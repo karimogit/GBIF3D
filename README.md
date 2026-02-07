@@ -47,8 +47,6 @@ All dependencies are open-source (MIT-compatible).
 - **API routes** — Occurrence image route validates the key; places search proxies to Nominatim with a proper User-Agent.
 - **Dependencies** — Run `npm audit` and address high/critical findings before deployment.
 
-For more detail, see [docs/CODE_REVIEW.md](docs/CODE_REVIEW.md#security-whats-in-place-and-what-to-check).
-
 ## Caching and when data refreshes
 
 Occurrence requests to the GBIF API are **cached in memory** (per geometry + filters + offset) to reduce rate-limit risk:
