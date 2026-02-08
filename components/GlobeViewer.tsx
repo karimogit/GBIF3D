@@ -163,16 +163,17 @@ export default function GlobeViewer({
   }, [selectedRegionBounds, fetchOccurrences, hasTaxonFilter]);
 
   const displayedOccurrences = useMemo(() => {
-    let combined = [...occurrences, ...(importedOccurrences ?? [])];
-    // When a specific region is selected (not "Current view"), only show occurrences inside that region's bounds
-    if (selectedRegionBounds != null) {
-      combined = combined.filter((o) => {
-        const lon = o.decimalLongitude;
-        const lat = o.decimalLatitude;
-        if (lon == null || lat == null) return false;
-        return pointInBounds(lon, lat, selectedRegionBounds!);
-      });
-    }
+    // Only filter API occurrences by region; show all imported points regardless of selected region
+    const apiInRegion =
+      selectedRegionBounds != null
+        ? occurrences.filter((o) => {
+            const lon = o.decimalLongitude;
+            const lat = o.decimalLatitude;
+            if (lon == null || lat == null) return false;
+            return pointInBounds(lon, lat, selectedRegionBounds!);
+          })
+        : occurrences;
+    let combined = [...apiInRegion, ...(importedOccurrences ?? [])];
     if (timeFilterYear == null) return combined;
     return combined.filter((o) => {
       const year = occurrenceYear(o);

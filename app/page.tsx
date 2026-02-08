@@ -441,6 +441,7 @@ export default function Home() {
           occurrenceCount={allOccurrences.length}
           onImportFile={handleImportFile}
           importedOccurrenceCount={importedOccurrences.length}
+          importedOccurrences={importedOccurrences}
           onClearImport={importedOccurrences.length > 0 ? handleClearImport : undefined}
           savedOccurrences={savedOccurrences}
           onSelectOccurrence={handleSelectOccurrence}

@@ -101,36 +101,9 @@ function rowToOccurrence(row: Record<string, unknown>, syntheticKey: number): GB
 }
 
 /**
- * Parse CSV text (header row + data). Expects GBIF/Darwin Core style columns.
- * Returns occurrences with valid decimalLatitude/decimalLongitude; assigns synthetic keys.
+ * Split a line by a single delimiter, respecting double-quoted fields.
  */
-export function parseOccurrencesCSV(text: string): GBIFOccurrence[] {
-  const lines = text.split(/\r?\n/).filter((l) => l.trim());
-  if (lines.length < 2) return [];
-  const headerLine = lines[0];
-  const headerValues = parseCSVLine(headerLine);
-  const headers = headerValues.map((h) => normalizeHeader(h) || camelCase(h.trim()));
-  const results: GBIFOccurrence[] = [];
-  let syntheticKey = -1;
-  for (let i = 1; i < lines.length; i++) {
-    const line = lines[i];
-    const values = parseCSVLine(line);
-    const row: Record<string, unknown> = {};
-    headers.forEach((h, j) => {
-      if (h) row[h] = values[j]?.trim();
-    });
-    const lat = parseNum(row['decimalLatitude']);
-    const lon = parseNum(row['decimalLongitude']);
-    if (lat != null && lon != null && lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180) {
-      results.push(rowToOccurrence(row, syntheticKey));
-      syntheticKey -= 1;
-    }
-  }
-  return results;
-}
-
-/** Simple CSV line parse (handles quoted fields with commas). */
-function parseCSVLine(line: string): string[] {
+function parseLineByDelimiter(line: string, delimiter: string): string[] {
   const out: string[] = [];
   let cur = '';
   let inQuotes = false;
@@ -140,7 +113,7 @@ function parseCSVLine(line: string): string[] {
       inQuotes = !inQuotes;
     } else if (inQuotes) {
       cur += c;
-    } else if (c === ',' || c === ';' || c === '\t') {
+    } else if (c === delimiter) {
       out.push(cur);
       cur = '';
     } else {
@@ -149,6 +122,71 @@ function parseCSVLine(line: string): string[] {
   }
   out.push(cur);
   return out;
+}
+
+/** Detect delimiter from first line: tab if more tabs than commas (GBIF exports are often TSV). */
+function detectDelimiter(firstLine: string): string {
+  let tabs = 0;
+  let commas = 0;
+  let inQuotes = false;
+  for (let i = 0; i < firstLine.length; i++) {
+    const c = firstLine[i];
+    if (c === '"') inQuotes = !inQuotes;
+    else if (!inQuotes) {
+      if (c === '\t') tabs += 1;
+      else if (c === ',') commas += 1;
+    }
+  }
+  return tabs >= commas ? '\t' : ',';
+}
+
+/** Simple CSV/TSV line parse (handles quoted fields; uses comma, semicolon, or tab). */
+function parseCSVLine(line: string, delimiter?: string): string[] {
+  if (delimiter !== undefined) return parseLineByDelimiter(line, delimiter);
+  return parseLineByDelimiter(line, ',').length >= parseLineByDelimiter(line, '\t').length
+    ? parseLineByDelimiter(line, ',')
+    : parseLineByDelimiter(line, '\t');
+}
+
+/**
+ * Parse CSV/TSV text (header row + data). Expects GBIF/Darwin Core style columns.
+ * Strips BOM. Detects tab vs comma delimiter so values like "Locality, Region" don't break columns.
+ * Returns occurrences with valid decimalLatitude/decimalLongitude; assigns synthetic keys.
+ */
+export function parseOccurrencesCSV(text: string): GBIFOccurrence[] {
+  const raw = text.replace(/^\uFEFF/, ''); // BOM
+  const lines = raw.split(/\r?\n/).filter((l) => l.trim());
+  if (lines.length < 2) return [];
+  const headerLine = lines[0];
+  const delimiter = detectDelimiter(headerLine);
+  const headerValues = parseLineByDelimiter(headerLine, delimiter);
+  const headers = headerValues.map((h) => normalizeHeader(h.trim()) || camelCase(h.trim()));
+  const results: GBIFOccurrence[] = [];
+  let syntheticKey = -1;
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i];
+    const values = parseLineByDelimiter(line, delimiter);
+    const row: Record<string, unknown> = {};
+    headers.forEach((h, j) => {
+      if (h) row[h] = values[j]?.trim();
+    });
+    const lat = parseNum(row['decimalLatitude']);
+    const lon = parseNum(row['decimalLongitude']);
+    if (lat != null && lon != null && lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180) {
+      const keyCol = row['key'] ?? row['gbifID'];
+      const keyNum =
+        typeof keyCol === 'number'
+          ? keyCol
+          : typeof keyCol === 'string'
+            ? parseInt(keyCol, 10)
+            : undefined;
+      const key =
+        keyNum != null && Number.isInteger(keyNum) && keyNum > 0 ? keyNum : syntheticKey;
+      if (key === syntheticKey) syntheticKey -= 1;
+      results.push(rowToOccurrence(row, key));
+    }
+  }
+  return results;
 }
 
 /**

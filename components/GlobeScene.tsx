@@ -640,7 +640,15 @@ function FlyToBounds({ bounds }: { bounds: Bounds }) {
 }
 
 /** Selects an occurrence entity by key and flies to it, opening the info box. */
-function SelectOccurrence({ occurrenceKey, occurrences }: { occurrenceKey: number | null; occurrences: GBIFOccurrence[] }) {
+function SelectOccurrence({
+  occurrenceKey,
+  occurrences,
+  usePrimitiveMode,
+}: {
+  occurrenceKey: number | null;
+  occurrences: GBIFOccurrence[];
+  usePrimitiveMode: boolean;
+}) {
   const cesium = useCesium();
   useEffect(() => {
     if (occurrenceKey == null) return;
@@ -651,37 +659,56 @@ function SelectOccurrence({ occurrenceKey, occurrences }: { occurrenceKey: numbe
     } catch {
       return;
     }
-    // Find the occurrence
     const occ = occurrences.find((o) => o.key === occurrenceKey);
     if (!occ || occ.decimalLatitude == null || occ.decimalLongitude == null) return;
-    
-    // Try to find the entity, with a retry mechanism in case it's not rendered yet
+
+    const position = Cesium.Cartesian3.fromDegrees(
+      occ.decimalLongitude,
+      occ.decimalLatitude,
+      0
+    );
+
+    if (usePrimitiveMode) {
+      const infoEntity = viewer.entities.getById(SELECTED_INFO_ENTITY_ID);
+      try {
+        viewer.camera.flyTo({
+          destination: position,
+          duration: 1.2,
+          complete: () => {
+            try {
+              if (infoEntity) viewer.selectedEntity = infoEntity;
+            } catch {
+              // viewer may be destroyed
+            }
+          },
+        });
+      } catch {
+        // viewer may be destroyed
+      }
+      return;
+    }
+
     let retryCount = 0;
-    const MAX_RETRIES = 20; // Max 1 second of retries (20 * 50ms)
+    const MAX_RETRIES = 20;
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
     let cancelled = false;
-    
+
     const findAndSelectEntity = () => {
       if (cancelled) return;
-      // getById expects a string, but entity id is set as number - convert to string
       const entity = viewer.entities.getById(String(occurrenceKey));
       if (!entity) {
         retryCount++;
         if (retryCount < MAX_RETRIES) {
-          // Retry after a short delay if entity not found
           timeoutId = setTimeout(findAndSelectEntity, 50);
         }
         return;
       }
-      // Fly to the location (we already checked these are not null above)
-      const position = Cesium.Cartesian3.fromDegrees(occ.decimalLongitude!, occ.decimalLatitude!, 0);
       try {
         viewer.camera.flyTo({
           destination: position,
           duration: 1.2,
           complete: () => {
             if (cancelled) return;
-            // Select the entity after flying (this opens the info box)
             try {
               viewer.selectedEntity = entity;
             } catch {
@@ -693,16 +720,14 @@ function SelectOccurrence({ occurrenceKey, occurrences }: { occurrenceKey: numbe
         // viewer may be destroyed
       }
     };
-    
+
     findAndSelectEntity();
-    
+
     return () => {
       cancelled = true;
-      if (timeoutId != null) {
-        clearTimeout(timeoutId);
-      }
+      if (timeoutId != null) clearTimeout(timeoutId);
     };
-  }, [cesium?.viewer, occurrenceKey, occurrences]);
+  }, [cesium?.viewer, occurrenceKey, occurrences, usePrimitiveMode]);
   return null;
 }
 
@@ -950,6 +975,186 @@ function DrawRegionHandler({
 
 export type SceneModeType = '3D' | '2D' | 'Columbus';
 
+/** Above this count we use PointPrimitiveCollection instead of one Entity per occurrence to avoid browser freeze. */
+const MAX_OCCURRENCES_FOR_ENTITIES = 6000;
+
+/** Renders many occurrences as a single Cesium PointPrimitiveCollection (efficient for 10k–100k+ points). */
+function OccurrencePointsPrimitive({
+  occurrences,
+  sceneMode,
+  cameraTilt,
+  imageUrlsByKey,
+  savedOccurrenceKeys,
+  selectedOccurrenceKey,
+  onPickedKey,
+}: {
+  occurrences: GBIFOccurrence[];
+  sceneMode: SceneModeType;
+  cameraTilt: number;
+  imageUrlsByKey: Record<number, string[]>;
+  savedOccurrenceKeys?: Set<number>;
+  selectedOccurrenceKey?: number | null;
+  onPickedKey: (key: number) => void;
+}) {
+  const cesium = useCesium();
+  const collectionRef = useRef<Cesium.PointPrimitiveCollection | null>(null);
+  const handlerRef = useRef<Cesium.ScreenSpaceEventHandler | null>(null);
+
+  const withCoords = useMemo(
+    () =>
+      occurrences.filter(
+        (o) =>
+          o.decimalLatitude != null &&
+          o.decimalLongitude != null &&
+          Number.isFinite(o.decimalLatitude) &&
+          Number.isFinite(o.decimalLongitude)
+      ),
+    [occurrences]
+  );
+
+  useEffect(() => {
+    const viewer = cesium?.viewer;
+    if (viewer?.scene?.primitives == null) return;
+
+    const collection = new Cesium.PointPrimitiveCollection();
+    viewer.scene.primitives.add(collection);
+    collectionRef.current = collection;
+
+    return () => {
+      if (collectionRef.current) {
+        viewer.scene.primitives.remove(collectionRef.current);
+        collectionRef.current = null;
+      }
+    };
+  }, [cesium?.viewer]);
+
+  useEffect(() => {
+    const collection = collectionRef.current;
+    if (!collection) return;
+
+    collection.removeAll();
+    const height = sceneMode === '2D' ? 0 : 1;
+    const alpha = cameraTilt > -0.5 ? 0 : 1;
+
+    for (const occ of withCoords) {
+      const color = colorForOccurrence(occ).withAlpha(alpha);
+      const point = collection.add({
+        position: Cesium.Cartesian3.fromDegrees(
+          occ.decimalLongitude!,
+          occ.decimalLatitude!,
+          height
+        ),
+        color,
+        pixelSize: selectedOccurrenceKey != null && occ.key === selectedOccurrenceKey ? 18 : 11,
+        outlineColor: Cesium.Color.WHITE.withAlpha(alpha),
+        outlineWidth: selectedOccurrenceKey != null && occ.key === selectedOccurrenceKey ? 3 : 2,
+        id: occ.key,
+      });
+      point.scaleByDistance = getOccurrencePointScaleByDistance();
+      point.disableDepthTestDistance = sceneMode === '2D' ? Number.POSITIVE_INFINITY : undefined;
+    }
+  }, [withCoords, sceneMode, cameraTilt, selectedOccurrenceKey]);
+
+  useEffect(() => {
+    const viewer = cesium?.viewer;
+    if (viewer?.scene?.canvas == null) return;
+
+    const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+    handlerRef.current = handler;
+
+    handler.setInputAction((event: { position: Cesium.Cartesian2 }) => {
+      try {
+        const picked = viewer.scene.pick(event.position);
+        if (picked?.id != null && typeof picked.id === 'number') {
+          onPickedKey(picked.id);
+        }
+      } catch {
+        // ignore
+      }
+    }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+
+    return () => {
+      if (handlerRef.current && !handlerRef.current.isDestroyed()) {
+        handlerRef.current.destroy();
+        handlerRef.current = null;
+      }
+    };
+  }, [cesium?.viewer, onPickedKey]);
+
+  return null;
+}
+
+/** When using primitive rendering, we use one Entity for the info box; this syncs its position/description and selection. */
+const SELECTED_INFO_ENTITY_ID = 'selected-occurrence-info';
+
+function SelectedOccurrenceInfoSync({
+  displayedKey,
+  occurrences,
+  imageUrlsByKey,
+  savedOccurrenceKeys,
+}: {
+  displayedKey: number | null;
+  occurrences: GBIFOccurrence[];
+  imageUrlsByKey: Record<number, string[]>;
+  savedOccurrenceKeys?: Set<number>;
+}) {
+  const cesium = useCesium();
+  const entityRef = useRef<Cesium.Entity | null>(null);
+
+  useEffect(() => {
+    const viewer = cesium?.viewer;
+    if (viewer?.entities == null) return;
+
+    const entity = viewer.entities.add({
+      id: SELECTED_INFO_ENTITY_ID,
+      position: Cesium.Cartesian3.fromDegrees(0, 0, 0),
+      name: '',
+      description: '',
+      show: false,
+    });
+    entityRef.current = entity;
+
+    return () => {
+      viewer.entities.remove(entity);
+      entityRef.current = null;
+    };
+  }, [cesium?.viewer]);
+
+  useEffect(() => {
+    const viewer = cesium?.viewer;
+    const entity = entityRef.current;
+    if (!viewer || !entity) return;
+
+    if (displayedKey == null) {
+      entity.show = false;
+      if (viewer.selectedEntity === entity) viewer.selectedEntity = undefined;
+      return;
+    }
+
+    const occ = occurrences.find((o) => o.key === displayedKey);
+    if (!occ || occ.decimalLatitude == null || occ.decimalLongitude == null) {
+      entity.show = false;
+      return;
+    }
+
+    entity.position = Cesium.Cartesian3.fromDegrees(
+      occ.decimalLongitude,
+      occ.decimalLatitude,
+      0
+    );
+    entity.description = occurrenceToDescription(
+      occ,
+      imageUrlsByKey[occ.key],
+      savedOccurrenceKeys
+    );
+    entity.name = occ.scientificName || occ.vernacularName || `Occurrence ${occ.key}`;
+    entity.show = true;
+    viewer.selectedEntity = entity;
+  }, [cesium?.viewer, displayedKey, occurrences, imageUrlsByKey, savedOccurrenceKeys]);
+
+  return null;
+}
+
 interface GlobeSceneProps {
   occurrences: GBIFOccurrence[];
   onBoundsChange: (bounds: Bounds) => void;
@@ -993,9 +1198,18 @@ export default function GlobeScene({
   const [cameraTilt, setCameraTilt] = useState(0); // Camera pitch in radians
   const [terrain, setTerrain] = useState<Cesium.TerrainProvider | null>(null);
   const [imageUrlsByKey, setImageUrlsByKey] = useState<Record<number, string[]>>({});
+  const [pickedOccurrenceKey, setPickedOccurrenceKey] = useState<number | null>(null);
+
+  const usePrimitiveMode = occurrences.length > MAX_OCCURRENCES_FOR_ENTITIES;
+  const displayedOccurrenceKey =
+    selectedOccurrenceKey ?? pickedOccurrenceKey;
 
   const handleOccurrenceImageLoaded = useCallback((occurrenceKey: number, urls: string[]) => {
     if (urls.length > 0) setImageUrlsByKey((prev) => ({ ...prev, [occurrenceKey]: urls }));
+  }, []);
+
+  const handlePickedKey = useCallback((key: number) => {
+    setPickedOccurrenceKey(key);
   }, []);
 
   // Set Cesium Ion token from env (e.g. Vercel: NEXT_PUBLIC_CESIUM_ION_TOKEN) before any Ion requests
@@ -1047,49 +1261,84 @@ export default function GlobeScene({
       <InfoBoxLinkFix />
       <CameraBoundsReporter onBoundsChange={onBoundsChange} />
       {flyToBounds && <FlyToBounds bounds={flyToBounds} />}
-      {selectedOccurrenceKey != null && <SelectOccurrence occurrenceKey={selectedOccurrenceKey} occurrences={occurrences} />}
+      {selectedOccurrenceKey != null && (
+        <SelectOccurrence
+          occurrenceKey={selectedOccurrenceKey}
+          occurrences={occurrences}
+          usePrimitiveMode={usePrimitiveMode}
+        />
+      )}
       {drawRegionMode && onDrawnBounds && (
         <DrawRegionHandler active onDrawnBounds={onDrawnBounds} />
       )}
       {drawnBounds && <DrawnRegionOverlay bounds={drawnBounds} />}
-      {occurrences
-            .filter(
-              (o) =>
-                o.decimalLatitude != null &&
-                o.decimalLongitude != null &&
-                Number.isFinite(o.decimalLatitude) &&
-                Number.isFinite(o.decimalLongitude)
-            )
-            .map((occ) => {
-              const isSelected = selectedOccurrenceKey != null && occ.key === selectedOccurrenceKey;
-              return (
-                <Entity
-                  key={occ.key}
-                  id={occ.key}
-                  position={Cesium.Cartesian3.fromDegrees(
-                    occ.decimalLongitude!,
-                    occ.decimalLatitude!,
-                    sceneMode === '2D' ? 0 : 1
+      {usePrimitiveMode ? (
+        <>
+          <OccurrencePointsPrimitive
+            occurrences={occurrences}
+            sceneMode={sceneMode}
+            cameraTilt={cameraTilt}
+            imageUrlsByKey={imageUrlsByKey}
+            savedOccurrenceKeys={savedOccurrenceKeys}
+            selectedOccurrenceKey={displayedOccurrenceKey ?? undefined}
+            onPickedKey={handlePickedKey}
+          />
+          <SelectedOccurrenceInfoSync
+            displayedKey={displayedOccurrenceKey}
+            occurrences={occurrences}
+            imageUrlsByKey={imageUrlsByKey}
+            savedOccurrenceKeys={savedOccurrenceKeys}
+          />
+        </>
+      ) : (
+        occurrences
+          .filter(
+            (o) =>
+              o.decimalLatitude != null &&
+              o.decimalLongitude != null &&
+              Number.isFinite(o.decimalLatitude) &&
+              Number.isFinite(o.decimalLongitude)
+          )
+          .map((occ) => {
+            const isSelected =
+              selectedOccurrenceKey != null && occ.key === selectedOccurrenceKey;
+            return (
+              <Entity
+                key={occ.key}
+                id={occ.key}
+                position={Cesium.Cartesian3.fromDegrees(
+                  occ.decimalLongitude!,
+                  occ.decimalLatitude!,
+                  sceneMode === '2D' ? 0 : 1
+                )}
+                description={occurrenceToDescription(
+                  occ,
+                  imageUrlsByKey[occ.key],
+                  savedOccurrenceKeys
+                )}
+                name={occ.scientificName || occ.vernacularName || `Occurrence ${occ.key}`}
+              >
+                <PointGraphics
+                  pixelSize={isSelected ? 18 : 11}
+                  scaleByDistance={getOccurrencePointScaleByDistance()}
+                  color={colorForOccurrence(occ).withAlpha(cameraTilt > -0.5 ? 0.0 : 1.0)}
+                  outlineColor={Cesium.Color.WHITE.withAlpha(
+                    cameraTilt > -0.5 ? 0.0 : isSelected ? 1.0 : 0.8
                   )}
-                  description={occurrenceToDescription(occ, imageUrlsByKey[occ.key], savedOccurrenceKeys)}
-                  name={occ.scientificName || occ.vernacularName || `Occurrence ${occ.key}`}
-                >
-                  <PointGraphics
-                    pixelSize={isSelected ? 18 : 11}
-                    scaleByDistance={getOccurrencePointScaleByDistance()}
-                    color={colorForOccurrence(occ).withAlpha(cameraTilt > -0.5 ? 0.0 : 1.0)}
-                    outlineColor={Cesium.Color.WHITE.withAlpha(cameraTilt > -0.5 ? 0.0 : isSelected ? 1.0 : 0.8)}
-                    outlineWidth={isSelected ? 3 : 2}
-                    disableDepthTestDistance={sceneMode === '2D' ? Number.POSITIVE_INFINITY : undefined}
-                    heightReference={
-                      sceneMode === '2D'
-                        ? Cesium.HeightReference.NONE
-                        : Cesium.HeightReference.RELATIVE_TO_GROUND
-                    }
-                  />
-                </Entity>
-              );
-            })}
+                  outlineWidth={isSelected ? 3 : 2}
+                  disableDepthTestDistance={
+                    sceneMode === '2D' ? Number.POSITIVE_INFINITY : undefined
+                  }
+                  heightReference={
+                    sceneMode === '2D'
+                      ? Cesium.HeightReference.NONE
+                      : Cesium.HeightReference.RELATIVE_TO_GROUND
+                  }
+                />
+              </Entity>
+            );
+          })
+      )}
     </Viewer>
   );
 }
