@@ -623,7 +623,7 @@ export default function MapTopBar({
           paper: {
             sx: {
               borderRadius: 2,
-              mt: 1,
+              mt: 2,
               p: 2,
               maxHeight: 'min(85vh, 520px)',
               maxWidth: 'min(420px, calc(100vw - 220px))',
@@ -1088,6 +1088,7 @@ export default function MapTopBar({
             <Button onClick={() => setHelpOpen(false)}>Close</Button>
           </DialogActions>
         </Dialog>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, marginLeft: 'auto' }}>
         <IconButton
           size="small"
           aria-label="Help: how this tool works"
@@ -1149,6 +1150,7 @@ export default function MapTopBar({
         >
           <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>GitHub</Box>
         </Button>
+        </Box>
       </Box>
       </Box>
     </Box>
