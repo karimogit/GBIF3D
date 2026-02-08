@@ -22,9 +22,12 @@ const OCCURRENCE_LIMIT = OCCURRENCE_PAGE_MAX;
 export const OCCURRENCE_MAX_TOTAL = 100_000;
 /** Chunk size per API request — must not exceed GBIF's 300 per page. */
 const OCCURRENCE_CHUNK_SIZE = OCCURRENCE_PAGE_MAX;
-/** Delay between chunk requests (ms) to reduce rate-limit risk. */
-const CHUNK_DELAY_MS = 150;
+/** Delay between chunk requests (ms) to reduce rate-limit (429) risk. */
+const CHUNK_DELAY_MS = 400;
 const REQUEST_TIMEOUT_MS = 30000;
+/** On 429, wait this long (ms) before retry if server doesn't send Retry-After. */
+const RATE_LIMIT_BACKOFF_MS = 8000;
+const MAX_RETRIES_ON_429 = 2;
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -80,8 +83,8 @@ export async function searchOccurrences(
   if (filters.eventDate) params.eventDate = filters.eventDate;
   if (filters.iucnRedListCategory) params.iucnRedListCategory = filters.iucnRedListCategory;
   if (filters.basisOfRecord) params.basisOfRecord = filters.basisOfRecord;
-  if (filters.continent) params.continent = filters.continent;
-  if (filters.country) params.country = filters.country;
+  if (filters.continent?.trim()) params.continent = filters.continent.trim().toUpperCase();
+  if (filters.country?.trim()) params.country = filters.country.trim().toUpperCase();
   if (filters.datasetKey) params.datasetKey = filters.datasetKey;
   if (filters.institutionCode) params.institutionCode = filters.institutionCode;
   if (filters.facet?.length) params.facet = filters.facet.join(',');
@@ -91,25 +94,38 @@ export async function searchOccurrences(
   const cached = getCached<GBIFOccurrenceSearchResponse>(key);
   if (cached) return cached;
 
-  try {
-    const { data } = await api.get<GBIFOccurrenceSearchResponse>(
-      '/occurrence/search',
-      {
-        params: params as Record<string, unknown>,
-        paramsSerializer: (p) => serializeOccurrenceParams(p as Record<string, string | number | number[] | undefined>),
+  let lastErr: GBIFApiError | null = null;
+  for (let attempt = 0; attempt <= MAX_RETRIES_ON_429; attempt++) {
+    try {
+      const { data } = await api.get<GBIFOccurrenceSearchResponse>(
+        '/occurrence/search',
+        {
+          params: params as Record<string, unknown>,
+          paramsSerializer: (p) => serializeOccurrenceParams(p as Record<string, string | number | number[] | undefined>),
+        }
+      );
+      setCache(key, data, OCCURRENCE_CACHE_TTL_MS);
+      return data;
+    } catch (err) {
+      const ax = err as AxiosError<{ message?: string; code?: string }>;
+      const status = ax.response?.status;
+      lastErr = new GBIFApiError(
+        ax.response?.data?.message ?? ax.message ?? 'GBIF occurrence search failed',
+        status,
+        ax.response?.data?.code
+      );
+      if (status === 429 && attempt < MAX_RETRIES_ON_429) {
+        const retryAfter = ax.response?.headers?.['retry-after'];
+        const waitMs = typeof retryAfter === 'string' && /^\d+$/.test(retryAfter)
+          ? Math.min(60000, parseInt(retryAfter, 10) * 1000)
+          : RATE_LIMIT_BACKOFF_MS;
+        await delay(waitMs);
+        continue;
       }
-    );
-    setCache(key, data, OCCURRENCE_CACHE_TTL_MS);
-    return data;
-  } catch (err) {
-    const ax = err as AxiosError<{ message?: string; code?: string }>;
-    const status = ax.response?.status;
-    const msg =
-      ax.response?.data?.message ??
-      ax.message ??
-      'GBIF occurrence search failed';
-    throw new GBIFApiError(msg, status, ax.response?.data?.code);
+      throw lastErr;
+    }
   }
+  throw lastErr ?? new GBIFApiError('GBIF occurrence search failed');
 }
 
 /**
