@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Viewer, Entity, PointGraphics, useCesium } from 'resium';
 import * as Cesium from 'cesium';
 import type { GBIFOccurrence } from '@/types/gbif';
@@ -89,48 +89,6 @@ function getOccurrencePointScaleByDistance(): Cesium.NearFarScalar {
     occurrencePointScaleByDistance = new Cesium.NearFarScalar(2e2, 1.6, 1e7, 0.5);
   }
   return occurrencePointScaleByDistance;
-}
-
-const CLUSTER_THRESHOLD = 1000;
-
-/** Grid-based cluster: aggregate occurrences into cells for display when count is high. */
-function computeClusters(
-  occurrences: GBIFOccurrence[],
-  bounds: Bounds
-): Array<{ lat: number; lon: number; count: number }> {
-  const valid = occurrences.filter(
-    (o) =>
-      o.decimalLatitude != null &&
-      o.decimalLongitude != null &&
-      Number.isFinite(o.decimalLatitude) &&
-      Number.isFinite(o.decimalLongitude)
-  );
-  if (valid.length === 0) return [];
-
-  const spanLon = bounds.east - bounds.west;
-  const spanLat = bounds.north - bounds.south;
-  const gridLon = Math.max(0.05, Math.min(2, spanLon / 25));
-  const gridLat = Math.max(0.05, Math.min(2, spanLat / 25));
-
-  const map = new Map<string, { lat: number; lon: number; count: number }>();
-
-  for (const o of valid) {
-    const lat = o.decimalLatitude!;
-    const lon = o.decimalLongitude!;
-    const cellLat = Math.floor(lat / gridLat) * gridLat + gridLat / 2;
-    const cellLon = Math.floor(lon / gridLon) * gridLon + gridLon / 2;
-    const key = `${cellLat.toFixed(4)},${cellLon.toFixed(4)}`;
-    const existing = map.get(key);
-    if (existing) {
-      existing.count += 1;
-      existing.lat = (existing.lat * (existing.count - 1) + lat) / existing.count;
-      existing.lon = (existing.lon * (existing.count - 1) + lon) / existing.count;
-    } else {
-      map.set(key, { lat, lon, count: 1 });
-    }
-  }
-
-  return Array.from(map.values());
 }
 
 /** IUCN category → CSS color (no Cesium usage at module load, to stay SSR-safe). */
@@ -994,8 +952,6 @@ export type SceneModeType = '3D' | '2D' | 'Columbus';
 
 interface GlobeSceneProps {
   occurrences: GBIFOccurrence[];
-  /** Current view bounds (for clustering grid when occurrence count is high). */
-  viewBounds?: Bounds | null;
   onBoundsChange: (bounds: Bounds) => void;
   /** When set, fly camera to this region */
   flyToBounds?: Bounds | null;
@@ -1022,7 +978,6 @@ interface GlobeSceneProps {
 
 export default function GlobeScene({
   occurrences,
-  viewBounds = null,
   onBoundsChange,
   flyToBounds,
   drawRegionMode = false,
@@ -1038,13 +993,6 @@ export default function GlobeScene({
   const [cameraTilt, setCameraTilt] = useState(0); // Camera pitch in radians
   const [terrain, setTerrain] = useState<Cesium.TerrainProvider | null>(null);
   const [imageUrlsByKey, setImageUrlsByKey] = useState<Record<number, string[]>>({});
-
-  const useClusters =
-    occurrences.length > CLUSTER_THRESHOLD && viewBounds != null && viewBounds.west !== viewBounds.east;
-  const clusters = useMemo(
-    () => (useClusters ? computeClusters(occurrences, viewBounds!) : []),
-    [useClusters, occurrences, viewBounds]
-  );
 
   const handleOccurrenceImageLoaded = useCallback((occurrenceKey: number, urls: string[]) => {
     if (urls.length > 0) setImageUrlsByKey((prev) => ({ ...prev, [occurrenceKey]: urls }));
@@ -1104,34 +1052,7 @@ export default function GlobeScene({
         <DrawRegionHandler active onDrawnBounds={onDrawnBounds} />
       )}
       {drawnBounds && <DrawnRegionOverlay bounds={drawnBounds} />}
-      {useClusters
-        ? clusters.map((cluster, i) => (
-            <Entity
-              key={`cluster-${i}-${cluster.lat}-${cluster.lon}`}
-              id={`cluster-${i}`}
-              position={Cesium.Cartesian3.fromDegrees(
-                cluster.lon,
-                cluster.lat,
-                sceneMode === '2D' ? 0 : 1
-              )}
-              description={`<div style="font-family:system-ui;padding:8px;">${cluster.count} occurrence${cluster.count !== 1 ? 's' : ''} in this area. Zoom in or reduce the result set to see individual points.</div>`}
-              name={`Cluster of ${cluster.count}`}
-            >
-              <PointGraphics
-                pixelSize={14}
-                color={Cesium.Color.fromCssColorString('#4caf50').withAlpha(cameraTilt > -0.5 ? 0.0 : 0.85)}
-                outlineColor={Cesium.Color.WHITE.withAlpha(cameraTilt > -0.5 ? 0.0 : 0.9)}
-                outlineWidth={2}
-                disableDepthTestDistance={sceneMode === '2D' ? Number.POSITIVE_INFINITY : undefined}
-                heightReference={
-                  sceneMode === '2D'
-                    ? Cesium.HeightReference.NONE
-                    : Cesium.HeightReference.RELATIVE_TO_GROUND
-                }
-              />
-            </Entity>
-          ))
-        : occurrences
+      {occurrences
             .filter(
               (o) =>
                 o.decimalLatitude != null &&

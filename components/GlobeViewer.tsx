@@ -182,7 +182,6 @@ export default function GlobeViewer({
     >
       <GlobeScene
         occurrences={displayedOccurrences}
-        viewBounds={viewBounds}
         savedOccurrenceKeys={savedOccurrenceKeys}
         selectedOccurrenceKey={selectedOccurrenceKey}
         onBoundsChange={handleBoundsChange}
