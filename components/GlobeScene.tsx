@@ -1051,7 +1051,8 @@ function OccurrencePointsPrimitive({
         id: occ.key,
       });
       point.scaleByDistance = getOccurrencePointScaleByDistance();
-      point.disableDepthTestDistance = sceneMode === '2D' ? Number.POSITIVE_INFINITY : undefined;
+      point.disableDepthTestDistance =
+        sceneMode === '2D' ? Number.POSITIVE_INFINITY : 0;
     }
   }, [withCoords, sceneMode, cameraTilt, selectedOccurrenceKey]);
 
