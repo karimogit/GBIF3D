@@ -80,7 +80,7 @@ export async function searchOccurrences(
     params.taxonKey = filters.taxonKey;
   }
   if (filters.year) params.year = filters.year;
-  // GBIF expects date range with slash: YYYY-MM-DD/YYYY-MM-DD (ISO 8601); invalid format causes 400
+  // GBIF occurrence search API expects date range with COMMA (see techdocs "Searching dates": eventDate=2023-01-11,2023-01-12)
   const rawDate = filters.eventDate && String(filters.eventDate).trim();
   if (rawDate) {
     const normalized = rawDate.replace(',', '/');
@@ -92,7 +92,8 @@ export async function searchOccurrences(
       const fromDate = new Date(from + 'T00:00:00Z');
       const toDate = new Date(to + 'T00:00:00Z');
       if (!isNaN(fromDate.getTime()) && !isNaN(toDate.getTime()) && fromDate <= toDate) {
-        params.eventDate = `${from}/${to}`;
+        // Search API uses comma for range; slash causes "is not a valid date" 400
+        params.eventDate = `${from},${to}`;
       }
     }
   }
