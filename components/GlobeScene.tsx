@@ -261,53 +261,6 @@ function captureCanvasAsDataUrl(canvas: HTMLCanvasElement): string {
   return canvas.toDataURL('image/jpeg', 0.85);
 }
 
-/** Small UI button (top-right) to reset camera to the default Cesium home view. */
-function ResetViewButton() {
-  const cesium = useCesium();
-  return (
-    <div
-      style={{
-        position: 'absolute',
-        top: 10,
-        right: 56, // just to the left of the fullscreen button
-        zIndex: 1001,
-        pointerEvents: 'auto',
-      }}
-    >
-      <button
-        type="button"
-        aria-label="Reset view"
-        title="Reset view"
-        onClick={() => {
-          try {
-            const v = cesium?.viewer;
-            if (!v || !v.scene?.canvas || !v.camera) return;
-            v.camera.flyHome(1.2);
-          } catch {
-            // ignore if viewer is not ready
-          }
-        }}
-        style={{
-          width: 32,
-          height: 32,
-          borderRadius: 4,
-          border: 'none',
-          background: 'rgba(0,0,0,0.55)',
-          color: '#fff',
-          cursor: 'pointer',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          fontSize: 16,
-          lineHeight: 1,
-        }}
-      >
-        ⟳
-      </button>
-    </div>
-  );
-}
-
 /** Constrains how far the camera can tilt in 3D so angles stay readable. */
 function CameraTiltConstraints({ sceneMode }: { sceneMode: SceneModeType }) {
   const cesium = useCesium();
@@ -1253,7 +1206,6 @@ export default function GlobeScene({
       imageryProvider={getDefaultImageryProvider()}
       contextOptions={VIEWER_CONTEXT_OPTIONS}
     >
-      <ResetViewButton />
       <CameraTiltConstraints sceneMode={sceneMode} />
       <CameraTiltReporter onTiltChange={setCameraTilt} />
       <SceneModeSync sceneMode={sceneMode} />
