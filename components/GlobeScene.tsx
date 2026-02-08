@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Viewer, Entity, PointGraphics, LabelGraphics, useCesium } from 'resium';
+import { Viewer, Entity, PointGraphics, useCesium } from 'resium';
 import * as Cesium from 'cesium';
 import type { GBIFOccurrence } from '@/types/gbif';
 import type { Bounds } from '@/lib/geometry';
@@ -1107,17 +1107,6 @@ export default function GlobeScene({
                     ? Cesium.HeightReference.NONE
                     : Cesium.HeightReference.RELATIVE_TO_GROUND
                 }
-              />
-              <LabelGraphics
-                text={cluster.count > 999 ? `${(cluster.count / 1000).toFixed(1)}k` : String(cluster.count)}
-                font="12px sans-serif"
-                fillColor={Cesium.Color.WHITE}
-                outlineColor={Cesium.Color.BLACK}
-                outlineWidth={1}
-                style={Cesium.LabelStyle.FILL_AND_OUTLINE}
-                verticalOrigin={Cesium.VerticalOrigin.BOTTOM}
-                pixelOffset={new Cesium.Cartesian2(0, -12)}
-                scaleByDistance={new Cesium.NearFarScalar(1e3, 1, 1e7, 0.4)}
               />
             </Entity>
           ))
