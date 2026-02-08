@@ -55,7 +55,7 @@ export async function GET(request: NextRequest) {
           east: parseFloat(east),
           north: parseFloat(north),
         },
-        ...(cc ? { country_code: cc } : {}),
+        ...(cc && /^[A-Z]{2}$/.test(cc) ? { country_code: cc } : {}),
       };
     });
     return NextResponse.json({ results });

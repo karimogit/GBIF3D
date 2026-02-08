@@ -87,7 +87,9 @@ export async function searchOccurrences(
   if (filters.iucnRedListCategory) params.iucnRedListCategory = filters.iucnRedListCategory;
   if (filters.basisOfRecord) params.basisOfRecord = filters.basisOfRecord;
   if (filters.continent?.trim()) params.continent = filters.continent.trim().toUpperCase();
-  if (filters.country?.trim()) params.country = filters.country.trim().toUpperCase();
+  // GBIF expects ISO 3166-1 alpha-2 (2 letters); invalid codes cause 400
+  const countryVal = filters.country?.trim().toUpperCase();
+  if (countryVal && /^[A-Z]{2}$/.test(countryVal)) params.country = countryVal;
   if (filters.datasetKey) params.datasetKey = filters.datasetKey;
   if (filters.institutionCode) params.institutionCode = filters.institutionCode;
   if (filters.facet?.length) params.facet = filters.facet.join(',');
@@ -110,12 +112,19 @@ export async function searchOccurrences(
       setCache(key, data, OCCURRENCE_CACHE_TTL_MS);
       return data;
     } catch (err) {
-      const ax = err as AxiosError<{ message?: string; code?: string }>;
+      const ax = err as AxiosError<{ message?: string; code?: string; error?: string }>;
       const status = ax.response?.status;
+      const body = ax.response?.data;
+      const bodyMsg =
+        typeof body === 'object' && body !== null && 'message' in body
+          ? (body as { message?: string }).message
+          : typeof body === 'object' && body !== null && 'error' in body
+            ? (body as { error?: string }).error
+            : undefined;
       lastErr = new GBIFApiError(
-        ax.response?.data?.message ?? ax.message ?? 'GBIF occurrence search failed',
+        bodyMsg ?? ax.message ?? (status === 400 ? 'Invalid search parameters (check region and filters).' : 'GBIF occurrence search failed'),
         status,
-        ax.response?.data?.code
+        typeof body === 'object' && body !== null && 'code' in body ? (body as { code?: string }).code : undefined
       );
       if (status === 429 && attempt < MAX_RETRIES_ON_429) {
         const retryAfter = ax.response?.headers?.['retry-after'];
