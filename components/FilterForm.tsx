@@ -239,7 +239,7 @@ export default function FilterForm({
         }
         sx={{ mt: 2 }}
         inputProps={{ min: 100, max: OCCURRENCE_MAX_TOTAL, step: 1000 }}
-        helperText={`100–${(OCCURRENCE_MAX_TOTAL / 1000).toFixed(0)}k; fetched in chunks of 300 (GBIF API max per request).`}
+        helperText={`100–${(OCCURRENCE_MAX_TOTAL / 1000).toFixed(0)}k; fetched in chunks of 300 (GBIF API limit).`}
       />
       <Box sx={{ mt: 2 }}>
         <Button

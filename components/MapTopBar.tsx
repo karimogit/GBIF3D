@@ -341,7 +341,7 @@ export default function MapTopBar({
         },
       }}
     >
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0, flex: { xs: '1 1 100%', sm: 1 }, pointerEvents: 'auto' }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0, flex: { xs: '1 1 100%', sm: 1 }, maxWidth: { sm: 'calc(100% - 200px)' }, pointerEvents: 'auto' }}>
         <Box
           sx={{
             display: 'flex',
@@ -398,6 +398,16 @@ export default function MapTopBar({
             getOptionLabel={(o) => o.label}
             isOptionEqualToValue={(a, b) => a.id === b.id && a.label === b.label}
             groupBy={(o) => o.group ?? ''}
+            renderGroup={(params) => (
+              <li key={params.key}>
+                {params.group ? (
+                  <ListSubheader component="div" sx={{ lineHeight: 2 }}>
+                    {params.group}
+                  </ListSubheader>
+                ) : null}
+                {params.children}
+              </li>
+            )}
             size="small"
             sx={{ minWidth: { xs: 0, sm: 200 } }}
             loading={placeLoading}
@@ -407,6 +417,15 @@ export default function MapTopBar({
                 placeholder="Search places..."
                 size="small"
                 variant="outlined"
+                sx={{
+                  ...(value
+                    ? {
+                        '& .MuiOutlinedInput-input': {
+                          paddingRight: 4,
+                        },
+                      }
+                    : {}),
+                }}
                 InputProps={{
                   ...params.InputProps,
                   startAdornment: (
@@ -607,7 +626,7 @@ export default function MapTopBar({
               mt: 1,
               p: 2,
               maxHeight: 'min(85vh, 520px)',
-              maxWidth: 'calc(100vw - 24px)',
+              maxWidth: 'min(420px, calc(100vw - 220px))',
               overflow: 'auto',
             },
           },
