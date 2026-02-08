@@ -1145,10 +1145,12 @@ function SelectedOccurrenceInfoSync({
         0
       )
     );
-    entity.description = occurrenceToDescription(
-      occ,
-      imageUrlsByKey[occ.key],
-      savedOccurrenceKeys
+    entity.description = new Cesium.ConstantProperty(
+      occurrenceToDescription(
+        occ,
+        imageUrlsByKey[occ.key],
+        savedOccurrenceKeys
+      )
     );
     entity.name = occ.scientificName || occ.vernacularName || `Occurrence ${occ.key}`;
     entity.show = true;
