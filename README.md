@@ -4,8 +4,6 @@
 
 ![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)
 
-**Developer:** [Karim Osman](https://kar.im)
-
 ## About
 
 Explore where species have been recorded on an interactive 3D globe. Data comes from GBIF: millions of observations from museums, surveys, and citizen science.
