@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Tooltip from '@mui/material/Tooltip';
 import GlobeScene from './GlobeScene';
 import { searchOccurrencesChunked, OCCURRENCE_MAX_TOTAL } from '@/lib/gbif';
-import { boundsToWktPolygon } from '@/lib/geometry';
+import { boundsToWktPolygon, pointInBounds } from '@/lib/geometry';
 import type { Bounds } from '@/lib/geometry';
 import type { GBIFOccurrence, OccurrenceFilters } from '@/types/gbif';
 import { GBIFApiError } from '@/lib/gbif';
@@ -157,7 +157,16 @@ export default function GlobeViewer({
   }, [selectedRegionBounds, fetchOccurrences, hasTaxonFilter]);
 
   const displayedOccurrences = useMemo(() => {
-    const combined = [...occurrences, ...(importedOccurrences ?? [])];
+    let combined = [...occurrences, ...(importedOccurrences ?? [])];
+    // When a specific region is selected (not "Current view"), only show occurrences inside that region's bounds
+    if (selectedRegionBounds != null) {
+      combined = combined.filter((o) => {
+        const lon = o.decimalLongitude;
+        const lat = o.decimalLatitude;
+        if (lon == null || lat == null) return false;
+        return pointInBounds(lon, lat, selectedRegionBounds!);
+      });
+    }
     if (timeFilterYear == null) return combined;
     return combined.filter((o) => {
       const year = occurrenceYear(o);
@@ -169,7 +178,7 @@ export default function GlobeViewer({
       const month = occurrenceMonth(o);
       return month === timeFilterMonth;
     });
-  }, [occurrences, importedOccurrences, timeFilterYear, timeFilterMonth]);
+  }, [occurrences, importedOccurrences, selectedRegionBounds, timeFilterYear, timeFilterMonth]);
 
   return (
     <div

@@ -58,6 +58,18 @@ export function geoJsonBboxToBounds(bbox: number[]): Bounds {
 }
 
 /**
+ * Whether a point (lon, lat) lies inside the given bounds (inclusive).
+ */
+export function pointInBounds(
+  lon: number,
+  lat: number,
+  bounds: Bounds
+): boolean {
+  const { west, south, east, north } = bounds;
+  return lon >= west && lon <= east && lat >= south && lat <= north;
+}
+
+/**
  * Bbox from coordinates [minLon, minLat, maxLon, maxLat]
  */
 export function getBboxFromCoords(
