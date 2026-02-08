@@ -7,12 +7,15 @@ export interface PlaceSearchResult {
   display_name: string;
   place_id: number;
   bounds: { west: number; south: number; east: number; north: number };
+  /** ISO 3166-1 alpha-2 country code (e.g. SE, NO) when place is in a country; for API filter */
+  country_code?: string;
 }
 
 interface NominatimItem {
   display_name: string;
   place_id: number;
   boundingbox: [string, string, string, string]; // [south, north, west, east] = [min_lat, max_lat, min_lon, max_lon]
+  address?: { country_code?: string };
 }
 
 export async function GET(request: NextRequest) {
@@ -25,7 +28,7 @@ export async function GET(request: NextRequest) {
     q,
     format: 'json',
     limit: '8',
-    addressdetails: '0',
+    addressdetails: '1',
   });
 
   try {
@@ -42,6 +45,7 @@ export async function GET(request: NextRequest) {
     const data = (await res.json()) as NominatimItem[];
     const results: PlaceSearchResult[] = data.map((item) => {
       const [south, north, west, east] = item.boundingbox;
+      const cc = item.address?.country_code?.trim().toUpperCase();
       return {
         display_name: item.display_name,
         place_id: item.place_id,
@@ -51,6 +55,7 @@ export async function GET(request: NextRequest) {
           east: parseFloat(east),
           north: parseFloat(north),
         },
+        ...(cc ? { country_code: cc } : {}),
       };
     });
     return NextResponse.json({ results });

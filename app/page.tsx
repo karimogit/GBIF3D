@@ -130,7 +130,7 @@ function getSelectedRegionBounds(
   selectedRegionId: string,
   favorites: FavoriteRegion[],
   drawnBounds: Bounds | null,
-  placeSearchResult: { name: string; bounds: Bounds } | null,
+  placeSearchResult: { name: string; bounds: Bounds; countryCode?: string } | null,
   viewBounds: Bounds | null
 ): Bounds | null {
   if (!selectedRegionId) return null;
@@ -146,7 +146,7 @@ function getSelectedRegionBounds(
 function getRegionDisplayName(
   selectedRegionId: string,
   favorites: FavoriteRegion[],
-  placeSearchResult: { name: string; bounds: Bounds } | null
+  placeSearchResult: { name: string; bounds: Bounds; countryCode?: string } | null
 ): string {
   if (!selectedRegionId) return '';
   if (selectedRegionId === REGION_ID_CURRENT_VIEW) return 'Current view';
@@ -167,7 +167,11 @@ export default function Home() {
   const [selectedRegionId, setSelectedRegionId] = useState(REGION_ID_CURRENT_VIEW);
   const [favorites, setFavorites] = useState<FavoriteRegion[]>([]);
   const [drawnBounds, setDrawnBounds] = useState<Bounds | null>(null);
-  const [placeSearchResult, setPlaceSearchResult] = useState<{ name: string; bounds: Bounds } | null>(null);
+  const [placeSearchResult, setPlaceSearchResult] = useState<{
+    name: string;
+    bounds: Bounds;
+    countryCode?: string;
+  } | null>(null);
   const [drawRegionMode, setDrawRegionMode] = useState(false);
   const [sceneMode, setSceneMode] = useState<'3D' | '2D' | 'Columbus'>('3D');
   const [baseMap, setBaseMap] = useState<'bing' | 'osm' | 'positron' | 'dark-matter' | 'opentopomap'>('bing');
@@ -303,7 +307,11 @@ export default function Home() {
   );
   // When a predefined country region is selected (2-letter id), pass ISO country code to restrict API
   const selectedCountryCode =
-    selectedRegionId && /^[a-z]{2}$/.test(selectedRegionId) ? selectedRegionId : null;
+    selectedRegionId === REGION_ID_PLACE && placeSearchResult?.countryCode
+      ? placeSearchResult.countryCode
+      : selectedRegionId && /^[a-z]{2}$/.test(selectedRegionId)
+        ? selectedRegionId
+        : null;
 
   const handleSaveDrawnRegion = useCallback(() => {
     if (!drawnBounds) return;
@@ -414,8 +422,8 @@ export default function Home() {
           favorites={favorites}
           drawnBounds={drawnBounds}
           placeSearchResult={placeSearchResult}
-          onPlaceSelect={(bounds, name) => {
-            setPlaceSearchResult({ name, bounds });
+          onPlaceSelect={(bounds, name, countryCode) => {
+            setPlaceSearchResult({ name, bounds, ...(countryCode != null ? { countryCode } : {}) });
             setSelectedRegionId(REGION_ID_PLACE);
           }}
           filters={filters}

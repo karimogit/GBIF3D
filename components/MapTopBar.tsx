@@ -51,6 +51,8 @@ interface RegionOption {
   label: string;
   group?: string;
   bounds?: Bounds;
+  /** ISO country code when option is a place in a country; used for API filter */
+  countryCode?: string;
 }
 
 interface MapTopBarProps {
@@ -58,8 +60,8 @@ interface MapTopBarProps {
   onRegionChange: (regionId: string) => void;
   favorites: FavoriteRegion[];
   drawnBounds: { west: number; south: number; east: number; north: number } | null;
-  placeSearchResult: { name: string; bounds: Bounds } | null;
-  onPlaceSelect: (bounds: Bounds, name: string) => void;
+  placeSearchResult: { name: string; bounds: Bounds; countryCode?: string } | null;
+  onPlaceSelect: (bounds: Bounds, name: string, countryCode?: string) => void;
   filters: OccurrenceFilters;
   onFiltersChange: (f: OccurrenceFilters) => void;
   /** Draw region on the globe */
@@ -165,12 +167,15 @@ export default function MapTopBar({
     setPlaceLoading(true);
     try {
       const res = await fetch(`/api/places/search?q=${encodeURIComponent(q)}`);
-      const data = (await res.json()) as { results: Array<{ display_name: string; place_id: number; bounds: Bounds }> };
+      const data = (await res.json()) as {
+        results: Array<{ display_name: string; place_id: number; bounds: Bounds; country_code?: string }>;
+      };
       const list = (data.results ?? []).map((r) => ({
         id: `place-${r.place_id}`,
         label: r.display_name,
         group: 'Places',
         bounds: r.bounds,
+        ...(r.country_code ? { countryCode: r.country_code } : {}),
       }));
       setPlaceResults(list);
     } catch {
@@ -222,7 +227,7 @@ export default function MapTopBar({
         return;
       }
       if (newValue.bounds) {
-        onPlaceSelect(newValue.bounds, newValue.label);
+        onPlaceSelect(newValue.bounds, newValue.label, newValue.countryCode);
       } else {
         onRegionChange(newValue.id);
       }
