@@ -153,7 +153,9 @@ export default function MapTopBar({
   const [helpOpen, setHelpOpen] = useState(false);
   const [aboutMenuAnchor, setAboutMenuAnchor] = useState<null | HTMLElement>(null);
   const [savedMenuAnchor, setSavedMenuAnchor] = useState<null | HTMLElement>(null);
+  const [moreMenuAnchor, setMoreMenuAnchor] = useState<null | HTMLElement>(null);
   const placeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const moreButtonAnchorRef = useRef<HTMLElement | null>(null);
 
   const fetchPlaces = useCallback(async (q: string) => {
     if (!q || q.length < 2) {
@@ -232,9 +234,9 @@ export default function MapTopBar({
     <Box
       sx={{
         position: 'absolute',
-        top: 8,
-        left: 8,
-        right: 8,
+        top: 'max(8px, env(safe-area-inset-top))',
+        left: 'max(8px, env(safe-area-inset-left))',
+        right: 'max(8px, env(safe-area-inset-right))',
         zIndex: 1300,
         display: 'flex',
         flexWrap: 'wrap',
@@ -252,8 +254,10 @@ export default function MapTopBar({
           backgroundColor: 'rgba(255, 255, 255, 0.92)',
           '&:hover': { backgroundColor: 'rgba(255, 255, 255, 0.98)' },
           minHeight: 44,
-          '@media (min-width: 600px)': { minHeight: 'auto' },
+          minWidth: 44,
+          '@media (min-width: 600px)': { minHeight: 'auto', minWidth: 'auto' },
         },
+        '& .MuiIconButton-root': { minWidth: 44, minHeight: 44 },
         '& .MuiOutlinedInput-root': {
           backgroundColor: 'rgba(255, 255, 255, 0.92)',
           '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(0,0,0,0.23)' },
@@ -419,6 +423,101 @@ export default function MapTopBar({
       >
         Filters
       </Button>
+      {/* On mobile: single "More" menu; on desktop: individual buttons */}
+      <Button
+        variant="outlined"
+        size="small"
+        endIcon={<ArrowDropDown />}
+        onClick={(e) => {
+          moreButtonAnchorRef.current = e.currentTarget;
+          setMoreMenuAnchor(e.currentTarget);
+        }}
+        aria-label="More options"
+        aria-haspopup="true"
+        aria-expanded={Boolean(moreMenuAnchor)}
+        sx={{
+          minWidth: 0,
+          display: { xs: 'inline-flex', sm: 'none' },
+          bgcolor: moreMenuAnchor ? 'action.selected' : undefined,
+        }}
+      >
+        More
+      </Button>
+      <Menu
+        anchorEl={moreMenuAnchor}
+        open={Boolean(moreMenuAnchor)}
+        onClose={() => setMoreMenuAnchor(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+        transformOrigin={{ vertical: 'top', horizontal: 'left' }}
+        slotProps={{ paper: { sx: { minWidth: 220, maxWidth: 'calc(100vw - 24px)', maxHeight: 'min(70vh, 400px)' } } }}
+      >
+        {favorites.length > 0 && onRemoveFavorite && (
+          <MenuItem
+            onClick={() => {
+              setMoreMenuAnchor(null);
+              setSavedMenuAnchor(moreButtonAnchorRef.current);
+            }}
+          >
+            <ListItemIcon><Bookmark fontSize="small" /></ListItemIcon>
+            <ListItemText primary="Saved regions" />
+          </MenuItem>
+        )}
+        {onImportFile && (
+          <MenuItem
+            onClick={() => {
+              setMoreMenuAnchor(null);
+              setImportDialogOpen(true);
+            }}
+          >
+            <ListItemIcon><UploadFile fontSize="small" /></ListItemIcon>
+            <ListItemText primary={`Import${importedOccurrenceCount > 0 ? ` (${importedOccurrenceCount})` : ''}`} />
+          </MenuItem>
+        )}
+        {savedOccurrences.length > 0 && (
+          <MenuItem
+            onClick={() => {
+              setMoreMenuAnchor(null);
+              setSavedOccurrencesAnchor(moreButtonAnchorRef.current);
+            }}
+          >
+            <ListItemIcon><Bookmark fontSize="small" /></ListItemIcon>
+            <ListItemText primary={`Saved occurrences (${savedOccurrences.length})`} />
+          </MenuItem>
+        )}
+        {(onExportImage || onExportGeoJSON || onExportCSV || onExportPDF) &&
+          [
+            onExportImage && (
+              <MenuItem
+                key="more-export-img"
+                onClick={() => {
+                  onExportImage();
+                  setMoreMenuAnchor(null);
+                }}
+              >
+                <ListItemIcon><ImageOutlined fontSize="small" /></ListItemIcon>
+                <ListItemText primary="Export as image" />
+              </MenuItem>
+            ),
+            onExportGeoJSON && (
+              <MenuItem key="more-export-geojson" onClick={() => { onExportGeoJSON?.(); setMoreMenuAnchor(null); }} disabled={occurrenceCount === 0}>
+                <ListItemIcon><MapOutlined fontSize="small" /></ListItemIcon>
+                <ListItemText primary="Export as GeoJSON" />
+              </MenuItem>
+            ),
+            onExportCSV && (
+              <MenuItem key="more-export-csv" onClick={() => { onExportCSV?.(); setMoreMenuAnchor(null); }} disabled={occurrenceCount === 0}>
+                <ListItemIcon><TableChartOutlined fontSize="small" /></ListItemIcon>
+                <ListItemText primary="Export as CSV" />
+              </MenuItem>
+            ),
+            onExportPDF && (
+              <MenuItem key="more-export-pdf" onClick={() => { onExportPDF?.(); setMoreMenuAnchor(null); }} disabled={occurrenceCount === 0}>
+                <ListItemIcon><PictureAsPdfOutlined fontSize="small" /></ListItemIcon>
+                <ListItemText primary="Export as PDF" />
+              </MenuItem>
+            ),
+          ].filter(Boolean)}
+      </Menu>
       <Popover
         open={Boolean(filterAnchor)}
         anchorEl={filterAnchor}
@@ -454,7 +553,7 @@ export default function MapTopBar({
             aria-label="Saved regions"
             aria-haspopup="true"
             aria-expanded={Boolean(savedMenuAnchor)}
-            sx={{ minWidth: 0 }}
+            sx={{ minWidth: 0, display: { xs: 'none', sm: 'inline-flex' } }}
           >
             Saved
           </Button>
@@ -464,6 +563,7 @@ export default function MapTopBar({
             onClose={() => setSavedMenuAnchor(null)}
             anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
             transformOrigin={{ vertical: 'top', horizontal: 'left' }}
+            slotProps={{ paper: { sx: { maxWidth: 'calc(100vw - 24px)', maxHeight: 'min(70vh, 400px)' } } }}
           >
             {favorites.map((fav) => (
               <MenuItem
@@ -514,7 +614,7 @@ export default function MapTopBar({
             startIcon={<UploadFile />}
             onClick={() => setImportDialogOpen(true)}
             aria-label="Import GBIF dataset (CSV or JSON)"
-            sx={{ minWidth: 0 }}
+            sx={{ minWidth: 0, display: { xs: 'none', sm: 'inline-flex' } }}
           >
             Import{importedOccurrenceCount > 0 ? ` (${importedOccurrenceCount})` : ''}
           </Button>
@@ -573,7 +673,7 @@ export default function MapTopBar({
             startIcon={savedOccurrences.length > 0 ? <Bookmark /> : <BookmarkBorder />}
             onClick={(e) => setSavedOccurrencesAnchor(e.currentTarget)}
             aria-label={savedOccurrences.length > 0 ? `Saved occurrences (${savedOccurrences.length})` : 'Saved occurrences'}
-            sx={{ minWidth: 0 }}
+            sx={{ minWidth: 0, display: { xs: 'none', sm: 'inline-flex' } }}
           >
             Saved{savedOccurrences.length > 0 ? ` (${savedOccurrences.length})` : ''}
           </Button>
@@ -630,7 +730,7 @@ export default function MapTopBar({
             aria-label="Export"
             aria-haspopup="true"
             aria-expanded={Boolean(exportMenuAnchor)}
-            sx={{ minWidth: 0 }}
+            sx={{ minWidth: 0, display: { xs: 'none', sm: 'inline-flex' } }}
           >
             Export
           </Button>
@@ -640,6 +740,7 @@ export default function MapTopBar({
             onClose={() => setExportMenuAnchor(null)}
             anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
             transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+            slotProps={{ paper: { sx: { maxWidth: 'calc(100vw - 24px)' } } }}
           >
             {[
               onExportImage && (
@@ -872,14 +973,14 @@ export default function MapTopBar({
           variant="outlined"
           size="small"
           startIcon={<InfoOutlined />}
-          endIcon={<ArrowDropDown />}
+          endIcon={<ArrowDropDown sx={{ display: { xs: 'none', sm: 'block' } }} />}
           onClick={(e) => setAboutMenuAnchor(e.currentTarget)}
           aria-label="About"
           aria-haspopup="true"
           aria-expanded={Boolean(aboutMenuAnchor)}
-          sx={{ minWidth: 0 }}
+          sx={{ minWidth: 0, '& .MuiButton-startIcon': { mr: { xs: 0, sm: 0.5 } } }}
         >
-          About
+          <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>About</Box>
         </Button>
         <Menu
           anchorEl={aboutMenuAnchor}
@@ -887,7 +988,7 @@ export default function MapTopBar({
           onClose={() => setAboutMenuAnchor(null)}
           anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
           transformOrigin={{ vertical: 'top', horizontal: 'right' }}
-          slotProps={{ paper: { sx: { minWidth: 280, maxWidth: 'min(400px, calc(100vw - 24px))' } } }}
+          slotProps={{ paper: { sx: { minWidth: 260, maxWidth: 'calc(100vw - 24px)' } } }}
         >
           <Paper component="div" sx={{ p: 2, boxShadow: 'none', backgroundColor: 'transparent' }}>
             <Typography variant="subtitle1" fontWeight={600} gutterBottom>
@@ -917,9 +1018,9 @@ export default function MapTopBar({
           size="small"
           startIcon={<GitHub />}
           aria-label="View on GitHub"
-          sx={{ minWidth: 0 }}
+          sx={{ minWidth: 0, '& .MuiButton-startIcon': { mr: { xs: 0, sm: 0.5 } } }}
         >
-          GitHub
+          <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>GitHub</Box>
         </Button>
       </Box>
       </Box>

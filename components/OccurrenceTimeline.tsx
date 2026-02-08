@@ -78,7 +78,7 @@ export default function OccurrenceTimeline({
         position: 'absolute',
         left: '50%',
         transform: 'translateX(-50%)',
-        bottom: 24,
+        bottom: 'max(24px, env(safe-area-inset-bottom))',
         width: 'min(92vw, 720px)',
         padding: '8px 12px',
         background: 'rgba(18, 22, 28, 0.94)',

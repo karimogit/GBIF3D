@@ -193,24 +193,19 @@ export default function FilterForm({
           Full occurrence date range (YYYY-MM-DD). Leave empty for all dates.
         </Typography>
       </Box>
-      <FormControl fullWidth size="small" sx={{ mt: 2 }}>
-        <InputLabel id="filter-iucn-label">IUCN Red List</InputLabel>
-        <Select
-          labelId="filter-iucn-label"
-          label="IUCN Red List"
-          value={filters.iucnRedListCategory ?? IUCN_ANY}
-          onChange={(e) => {
-            const v = e.target.value;
-            updateFilter('iucnRedListCategory', v === IUCN_ANY ? undefined : v);
-          }}
-        >
-          {IUCN_OPTIONS.map((o) => (
-            <MenuItem key={o.value} value={o.value}>
-              {o.label}
-            </MenuItem>
-          ))}
-        </Select>
-      </FormControl>
+      <TextField
+        fullWidth
+        label="Max results"
+        type="number"
+        size="small"
+        value={filters.limit ?? 10000}
+        onChange={(e) =>
+          updateFilter('limit', Math.min(OCCURRENCE_MAX_TOTAL, Math.max(100, Number(e.target.value) || 10000)))
+        }
+        sx={{ mt: 2 }}
+        inputProps={{ min: 100, max: OCCURRENCE_MAX_TOTAL, step: 1000 }}
+        helperText={`100–${(OCCURRENCE_MAX_TOTAL / 1000).toFixed(0)}k; fetched in chunks of 1,000 to stay within API limits.`}
+      />
       <Box sx={{ mt: 2 }}>
         <Button
           fullWidth
@@ -225,6 +220,24 @@ export default function FilterForm({
         </Button>
         <Collapse in={advancedOpen}>
           <Box sx={{ mt: 1 }}>
+            <FormControl fullWidth size="small" sx={{ mt: 1 }}>
+              <InputLabel id="filter-iucn-label">IUCN Red List</InputLabel>
+              <Select
+                labelId="filter-iucn-label"
+                label="IUCN Red List"
+                value={filters.iucnRedListCategory ?? IUCN_ANY}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  updateFilter('iucnRedListCategory', v === IUCN_ANY ? undefined : v);
+                }}
+              >
+                {IUCN_OPTIONS.map((o) => (
+                  <MenuItem key={o.value} value={o.value}>
+                    {o.label}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
             <FormControl fullWidth size="small" sx={{ mt: 1 }}>
               <InputLabel id="filter-basis-label">Basis of record</InputLabel>
               <Select
@@ -292,19 +305,6 @@ export default function FilterForm({
           </Box>
         </Collapse>
       </Box>
-      <TextField
-        fullWidth
-        label="Max results"
-        type="number"
-        size="small"
-        value={filters.limit ?? 10000}
-        onChange={(e) =>
-          updateFilter('limit', Math.min(OCCURRENCE_MAX_TOTAL, Math.max(100, Number(e.target.value) || 10000)))
-        }
-        sx={{ mt: 2 }}
-        inputProps={{ min: 100, max: OCCURRENCE_MAX_TOTAL, step: 1000 }}
-        helperText={`100–${(OCCURRENCE_MAX_TOTAL / 1000).toFixed(0)}k; fetched in chunks of 1,000 to stay within API limits.`}
-      />
     </Box>
   );
 }
