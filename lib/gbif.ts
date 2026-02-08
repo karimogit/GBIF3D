@@ -80,9 +80,21 @@ export async function searchOccurrences(
     params.taxonKey = filters.taxonKey;
   }
   if (filters.year) params.year = filters.year;
-  // GBIF expects date range with slash: YYYY-MM-DD/YYYY-MM-DD
-  if (filters.eventDate) {
-    params.eventDate = String(filters.eventDate).replace(',', '/');
+  // GBIF expects date range with slash: YYYY-MM-DD/YYYY-MM-DD (ISO 8601); invalid format causes 400
+  const rawDate = filters.eventDate && String(filters.eventDate).trim();
+  if (rawDate) {
+    const normalized = rawDate.replace(',', '/');
+    const [from, to] = normalized.split('/').map((s) => s?.trim() ?? '');
+    const isoDate = /^\d{4}-\d{2}-\d{2}$/;
+    // Validate: both dates must be valid ISO format, and start <= end
+    if (from && to && isoDate.test(from) && isoDate.test(to) && from <= to) {
+      // Validate dates are actually valid calendar dates (e.g. not 2025-13-45)
+      const fromDate = new Date(from + 'T00:00:00Z');
+      const toDate = new Date(to + 'T00:00:00Z');
+      if (!isNaN(fromDate.getTime()) && !isNaN(toDate.getTime()) && fromDate <= toDate) {
+        params.eventDate = `${from}/${to}`;
+      }
+    }
   }
   if (filters.iucnRedListCategory) params.iucnRedListCategory = filters.iucnRedListCategory;
   if (filters.basisOfRecord) params.basisOfRecord = filters.basisOfRecord;
@@ -120,12 +132,15 @@ export async function searchOccurrences(
           ? (body as { message?: string }).message
           : typeof body === 'object' && body !== null && 'error' in body
             ? (body as { error?: string }).error
-            : undefined;
-      lastErr = new GBIFApiError(
-        bodyMsg ?? ax.message ?? (status === 400 ? 'Invalid search parameters (check region and filters).' : 'GBIF occurrence search failed'),
-        status,
-        typeof body === 'object' && body !== null && 'code' in body ? (body as { code?: string }).code : undefined
-      );
+            : typeof body === 'string'
+              ? body
+              : undefined;
+      // For 400 errors, include more detail about what was sent
+      const errorMsg =
+        status === 400
+          ? bodyMsg ?? `Invalid search parameters. Check date range, region bounds, and filters. Sent: ${JSON.stringify(params)}`
+          : bodyMsg ?? ax.message ?? 'GBIF occurrence search failed';
+      lastErr = new GBIFApiError(errorMsg, status, typeof body === 'object' && body !== null && 'code' in body ? (body as { code?: string }).code : undefined);
       if (status === 429 && attempt < MAX_RETRIES_ON_429) {
         const retryAfter = ax.response?.headers?.['retry-after'];
         const waitMs = typeof retryAfter === 'string' && /^\d+$/.test(retryAfter)
