@@ -301,6 +301,9 @@ export default function Home() {
     placeSearchResult,
     viewBounds
   );
+  // When a predefined country region is selected (2-letter id), pass ISO country code to restrict API
+  const selectedCountryCode =
+    selectedRegionId && /^[a-z]{2}$/.test(selectedRegionId) ? selectedRegionId : null;
 
   const handleSaveDrawnRegion = useCallback(() => {
     if (!drawnBounds) return;
@@ -374,6 +377,7 @@ export default function Home() {
                 ? null
                 : selectedRegionBounds
             }
+            selectedCountryCode={selectedRegionId === REGION_ID_CURRENT_VIEW ? null : selectedCountryCode}
             flyToBounds={selectedRegionId === REGION_ID_CURRENT_VIEW ? null : (selectedRegionBounds ?? undefined)}
             onViewBoundsChange={(b) => {
               viewBoundsRef.current = b;

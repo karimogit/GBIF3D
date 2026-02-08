@@ -69,17 +69,20 @@ export default function FilterForm({
   const [advancedOpen, setAdvancedOpen] = useState(false);
   /** Selected species for display (synced from filters so selection persists when popover closes). Use stable empty ref so MUI Autocomplete doesn't reset inputValue on every keystroke. */
   const selectedSpecies: SpeciesOption[] = filters.selectedSpeciesOptions ?? EMPTY_SPECIES_OPTIONS;
-  const [dateFrom, setDateFrom] = useState<string>(
-    filters.eventDate ? String(filters.eventDate).split(',')[0] ?? '' : ''
-  );
-  const [dateTo, setDateTo] = useState<string>(
-    filters.eventDate ? String(filters.eventDate).split(',')[1] ?? '' : ''
-  );
+  // GBIF eventDate range uses slash: YYYY-MM-DD/YYYY-MM-DD (accept comma for backward compatibility)
+  const parseEventDateRange = (s: string | undefined): [string, string] => {
+    if (!s?.trim()) return ['', ''];
+    const str = String(s).trim();
+    const parts = str.includes('/') ? str.split('/') : str.split(',');
+    return [parts[0]?.trim() ?? '', parts[1]?.trim() ?? ''];
+  };
+  const [dateFrom, setDateFrom] = useState<string>(() => parseEventDateRange(filters.eventDate)[0]);
+  const [dateTo, setDateTo] = useState<string>(() => parseEventDateRange(filters.eventDate)[1]);
 
   useEffect(() => {
-    const parts = filters.eventDate ? String(filters.eventDate).split(',') : [];
-    setDateFrom(parts[0] ?? '');
-    setDateTo(parts[1] ?? '');
+    const [from, to] = parseEventDateRange(filters.eventDate);
+    setDateFrom(from);
+    setDateTo(to);
   }, [filters.eventDate]);
 
   const updateFilter = (key: keyof OccurrenceFilters, value: unknown) => {
@@ -109,7 +112,7 @@ export default function FilterForm({
       updateFilter('eventDate', undefined);
       return;
     }
-    updateFilter('eventDate', `${from},${to}`);
+    updateFilter('eventDate', `${from}/${to}`);
   };
 
   const handleTaxonClass = (classKey: string) => {

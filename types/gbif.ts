@@ -106,7 +106,7 @@ export interface OccurrenceFilters {
   /** Selected species options for filter UI display (persists when popover closes) */
   selectedSpeciesOptions?: SelectedSpeciesOption[];
   year?: string; // single year or range "2010,2020"
-  /** Optional occurrence date range "YYYY-MM-DD,YYYY-MM-DD" (GBIF eventDate parameter). */
+  /** Optional occurrence date range "YYYY-MM-DD/YYYY-MM-DD" (GBIF eventDate parameter). */
   eventDate?: string;
   iucnRedListCategory?: IUCNCategory | string;
   basisOfRecord?: string; // e.g. HUMAN_OBSERVATION, PRESERVED_SPECIMEN

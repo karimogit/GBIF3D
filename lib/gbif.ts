@@ -80,7 +80,10 @@ export async function searchOccurrences(
     params.taxonKey = filters.taxonKey;
   }
   if (filters.year) params.year = filters.year;
-  if (filters.eventDate) params.eventDate = filters.eventDate;
+  // GBIF expects date range with slash: YYYY-MM-DD/YYYY-MM-DD
+  if (filters.eventDate) {
+    params.eventDate = String(filters.eventDate).replace(',', '/');
+  }
   if (filters.iucnRedListCategory) params.iucnRedListCategory = filters.iucnRedListCategory;
   if (filters.basisOfRecord) params.basisOfRecord = filters.basisOfRecord;
   if (filters.continent?.trim()) params.continent = filters.continent.trim().toUpperCase();

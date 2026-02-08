@@ -26,6 +26,8 @@ interface GlobeViewerProps {
   onOccurrencesChange?: (occurrences: GBIFOccurrence[]) => void;
   /** When set, fetch and fly to this region; when null, use current view bounds */
   selectedRegionBounds?: Bounds | null;
+  /** When set (e.g. predefined country region like Sweden), restrict API to this ISO country code in addition to geometry. */
+  selectedCountryCode?: string | null;
   /** When set, fly camera to these bounds (e.g. after picking a region). Omit or pass null to skip flying (e.g. when "Current view" is selected). */
   flyToBounds?: Bounds | null;
   /** Called when the camera view bounds change (e.g. for "Save current view") */
@@ -59,6 +61,7 @@ export default function GlobeViewer({
   filters,
   onOccurrencesChange,
   selectedRegionBounds = null,
+  selectedCountryCode = null,
   flyToBounds: flyToBoundsProp = undefined,
   onViewBoundsChange,
   drawRegionMode = false,
@@ -96,9 +99,11 @@ export default function GlobeViewer({
       setError(null);
       try {
         const geometry = boundsToWktPolygon(bounds);
+        const country = selectedCountryCode?.trim().toUpperCase() ?? filters.country;
         const res = await searchOccurrencesChunked({
           ...filters,
           geometry,
+          country: country || undefined,
           limit: filters.limit ?? 1000,
         });
         setOccurrences(res.results);
@@ -119,6 +124,7 @@ export default function GlobeViewer({
     },
     // Refetch when these filters change; add new filter keys here and in lib/gbif searchOccurrences params
     [
+      selectedCountryCode,
       filters.geometry,
       filters.taxonKey,
       filters.taxonKeys,
