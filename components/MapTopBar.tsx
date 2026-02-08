@@ -312,7 +312,7 @@ export default function MapTopBar({
         position: 'absolute',
         top: 'max(8px, env(safe-area-inset-top))',
         left: 'max(8px, env(safe-area-inset-left))',
-        right: 'max(8px, env(safe-area-inset-right))',
+        right: 0,
         zIndex: 1300,
         display: 'flex',
         flexWrap: 'wrap',
@@ -323,7 +323,6 @@ export default function MapTopBar({
         borderRadius: 2,
         p: 0.5,
         pl: 1,
-        pr: 0.5,
         pointerEvents: 'none',
         '& > *': { pointerEvents: 'auto' },
         '& .MuiButton-root': {
@@ -1088,7 +1087,7 @@ export default function MapTopBar({
             <Button onClick={() => setHelpOpen(false)}>Close</Button>
           </DialogActions>
         </Dialog>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, marginLeft: 'auto' }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, marginLeft: 'auto', paddingRight: 'max(8px, env(safe-area-inset-right))' }}>
         <IconButton
           size="small"
           aria-label="Help: how this tool works"
