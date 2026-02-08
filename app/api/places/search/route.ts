@@ -30,7 +30,10 @@ export async function GET(request: NextRequest) {
 
   try {
     const res = await fetch(`${NOMINATIM_URL}?${params}`, {
-      headers: { 'User-Agent': USER_AGENT },
+      headers: {
+        'User-Agent': USER_AGENT,
+        'Accept-Language': 'en',
+      },
       next: { revalidate: 3600 },
     });
     if (!res.ok) {

@@ -27,7 +27,7 @@ Built with Next.js, Cesium (Resium), and the GBIF API.
 - **Terrain** — Cesium World Terrain (optional Ion token); elevation visible when zoomed; occurrence points clamp to the surface
 - **Export** — Save current view as PNG image, visible occurrences as GeoJSON or CSV, or generate a PDF report with map snapshot and species summary
 - **Accessibility** — Skip link, keyboard focus, color-blind friendly palette, aria-labels on controls
-- **Performance** — Caching to reduce API load; configurable result limit (up to 100k in chunks of 1,000)
+- **Performance** — Caching to reduce API load; configurable result limit (up to 100k, fetched in chunks of 300 per request — GBIF API max)
 
 ## Tech stack
 

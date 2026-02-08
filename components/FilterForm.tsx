@@ -166,9 +166,26 @@ export default function FilterForm({
         </Select>
       </FormControl>
       <Box sx={{ mt: 2, width: '100%' }}>
-        <Typography variant="caption" sx={{ display: 'block', mb: 0.5, color: 'text.secondary' }}>
-          Date range
-        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.5, flexWrap: 'wrap', gap: 0.5 }}>
+          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+            Date range
+          </Typography>
+          {filters.eventDate && (
+            <Button
+              size="small"
+              variant="text"
+              color="secondary"
+              onClick={() => {
+                setDateFrom('');
+                setDateTo('');
+                updateFilter('eventDate', undefined);
+              }}
+              sx={{ minWidth: 0, py: 0, fontSize: '0.75rem' }}
+            >
+              Clear date filter
+            </Button>
+          )}
+        </Box>
         <Box sx={{ display: 'flex', gap: 1, width: '100%' }}>
           <TextField
             label=""
@@ -190,7 +207,9 @@ export default function FilterForm({
           />
         </Box>
         <Typography variant="caption" sx={{ mt: 0.5, color: 'text.disabled' }}>
-          Full occurrence date range (YYYY-MM-DD). Leave empty for all dates.
+          {filters.eventDate
+            ? 'Date filter is active — results are limited to this range. Clear it for all dates.'
+            : 'Start and end date. Leave both empty for all dates.'}
         </Typography>
       </Box>
       <TextField
@@ -204,7 +223,7 @@ export default function FilterForm({
         }
         sx={{ mt: 2 }}
         inputProps={{ min: 100, max: OCCURRENCE_MAX_TOTAL, step: 1000 }}
-        helperText={`100–${(OCCURRENCE_MAX_TOTAL / 1000).toFixed(0)}k; fetched in chunks of 1,000 to stay within API limits.`}
+        helperText={`100–${(OCCURRENCE_MAX_TOTAL / 1000).toFixed(0)}k; fetched in chunks of 300 (GBIF API max per request).`}
       />
       <Box sx={{ mt: 2 }}>
         <Button

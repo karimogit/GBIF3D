@@ -135,16 +135,36 @@ function computeClusters(
 
 /** IUCN category → CSS color (no Cesium usage at module load, to stay SSR-safe). */
 const IUCN_COLORS: Record<string, string> = {
-  EX: '#000000', // black
-  EW: '#8B0000', // dark red
-  CR: '#FF0000', // red
-  EN: '#FF9800', // orange-ish
-  VU: '#F9A825', // amber
-  NT: '#FBC02D', // warm gold
-  LC: '#2E7D32', // green
-  DD: '#757575', // gray
-  NA: '#BDBDBD', // light gray
+  EX: '#000000',
+  EW: '#8B0000',
+  CR: '#FF0000',
+  EN: '#FF9800',
+  VU: '#F9A825',
+  NT: '#FBC02D',
+  LC: '#2E7D32',
+  DD: '#757575',
+  NA: '#BDBDBD',
 };
+
+/** IUCN category code → full label for display in species/occurrence box. */
+const IUCN_LABELS: Record<string, string> = {
+  EX: 'Extinct',
+  EW: 'Extinct in the Wild',
+  CR: 'Critically Endangered',
+  EN: 'Endangered',
+  VU: 'Vulnerable',
+  NT: 'Near Threatened',
+  LC: 'Least Concern',
+  DD: 'Data Deficient',
+  NA: 'Not Assessed',
+};
+
+function formatIucnStatus(code: string): string {
+  if (!code) return '';
+  const upper = code.toUpperCase();
+  const label = IUCN_LABELS[upper];
+  return label ? `${upper} (${label})` : code;
+}
 
 const LIGHTBOX_PHOTO_CLASS = 'gbif-globe-infobox-photo';
 
@@ -218,7 +238,8 @@ ${validUrls
   const recordedBy = occ.recordedBy?.trim() || '';
   const institution = occ.institutionCode?.trim() || '';
   const dataset = occ.datasetName?.trim() || '';
-  const iucn = occ.iucnRedListCategory?.trim() || '';
+  const iucnRaw = occ.iucnRedListCategory?.trim() || '';
+  const iucn = formatIucnStatus(iucnRaw);
   const rank = occ.taxonRank?.trim() || '';
 
   return `

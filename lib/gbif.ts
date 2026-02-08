@@ -14,12 +14,14 @@ import type {
 import { getCached, setCache, cacheKey, OCCURRENCE_CACHE_TTL_MS } from './cache';
 
 const BASE_URL = 'https://api.gbif.org/v1';
+/** GBIF occurrence search API allows max 300 records per page (see techdocs.gbif.org). */
+const OCCURRENCE_PAGE_MAX = 300;
 /** Default max results per request. */
-const OCCURRENCE_LIMIT = 1000;
-/** Max total results we allow (chunked fetching). GBIF search API can be paged up to ~100k. */
+const OCCURRENCE_LIMIT = OCCURRENCE_PAGE_MAX;
+/** Max total results we allow (chunked fetching). GBIF search API can be paged up to 100k total. */
 export const OCCURRENCE_MAX_TOTAL = 100_000;
-/** Chunk size per API request to stay within API limits. */
-const OCCURRENCE_CHUNK_SIZE = 1000;
+/** Chunk size per API request — must not exceed GBIF's 300 per page. */
+const OCCURRENCE_CHUNK_SIZE = OCCURRENCE_PAGE_MAX;
 /** Delay between chunk requests (ms) to reduce rate-limit risk. */
 const CHUNK_DELAY_MS = 150;
 const REQUEST_TIMEOUT_MS = 30000;
