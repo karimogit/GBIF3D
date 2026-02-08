@@ -1138,10 +1138,12 @@ function SelectedOccurrenceInfoSync({
       return;
     }
 
-    entity.position = Cesium.Cartesian3.fromDegrees(
-      occ.decimalLongitude,
-      occ.decimalLatitude,
-      0
+    entity.position = new Cesium.ConstantPositionProperty(
+      Cesium.Cartesian3.fromDegrees(
+        occ.decimalLongitude,
+        occ.decimalLatitude,
+        0
+      )
     );
     entity.description = occurrenceToDescription(
       occ,
