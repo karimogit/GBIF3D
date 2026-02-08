@@ -499,7 +499,7 @@ export default function MapTopBar({
             </>
           )}
         </Box>
-      <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 0.5, flexShrink: 0, flex: 1, minWidth: 0 }}>
       <Button
         variant="outlined"
         size="small"
@@ -1092,7 +1092,12 @@ export default function MapTopBar({
           size="small"
           aria-label="Help: how this tool works"
           onClick={() => setHelpOpen(true)}
-          sx={{ color: 'common.white' }}
+          sx={{
+            color: 'rgba(0,0,0,0.7)',
+            backgroundColor: 'rgba(255, 255, 255, 0.92)',
+            border: '1px solid rgba(0, 0, 0, 0.23)',
+            '&:hover': { backgroundColor: 'rgba(255, 255, 255, 0.98)' },
+          }}
         >
           <HelpOutline fontSize="small" />
         </IconButton>
