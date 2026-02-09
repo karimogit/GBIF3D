@@ -867,7 +867,7 @@ export default function MapTopBar({
             aria-label="Export"
             aria-haspopup="true"
             aria-expanded={Boolean(exportMenuAnchor)}
-            sx={{ minWidth: 0, display: { xs: 'none', sm: 'inline-flex' } }}
+            sx={{ minWidth: 0, display: 'inline-flex' }}
           >
             Export
           </Button>
@@ -1133,7 +1133,7 @@ export default function MapTopBar({
           onClose={() => setAboutMenuAnchor(null)}
           anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
           transformOrigin={{ vertical: 'top', horizontal: 'right' }}
-          slotProps={{ paper: { sx: { mt: 1, minWidth: 260, maxWidth: 'min(360px, calc(100vw - 24px))' } } }}
+          slotProps={{ paper: { sx: { mt: 1, minWidth: 280, maxWidth: 'min(420px, calc(100vw - 24px))' } } }}
         >
           <Paper component="div" sx={{ p: 2, boxShadow: 'none', backgroundColor: 'transparent' }}>
             <Typography variant="subtitle1" fontWeight={600} gutterBottom>
