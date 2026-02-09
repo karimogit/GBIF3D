@@ -1062,7 +1062,7 @@ export default function MapTopBar({
               mx: 1,
               height: '80%',
               alignSelf: 'center',
-              borderColor: 'rgba(255,255,255,0.7)',
+              borderColor: '#ffffff',
             }}
           />
           <Button

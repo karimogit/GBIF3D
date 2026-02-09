@@ -81,9 +81,9 @@ html, body {
   display: none !important;
 }
 
-/* Species info box: leave clear gap below the top bar */
+/* Species info box: small gap below the top bar */
 .cesium-infoBox {
-  margin-top: 56px;
+  margin-top: 40px;
 }
 .cesium-viewer-fullscreenContainer {
   bottom: 16px !important;
