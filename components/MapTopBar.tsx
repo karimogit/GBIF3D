@@ -301,10 +301,12 @@ export default function MapTopBar({
       if (newValue.bounds) {
         onPlaceSelect(newValue.bounds, newValue.label, newValue.countryCode);
       } else {
+        // When choosing a predefined region (not a searched place), clear any place search
+        setPlaceQuery('');
         onRegionChange(newValue.id);
       }
     },
-    [onRegionChange, onPlaceSelect]
+    [onRegionChange, onPlaceSelect, setPlaceQuery]
   );
 
   return (
