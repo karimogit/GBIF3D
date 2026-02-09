@@ -312,7 +312,7 @@ export default function MapTopBar({
         position: 'absolute',
         top: 'max(8px, env(safe-area-inset-top))',
         left: 'max(8px, env(safe-area-inset-left))',
-        right: 0,
+        right: 'max(8px, env(safe-area-inset-right))',
         zIndex: 1300,
         display: 'flex',
         flexWrap: 'wrap',
@@ -543,7 +543,7 @@ export default function MapTopBar({
         onClose={() => setMoreMenuAnchor(null)}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
         transformOrigin={{ vertical: 'top', horizontal: 'left' }}
-        slotProps={{ paper: { sx: { minWidth: 220, maxWidth: 'calc(100vw - 24px)', maxHeight: 'min(70vh, 400px)' } } }}
+        slotProps={{ paper: { sx: { minWidth: 220, maxWidth: 'min(420px, calc(100vw - 24px))', maxHeight: 'min(70vh, 400px)' } } }}
       >
         {favorites.length > 0 && onRemoveFavorite && (
           <MenuItem
@@ -1087,7 +1087,7 @@ export default function MapTopBar({
             <Button onClick={() => setHelpOpen(false)}>Close</Button>
           </DialogActions>
         </Dialog>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, marginLeft: 'auto', paddingRight: 'max(8px, env(safe-area-inset-right))' }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, marginLeft: 'auto' }}>
         <IconButton
           size="small"
           aria-label="Help: how this tool works"
