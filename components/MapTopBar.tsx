@@ -1019,8 +1019,8 @@ export default function MapTopBar({
                       )}
                       {!photorealistic3D && <ListItemIcon sx={{ minWidth: 32 }} />}
                       <ListItemText
-                        primary="Photorealistic 3D (Google)"
-                        secondary="3D buildings overlay (Cesium Ion)"
+                        primary="Photorealistic 3D"
+                        secondary="3D buildings overlay"
                       />
                     </MenuItem>,
                     <Divider key="photorealistic-divider" sx={{ my: 1 }} />,
@@ -1058,8 +1058,12 @@ export default function MapTopBar({
           </Menu>
           <Divider
             orientation="vertical"
-            flexItem
-            sx={{ mx: 1, borderColor: 'rgba(255,255,255,0.7)' }}
+            sx={{
+              mx: 1,
+              height: '80%',
+              alignSelf: 'center',
+              borderColor: 'rgba(255,255,255,0.7)',
+            }}
           />
           <Button
             variant="outlined"
@@ -1145,7 +1149,7 @@ export default function MapTopBar({
               Explore where species have been recorded on an interactive 3D globe. Data comes from GBIF: millions of observations from museums, surveys, and citizen science.
             </Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-              Pick a region or search for a place, import your own GBIF-style datasets, filter by species or year, and draw your own area. Each dot is an occurrence; colors show IUCN status. Use the <strong>timeline</strong> at the bottom to filter by year. Use <strong>View</strong> for 3D/2D/Columbus, base maps, and optional Photorealistic 3D (Google). Export current data as image, GeoJSON, CSV, or PDF.
+              Pick a region or search for a place, import your own GBIF-style datasets, filter by species or year, and draw your own area. Each dot is an occurrence; colors show IUCN status. Use the <strong>timeline</strong> at the bottom to filter by year. Use <strong>View</strong> for 3D/2D, base maps, and optional Photorealistic 3D. Export current data as image, GeoJSON, CSV, or PDF.
             </Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
               Built with Next.js, Cesium (Resium), and the GBIF API.
