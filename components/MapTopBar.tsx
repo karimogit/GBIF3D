@@ -26,6 +26,7 @@ import GitHub from '@mui/icons-material/GitHub';
 import EditOutlined from '@mui/icons-material/EditOutlined';
 import Public from '@mui/icons-material/Public';
 import HelpOutline from '@mui/icons-material/HelpOutline';
+import MenuIcon from '@mui/icons-material/Menu';
 import Check from '@mui/icons-material/Check';
 import BookmarkAdd from '@mui/icons-material/BookmarkAdd';
 import Bookmark from '@mui/icons-material/Bookmark';
@@ -511,32 +512,30 @@ export default function MapTopBar({
         aria-expanded={Boolean(filterAnchor)}
         sx={{
           minWidth: 0,
+          display: { xs: 'none', sm: 'inline-flex' },
           bgcolor: filterAnchor ? 'action.selected' : undefined,
           '&:hover': { bgcolor: 'action.hover' },
         }}
       >
         Filters
       </Button>
-      {/* On mobile: single "More" menu; on desktop: individual buttons */}
-      <Button
-        variant="outlined"
+      {/* On mobile: single hamburger menu; on desktop: individual buttons */}
+      <IconButton
         size="small"
-        endIcon={<ArrowDropDown />}
         onClick={(e) => {
           moreButtonAnchorRef.current = e.currentTarget;
           setMoreMenuAnchor(e.currentTarget);
         }}
-        aria-label="More options"
+        aria-label="Menu"
         aria-haspopup="true"
         aria-expanded={Boolean(moreMenuAnchor)}
         sx={{
-          minWidth: 0,
           display: { xs: 'inline-flex', sm: 'none' },
-          bgcolor: moreMenuAnchor ? 'action.selected' : undefined,
+          color: 'rgba(255,255,255,0.9)',
         }}
       >
-        More
-      </Button>
+        <MenuIcon fontSize="small" />
+      </IconButton>
       <Menu
         anchorEl={moreMenuAnchor}
         open={Boolean(moreMenuAnchor)}
@@ -545,6 +544,18 @@ export default function MapTopBar({
         transformOrigin={{ vertical: 'top', horizontal: 'left' }}
         slotProps={{ paper: { sx: { minWidth: 220, maxWidth: 'min(420px, calc(100vw - 24px))', maxHeight: 'min(70vh, 400px)' } } }}
       >
+        {/* Filters entry for mobile */}
+        <MenuItem
+          onClick={() => {
+            setMoreMenuAnchor(null);
+            if (moreButtonAnchorRef.current) {
+              setFilterAnchor(moreButtonAnchorRef.current);
+            }
+          }}
+        >
+          <ListItemIcon><FilterList fontSize="small" /></ListItemIcon>
+          <ListItemText primary="Filters" />
+        </MenuItem>
         {favorites.length > 0 && onRemoveFavorite && (
           <MenuItem
             onClick={() => {
@@ -866,7 +877,7 @@ export default function MapTopBar({
             onClose={() => setExportMenuAnchor(null)}
             anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
             transformOrigin={{ vertical: 'top', horizontal: 'right' }}
-            slotProps={{ paper: { sx: { maxWidth: 'calc(100vw - 24px)' } } }}
+            slotProps={{ paper: { sx: { mt: 1, maxWidth: 'calc(100vw - 24px)' } } }}
           >
             {[
               onExportImage && (
@@ -957,7 +968,7 @@ export default function MapTopBar({
             onClose={() => setViewMenuAnchor(null)}
             anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
             transformOrigin={{ vertical: 'top', horizontal: 'left' }}
-            slotProps={{ paper: { sx: { minWidth: 260, maxWidth: 'calc(100vw - 24px)' } } }}
+            slotProps={{ paper: { sx: { mt: 1, minWidth: 260, maxWidth: 'calc(100vw - 24px)' } } }}
           >
             {[
               <ListSubheader key="view-type" sx={{ lineHeight: 2 }}>View type</ListSubheader>,
@@ -1059,11 +1070,56 @@ export default function MapTopBar({
                 : []),
             ].filter(Boolean)}
           </Menu>
+          <Divider
+            orientation="vertical"
+            flexItem
+            sx={{ mx: 1, borderColor: 'rgba(255,255,255,0.7)' }}
+          />
+          <Button
+            variant="outlined"
+            size="small"
+            startIcon={<InfoOutlined />}
+            endIcon={<ArrowDropDown sx={{ display: { xs: 'none', sm: 'block' } }} />}
+            onClick={(e) => setAboutMenuAnchor(e.currentTarget)}
+            aria-label="About"
+            aria-haspopup="true"
+            aria-expanded={Boolean(aboutMenuAnchor)}
+            sx={{ minWidth: 0, '& .MuiButton-startIcon': { mr: { xs: 0, sm: 0.5 } } }}
+          >
+            <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>About</Box>
+          </Button>
+          <IconButton
+            size="small"
+            aria-label="Help: how this tool works"
+            onClick={() => setHelpOpen(true)}
+            sx={{
+              color: 'rgba(255,255,255,0.9)',
+              p: 0.5,
+              '&:hover': { backgroundColor: 'rgba(255,255,255,0.08)' },
+            }}
+          >
+            <HelpOutline fontSize="small" />
+          </IconButton>
+          <IconButton
+            component="a"
+            href={githubUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            size="small"
+            aria-label="View on GitHub"
+            sx={{
+              color: 'rgba(255,255,255,0.9)',
+              p: 0.5,
+              '&:hover': { backgroundColor: 'rgba(255,255,255,0.08)' },
+            }}
+          >
+            <GitHub fontSize="small" />
+          </IconButton>
         </>
       )}
       </Box>
 
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0, marginLeft: 'auto' }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
         <Dialog
           open={helpOpen}
           onClose={() => setHelpOpen(false)}
@@ -1087,40 +1143,13 @@ export default function MapTopBar({
             <Button onClick={() => setHelpOpen(false)}>Close</Button>
           </DialogActions>
         </Dialog>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, marginLeft: 'auto' }}>
-        <IconButton
-          size="small"
-          aria-label="Help: how this tool works"
-          onClick={() => setHelpOpen(true)}
-          sx={{
-            color: 'rgba(0,0,0,0.7)',
-            backgroundColor: 'rgba(255, 255, 255, 0.92)',
-            border: '1px solid rgba(0, 0, 0, 0.23)',
-            '&:hover': { backgroundColor: 'rgba(255, 255, 255, 0.98)' },
-          }}
-        >
-          <HelpOutline fontSize="small" />
-        </IconButton>
-        <Button
-          variant="outlined"
-          size="small"
-          startIcon={<InfoOutlined />}
-          endIcon={<ArrowDropDown sx={{ display: { xs: 'none', sm: 'block' } }} />}
-          onClick={(e) => setAboutMenuAnchor(e.currentTarget)}
-          aria-label="About"
-          aria-haspopup="true"
-          aria-expanded={Boolean(aboutMenuAnchor)}
-          sx={{ minWidth: 0, '& .MuiButton-startIcon': { mr: { xs: 0, sm: 0.5 } } }}
-        >
-          <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>About</Box>
-        </Button>
         <Menu
           anchorEl={aboutMenuAnchor}
           open={Boolean(aboutMenuAnchor)}
           onClose={() => setAboutMenuAnchor(null)}
           anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
           transformOrigin={{ vertical: 'top', horizontal: 'right' }}
-          slotProps={{ paper: { sx: { minWidth: 260, maxWidth: 'calc(100vw - 24px)' } } }}
+          slotProps={{ paper: { sx: { mt: 1, minWidth: 260, maxWidth: 'min(360px, calc(100vw - 24px))' } } }}
         >
           <Paper component="div" sx={{ p: 2, boxShadow: 'none', backgroundColor: 'transparent' }}>
             <Typography variant="subtitle1" fontWeight={600} gutterBottom>
@@ -1140,21 +1169,6 @@ export default function MapTopBar({
             </Typography>
           </Paper>
         </Menu>
-
-        <Button
-          component="a"
-          href={githubUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          variant="outlined"
-          size="small"
-          startIcon={<GitHub />}
-          aria-label="View on GitHub"
-          sx={{ minWidth: 0, '& .MuiButton-startIcon': { mr: { xs: 0, sm: 0.5 } } }}
-        >
-          <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>GitHub</Box>
-        </Button>
-        </Box>
       </Box>
       </Box>
     </Box>

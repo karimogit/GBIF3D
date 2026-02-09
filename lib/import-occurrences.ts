@@ -124,10 +124,11 @@ function parseLineByDelimiter(line: string, delimiter: string): string[] {
   return out;
 }
 
-/** Detect delimiter from first line: tab if more tabs than commas (GBIF exports are often TSV). */
+/** Detect delimiter from first line: prefer the most frequent of comma, semicolon, or tab (GBIF exports are often TSV or semicolon-separated). */
 function detectDelimiter(firstLine: string): string {
   let tabs = 0;
   let commas = 0;
+  let semicolons = 0;
   let inQuotes = false;
   for (let i = 0; i < firstLine.length; i++) {
     const c = firstLine[i];
@@ -135,9 +136,12 @@ function detectDelimiter(firstLine: string): string {
     else if (!inQuotes) {
       if (c === '\t') tabs += 1;
       else if (c === ',') commas += 1;
+      else if (c === ';') semicolons += 1;
     }
   }
-  return tabs >= commas ? '\t' : ',';
+  if (semicolons >= tabs && semicolons >= commas) return ';';
+  if (tabs >= commas) return '\t';
+  return ',';
 }
 
 /** Simple CSV/TSV line parse (handles quoted fields; uses comma, semicolon, or tab). */
