@@ -370,7 +370,7 @@ export default function MapTopBar({
             alignItems: 'center',
             gap: 0.5,
             flex: { xs: 1, sm: 'none' },
-            minWidth: { xs: 120, sm: 0 },
+            minWidth: { xs: 160, sm: 0 },
             maxWidth: { xs: '100%', sm: 'none' },
             backgroundColor: 'rgba(255, 255, 255, 0.92)',
             borderRadius: 1,
@@ -409,7 +409,7 @@ export default function MapTopBar({
               </li>
             )}
             size="small"
-            sx={{ minWidth: { xs: 0, sm: 200 } }}
+            sx={{ minWidth: { xs: 0, sm: 260 } }}
             loading={placeLoading}
             renderInput={(params) => (
               <TextField
@@ -1002,22 +1002,28 @@ export default function MapTopBar({
                 {sceneMode !== '2D' && <ListItemIcon sx={{ minWidth: 32 }} />}
                 <ListItemText primary="2D Map" secondary="Top-down flat map" />
               </MenuItem>,
-              <MenuItem
-                key="columbus"
-                onClick={() => {
-                  onSceneModeChange('Columbus');
-                  setViewMenuAnchor(null);
-                }}
-              >
-                {sceneMode === 'Columbus' && (
-                  <ListItemIcon sx={{ minWidth: 32 }}>
-                    <Check fontSize="small" color="primary" />
-                  </ListItemIcon>
-                )}
-                {sceneMode !== 'Columbus' && <ListItemIcon sx={{ minWidth: 32 }} />}
-                <ListItemText primary="Columbus View" secondary="2D map wrapped on a cylinder" />
-              </MenuItem>,
-              <Divider key="adv-divider" sx={{ my: 1 }} />,
+              ...(onPhotorealistic3DChange != null
+                ? [
+                    <MenuItem
+                      key="photorealistic3d"
+                      onClick={() => {
+                        onPhotorealistic3DChange(!photorealistic3D);
+                      }}
+                    >
+                      {photorealistic3D && (
+                        <ListItemIcon sx={{ minWidth: 32 }}>
+                          <Check fontSize="small" color="primary" />
+                        </ListItemIcon>
+                      )}
+                      {!photorealistic3D && <ListItemIcon sx={{ minWidth: 32 }} />}
+                      <ListItemText
+                        primary="Photorealistic 3D (Google)"
+                        secondary="3D buildings overlay (Cesium Ion)"
+                      />
+                    </MenuItem>,
+                    <Divider key="photorealistic-divider" sx={{ my: 1 }} />,
+                  ]
+                : []),
               ...(onBaseMapChange
                 ? [
                     <ListSubheader key="base-subheader" sx={{ lineHeight: 2 }}>Base map</ListSubheader>,
@@ -1044,28 +1050,6 @@ export default function MapTopBar({
                         <ListItemText primary={primary} secondary={secondary} />
                       </MenuItem>
                     )),
-                  ]
-                : []),
-              ...(onPhotorealistic3DChange != null
-                ? [
-                    <Divider key="photorealistic-divider" sx={{ my: 1 }} />,
-                    <MenuItem
-                      key="photorealistic3d"
-                      onClick={() => {
-                        onPhotorealistic3DChange(!photorealistic3D);
-                      }}
-                    >
-                      {photorealistic3D && (
-                        <ListItemIcon sx={{ minWidth: 32 }}>
-                          <Check fontSize="small" color="primary" />
-                        </ListItemIcon>
-                      )}
-                      {!photorealistic3D && <ListItemIcon sx={{ minWidth: 32 }} />}
-                      <ListItemText
-                        primary="Photorealistic 3D (Google)"
-                        secondary="3D buildings overlay (Cesium Ion)"
-                      />
-                    </MenuItem>,
                   ]
                 : []),
             ].filter(Boolean)}

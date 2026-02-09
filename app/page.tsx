@@ -161,7 +161,7 @@ function getRegionDisplayName(
 
 export default function Home() {
   const [filters, setFilters] = useState<OccurrenceFilters>({
-    limit: 10000,
+    limit: 1000,
   });
   const [occurrences, setOccurrences] = useState<GBIFOccurrence[]>([]);
   const [selectedRegionId, setSelectedRegionId] = useState(REGION_ID_CURRENT_VIEW);

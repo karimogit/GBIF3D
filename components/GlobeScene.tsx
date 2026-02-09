@@ -620,6 +620,7 @@ function SelectOccurrence({
       occ.decimalLatitude,
       0
     );
+    const currentHeading = viewer.camera.heading;
 
     if (usePrimitiveMode) {
       const infoEntity = viewer.entities.getById(SELECTED_INFO_ENTITY_ID);
@@ -627,6 +628,11 @@ function SelectOccurrence({
         viewer.camera.flyTo({
           destination: position,
           duration: 1.2,
+          orientation: {
+            heading: currentHeading,
+            pitch: -Cesium.Math.PI_OVER_TWO,
+            roll: 0,
+          },
           complete: () => {
             try {
               if (infoEntity) viewer.selectedEntity = infoEntity;
@@ -660,6 +666,11 @@ function SelectOccurrence({
         viewer.camera.flyTo({
           destination: position,
           duration: 1.2,
+          orientation: {
+            heading: currentHeading,
+            pitch: -Cesium.Math.PI_OVER_TWO,
+            roll: 0,
+          },
           complete: () => {
             if (cancelled) return;
             try {
