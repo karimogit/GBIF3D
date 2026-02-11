@@ -1056,13 +1056,15 @@ export default function MapTopBar({
                 : []),
             ].filter(Boolean)}
           </Menu>
-          <Divider
-            orientation="vertical"
+          <Box
+            aria-hidden="true"
             sx={{
               mx: 1,
-              height: '80%',
+              width: '1px',
+              height: 20,
               alignSelf: 'center',
-              borderColor: '#ffffff',
+              backgroundColor: '#ffffff',
+              opacity: 0.9,
             }}
           />
           <Button
