@@ -268,7 +268,7 @@ function CameraTiltConstraints({ sceneMode }: { sceneMode: SceneModeType }) {
     const viewer = cesium?.viewer;
     const controller = viewer?.scene?.screenSpaceCameraController;
     if (!controller) return;
-    // In 3D, limit extreme grazing angles; in 2D/Columbus, use Cesium default.
+    // In 3D, limit extreme grazing angles; in 2D, use Cesium default.
     if (sceneMode === '3D') {
       controller.maximumTiltAngle = Cesium.Math.toRadians(70); // a bit shallower than horizon
     } else {
@@ -695,7 +695,7 @@ function SelectOccurrence({
   return null;
 }
 
-/** Applies scene mode from top bar (3D / 2D / Columbus) to the Cesium viewer. */
+/** Applies scene mode from top bar (3D / 2D) to the Cesium viewer. */
 function SceneModeSync({ sceneMode }: { sceneMode: SceneModeType }) {
   const cesium = useCesium();
   useEffect(() => {
@@ -709,9 +709,6 @@ function SceneModeSync({ sceneMode }: { sceneMode: SceneModeType }) {
           break;
         case '2D':
           mode = Cesium.SceneMode.SCENE2D;
-          break;
-        case 'Columbus':
-          mode = Cesium.SceneMode.COLUMBUS_VIEW;
           break;
       }
       if (mode != null) {
@@ -737,6 +734,17 @@ function BaseMapSync({ baseMap }: { baseMap: BaseMapType }) {
 
     const ionStyle = getIonImageryStyle(baseMap);
     if (ionStyle != null) {
+      const token = process.env.NEXT_PUBLIC_CESIUM_ION_TOKEN;
+      if (!token) {
+        // Bing via ion requires a token; keep the app usable by falling back to a free basemap.
+        try {
+          layers.remove(base, true);
+          layers.addImageryProvider(createImageryProvider('osm'), 0);
+        } catch {
+          // ignore
+        }
+        return;
+      }
       let cancelled = false;
       layers.remove(base, true);
       Cesium.createWorldImageryAsync({ style: ionStyle })
@@ -789,7 +797,19 @@ function Photorealistic3DSync({ enabled }: { enabled: boolean }) {
     }
 
     let cancelled = false;
-    createGooglePhotorealistic3DTileset()
+    const createTileset = async (): Promise<Cesium.Cesium3DTileset> => {
+      // Cesium emits a warning if Google Photorealistic is used without Google geocoder.
+      // We don't use Cesium's geocoder UI, so we silence the warning via additionalOptions when supported.
+      try {
+        return await (createGooglePhotorealistic3DTileset as unknown as (opts?: unknown) => Promise<Cesium.Cesium3DTileset>)({
+          additionalOptions: { onlyUsingWithGoogleGeocoder: true },
+        });
+      } catch {
+        return await createGooglePhotorealistic3DTileset();
+      }
+    };
+
+    createTileset()
       .then((tileset) => {
         if (cancelled || !viewer?.scene?.primitives) return;
         viewer.scene.primitives.add(tileset);
@@ -937,7 +957,7 @@ function DrawRegionHandler({
   return null;
 }
 
-export type SceneModeType = '3D' | '2D' | 'Columbus';
+export type SceneModeType = '3D' | '2D';
 
 /** Above this count we use PointPrimitiveCollection instead of one Entity per occurrence to avoid browser freeze. */
 const MAX_OCCURRENCES_FOR_ENTITIES = 6000;
@@ -1164,6 +1184,7 @@ export default function GlobeScene({
   savedOccurrenceKeys,
   selectedOccurrenceKey,
 }: GlobeSceneProps) {
+  const [isClient, setIsClient] = useState(false);
   const [cameraTilt, setCameraTilt] = useState(0); // Camera pitch in radians
   const [terrain, setTerrain] = useState<Cesium.TerrainProvider | null>(null);
   const [imageUrlsByKey, setImageUrlsByKey] = useState<Record<number, string[]>>({});
@@ -1181,6 +1202,10 @@ export default function GlobeScene({
     setPickedOccurrenceKey(key);
   }, []);
 
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
+
   // Set Cesium Ion token from env (e.g. Vercel: NEXT_PUBLIC_CESIUM_ION_TOKEN) before any Ion requests
   useEffect(() => {
     const token = process.env.NEXT_PUBLIC_CESIUM_ION_TOKEN;
@@ -1189,22 +1214,35 @@ export default function GlobeScene({
     }
   }, []);
 
+  const baseImageryProvider = useMemo(() => {
+    if (!isClient) return undefined;
+    return getDefaultImageryProvider();
+  }, [isClient]);
+
   useEffect(() => {
     let cancelled = false;
-    Cesium.createWorldTerrainAsync().then((t) => {
-      if (!cancelled) setTerrain(t);
-    });
+    Cesium.createWorldTerrainAsync()
+      .then((t) => {
+        if (!cancelled) setTerrain(t);
+      })
+      .catch(() => {
+        // Cesium World Terrain requires an Ion token; fall back to ellipsoid terrain when unavailable.
+        if (!cancelled) setTerrain(new Cesium.EllipsoidTerrainProvider());
+      });
     return () => {
       cancelled = true;
     };
   }, []);
+
+  // Resium/Cesium Viewer construction must happen on the client; imagery providers also require browser APIs.
+  if (!isClient || !baseImageryProvider) return null;
 
   return (
     <Viewer
       full
       timeline={false}
       animation={false}
-      baseLayerPicker
+      baseLayerPicker={false}
       geocoder={false}
       homeButton={false}
       sceneModePicker={false}
@@ -1214,7 +1252,7 @@ export default function GlobeScene({
       scene3DOnly={false}
       requestRenderMode={false}
       terrainProvider={terrain ?? undefined}
-      imageryProvider={getDefaultImageryProvider()}
+      imageryProvider={baseImageryProvider}
       contextOptions={VIEWER_CONTEXT_OPTIONS}
     >
       <CameraTiltConstraints sceneMode={sceneMode} />

@@ -30,20 +30,22 @@ const REGION_ID_PLACE = 'place';
 const REGION_ID_CURRENT_VIEW = 'current-view';
 
 const VIEW_STORAGE_KEY = 'gbif-globe-view';
-const VALID_SCENE_MODES = ['3D', '2D', 'Columbus'] as const;
+const VALID_SCENE_MODES = ['3D', '2D'] as const;
 const VALID_BASE_MAPS = ['bing', 'osm', 'positron', 'dark-matter', 'opentopomap'] as const;
 
-function loadViewFromStorage(): { sceneMode: '3D' | '2D' | 'Columbus'; baseMap: typeof VALID_BASE_MAPS[number] } | null {
+function loadViewFromStorage(): { sceneMode: '3D' | '2D'; baseMap: typeof VALID_BASE_MAPS[number] } | null {
   if (typeof window === 'undefined') return null;
   try {
     const raw = localStorage.getItem(VIEW_STORAGE_KEY);
     if (!raw) return null;
     const p = JSON.parse(raw) as { sceneMode?: string; baseMap?: string };
-    const sceneMode = VALID_SCENE_MODES.includes(p.sceneMode as (typeof VALID_SCENE_MODES)[number]) ? p.sceneMode : null;
+    // Backward compatibility: previously stored "Columbus" should now behave like 2D.
+    const storedScene = p.sceneMode === 'Columbus' ? '2D' : p.sceneMode;
+    const sceneMode = VALID_SCENE_MODES.includes(storedScene as (typeof VALID_SCENE_MODES)[number]) ? storedScene : null;
     const baseMap = VALID_BASE_MAPS.includes(p.baseMap as (typeof VALID_BASE_MAPS)[number]) ? p.baseMap : null;
     if (sceneMode != null || baseMap != null) {
       return {
-        sceneMode: (sceneMode ?? '3D') as '3D' | '2D' | 'Columbus',
+        sceneMode: (sceneMode ?? '3D') as '3D' | '2D',
         baseMap: (baseMap ?? 'bing') as (typeof VALID_BASE_MAPS)[number],
       };
     }
@@ -173,7 +175,7 @@ export default function Home() {
     countryCode?: string;
   } | null>(null);
   const [drawRegionMode, setDrawRegionMode] = useState(false);
-  const [sceneMode, setSceneMode] = useState<'3D' | '2D' | 'Columbus'>('3D');
+  const [sceneMode, setSceneMode] = useState<'3D' | '2D'>('3D');
   const [baseMap, setBaseMap] = useState<'bing' | 'osm' | 'positron' | 'dark-matter' | 'opentopomap'>('bing');
   const viewBoundsRef = useRef<Bounds | null>(null);
   const [hasViewBounds, setHasViewBounds] = useState(false);

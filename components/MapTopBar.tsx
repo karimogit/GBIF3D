@@ -93,10 +93,10 @@ interface MapTopBarProps {
   /** When clicking a saved occurrence, select it (opens info box and flies to it). */
   onSelectOccurrence?: (key: number) => void;
   onRemoveSavedOccurrence?: (key: number) => void;
-  /** Current scene mode (3D / 2D / Columbus); shown in View menu */
-  sceneMode?: '3D' | '2D' | 'Columbus';
+  /** Current scene mode (3D / 2D); shown in View menu */
+  sceneMode?: '3D' | '2D';
   /** Called when user selects a scene mode from the View menu */
-  onSceneModeChange?: (mode: '3D' | '2D' | 'Columbus') => void;
+  onSceneModeChange?: (mode: '3D' | '2D') => void;
   /** Current base map (imagery); shown in View menu */
   baseMap?: 'bing' | 'osm' | 'positron' | 'dark-matter' | 'opentopomap';
   /** Called when user selects a base map from the View menu */
@@ -258,9 +258,15 @@ export default function MapTopBar({
   }, []);
 
   useEffect(() => {
+    const trimmed = placeQuery.trim();
+    if (trimmed.length < 2) {
+      setPlaceResults([]);
+      setPlaceLoading(false);
+      return;
+    }
     if (placeTimeoutRef.current) clearTimeout(placeTimeoutRef.current);
     placeTimeoutRef.current = setTimeout(() => {
-      fetchPlaces(placeQuery);
+      fetchPlaces(trimmed);
       placeTimeoutRef.current = null;
     }, PLACES_DEBOUNCE_MS);
     return () => {

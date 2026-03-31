@@ -37,8 +37,8 @@ interface GlobeViewerProps {
   onDrawnBounds?: (bounds: Bounds) => void;
   /** Drawn region to display on the globe */
   drawnBounds?: Bounds | null;
-  /** Scene mode: 3D globe, 2D map, or Columbus view (from top bar View menu) */
-  sceneMode?: '3D' | '2D' | 'Columbus';
+  /** Scene mode: 3D globe or 2D map (from top bar View menu) */
+  sceneMode?: '3D' | '2D';
   /** Base map / imagery (from View menu) */
   baseMap?: 'bing' | 'osm' | 'positron' | 'dark-matter' | 'opentopomap';
   /** Environmental overlay (Tools: land cover) */
