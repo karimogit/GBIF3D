@@ -413,7 +413,9 @@ export default function MapTopBar({
                     {params.group}
                   </ListSubheader>
                 ) : null}
-                {params.children}
+                <Box component="ul" sx={{ m: 0, p: 0 }}>
+                  {params.children}
+                </Box>
               </li>
             )}
             size="small"

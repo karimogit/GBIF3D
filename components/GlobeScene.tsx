@@ -722,7 +722,7 @@ function SceneModeSync({ sceneMode }: { sceneMode: SceneModeType }) {
 }
 
 /** Replaces the base imagery layer when base map selection changes (View menu). */
-function BaseMapSync({ baseMap }: { baseMap: BaseMapType }) {
+function BaseMapSync({ baseMap, ionEnabled }: { baseMap: BaseMapType; ionEnabled: boolean }) {
   const cesium = useCesium();
   useEffect(() => {
     const viewer = cesium?.viewer;
@@ -734,26 +734,36 @@ function BaseMapSync({ baseMap }: { baseMap: BaseMapType }) {
 
     const ionStyle = getIonImageryStyle(baseMap);
     if (ionStyle != null) {
-      const token = process.env.NEXT_PUBLIC_CESIUM_ION_TOKEN;
-      if (!token) {
-        // Bing via ion requires a token; keep the app usable by falling back to a free basemap.
+      if (!ionEnabled) {
+        // Bing via ion requires a valid token; keep the app usable by falling back to a free basemap.
         try {
+          const fallback = createImageryProvider('osm');
+          layers.addImageryProvider(fallback, 0);
           layers.remove(base, true);
-          layers.addImageryProvider(createImageryProvider('osm'), 0);
         } catch {
           // ignore
         }
         return;
       }
       let cancelled = false;
-      layers.remove(base, true);
       Cesium.createWorldImageryAsync({ style: ionStyle })
         .then((provider) => {
-          if (!cancelled) layers.addImageryProvider(provider, 0);
+          if (cancelled) return;
+          try {
+            layers.addImageryProvider(provider, 0);
+            layers.remove(base, true);
+          } catch {
+            // ignore
+          }
         })
         .catch(() => {
-          if (!cancelled) {
-            layers.addImageryProvider(createImageryProvider('osm'), 0);
+          if (cancelled) return;
+          try {
+            const fallback = createImageryProvider('osm');
+            layers.addImageryProvider(fallback, 0);
+            layers.remove(base, true);
+          } catch {
+            // ignore
           }
         });
       return () => {
@@ -762,12 +772,30 @@ function BaseMapSync({ baseMap }: { baseMap: BaseMapType }) {
     }
 
     try {
+      const provider = createImageryProvider(baseMap);
+      layers.addImageryProvider(provider, 0);
       layers.remove(base, true);
-      layers.addImageryProvider(createImageryProvider(baseMap), 0);
     } catch {
-      // viewer may be destroyed
+      // Keep existing base layer if replacement fails.
     }
-  }, [cesium?.viewer, baseMap]);
+  }, [cesium?.viewer, baseMap, ionEnabled]);
+  return null;
+}
+
+/** Ensures we never end up with zero imagery layers (blank globe). */
+function EnsureBaseImagery({ provider }: { provider: Cesium.ImageryProvider }) {
+  const cesium = useCesium();
+  useEffect(() => {
+    const viewer = cesium?.viewer;
+    if (viewer?.scene?.imageryLayers == null) return;
+    const layers = viewer.scene.imageryLayers;
+    if (layers.length > 0) return;
+    try {
+      layers.addImageryProvider(provider, 0);
+    } catch {
+      // ignore
+    }
+  }, [cesium?.viewer, provider]);
   return null;
 }
 
@@ -1185,6 +1213,7 @@ export default function GlobeScene({
   selectedOccurrenceKey,
 }: GlobeSceneProps) {
   const [isClient, setIsClient] = useState(false);
+  const [ionEnabled, setIonEnabled] = useState(false);
   const [cameraTilt, setCameraTilt] = useState(0); // Camera pitch in radians
   const [terrain, setTerrain] = useState<Cesium.TerrainProvider | null>(null);
   const [imageUrlsByKey, setImageUrlsByKey] = useState<Record<number, string[]>>({});
@@ -1209,9 +1238,39 @@ export default function GlobeScene({
   // Set Cesium Ion token from env (e.g. Vercel: NEXT_PUBLIC_CESIUM_ION_TOKEN) before any Ion requests
   useEffect(() => {
     const token = process.env.NEXT_PUBLIC_CESIUM_ION_TOKEN;
-    if (token && typeof Cesium !== 'undefined' && Cesium.Ion) {
-      Cesium.Ion.defaultAccessToken = token;
+    if (!token || typeof Cesium === 'undefined' || !Cesium.Ion) {
+      setIonEnabled(false);
+      return;
     }
+    Cesium.Ion.defaultAccessToken = token;
+    let cancelled = false;
+    // Validate token once so we can gracefully disable ion-backed features when invalid.
+    fetch(`https://api.cesium.com/v1/assets?access_token=${encodeURIComponent(token)}&limit=1`)
+      .then((res) => {
+        if (cancelled) return;
+        if (res.ok) {
+          setIonEnabled(true);
+          return;
+        }
+        setIonEnabled(false);
+        try {
+          Cesium.Ion.defaultAccessToken = '';
+        } catch {
+          // ignore
+        }
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setIonEnabled(false);
+        try {
+          Cesium.Ion.defaultAccessToken = '';
+        } catch {
+          // ignore
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const baseImageryProvider = useMemo(() => {
@@ -1221,6 +1280,12 @@ export default function GlobeScene({
 
   useEffect(() => {
     let cancelled = false;
+    if (!ionEnabled) {
+      setTerrain(new Cesium.EllipsoidTerrainProvider());
+      return () => {
+        cancelled = true;
+      };
+    }
     Cesium.createWorldTerrainAsync()
       .then((t) => {
         if (!cancelled) setTerrain(t);
@@ -1232,7 +1297,7 @@ export default function GlobeScene({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [ionEnabled]);
 
   // Resium/Cesium Viewer construction must happen on the client; imagery providers also require browser APIs.
   if (!isClient || !baseImageryProvider) return null;
@@ -1258,9 +1323,10 @@ export default function GlobeScene({
       <CameraTiltConstraints sceneMode={sceneMode} />
       <CameraTiltReporter onTiltChange={setCameraTilt} />
       <SceneModeSync sceneMode={sceneMode} />
-      <BaseMapSync baseMap={baseMap} />
+      <EnsureBaseImagery provider={baseImageryProvider} />
+      <BaseMapSync baseMap={baseMap} ionEnabled={ionEnabled} />
       <EnvironmentalOverlaySync layer={environmentalLayer} />
-      <Photorealistic3DSync enabled={photorealistic3D} />
+      <Photorealistic3DSync enabled={photorealistic3D && ionEnabled} />
       <OccurrenceImageLoader onImageLoaded={handleOccurrenceImageLoaded} />
       <ExportImageHandler />
       <ExportPdfCanvasHandler />
