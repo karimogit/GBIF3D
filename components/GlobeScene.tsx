@@ -752,6 +752,26 @@ function BaseMapSync({ baseMap, ionEnabled }: { baseMap: BaseMapType; ionEnabled
           try {
             layers.addImageryProvider(provider, 0);
             layers.remove(base, true);
+            // If the provider later fails (e.g. bad token / rate limit), fall back to OSM.
+            const errorEvent = (provider as unknown as { errorEvent?: Cesium.Event }).errorEvent;
+            if (errorEvent && typeof (errorEvent as unknown as { addEventListener?: unknown }).addEventListener === 'function') {
+              const remove = (errorEvent as unknown as { addEventListener: (cb: () => void) => () => void }).addEventListener(() => {
+                try {
+                  const fallback = createImageryProvider('osm');
+                  layers.addImageryProvider(fallback, 0);
+                  // remove the failing top layer if it exists at index 1+
+                  const top = layers.get(0);
+                  if (top) layers.remove(top, true);
+                } catch {
+                  // ignore
+                }
+                try {
+                  remove?.();
+                } catch {
+                  // ignore
+                }
+              });
+            }
           } catch {
             // ignore
           }
@@ -1238,39 +1258,14 @@ export default function GlobeScene({
   // Set Cesium Ion token from env (e.g. Vercel: NEXT_PUBLIC_CESIUM_ION_TOKEN) before any Ion requests
   useEffect(() => {
     const token = process.env.NEXT_PUBLIC_CESIUM_ION_TOKEN;
-    if (!token || typeof Cesium === 'undefined' || !Cesium.Ion) {
+    const trimmed = token?.trim();
+    if (!trimmed || typeof Cesium === 'undefined' || !Cesium.Ion) {
       setIonEnabled(false);
       return;
     }
-    Cesium.Ion.defaultAccessToken = token;
-    let cancelled = false;
-    // Validate token once so we can gracefully disable ion-backed features when invalid.
-    fetch(`https://api.cesium.com/v1/assets?access_token=${encodeURIComponent(token)}&limit=1`)
-      .then((res) => {
-        if (cancelled) return;
-        if (res.ok) {
-          setIonEnabled(true);
-          return;
-        }
-        setIonEnabled(false);
-        try {
-          Cesium.Ion.defaultAccessToken = '';
-        } catch {
-          // ignore
-        }
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setIonEnabled(false);
-        try {
-          Cesium.Ion.defaultAccessToken = '';
-        } catch {
-          // ignore
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
+    Cesium.Ion.defaultAccessToken = trimmed;
+    // "Enabled" means "token is present"; actual validity is handled by provider fallbacks.
+    setIonEnabled(true);
   }, []);
 
   const baseImageryProvider = useMemo(() => {
