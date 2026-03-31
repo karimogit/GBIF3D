@@ -12,6 +12,8 @@ Pick a region or search for a place, import your own GBIF-style datasets, filter
 
 Built with Next.js, Cesium (Resium), and the GBIF API.
 
+![GBIF 3D screenshot](docs/GBIF-3D.png)
+
 ## Features
 
 - **3D interactive globe** — Pan, zoom, tilt, and rotate using CesiumJS
