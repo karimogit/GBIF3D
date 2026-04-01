@@ -510,7 +510,18 @@ export default function MapTopBar({
             </>
           )}
         </Box>
-      <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 0.5, flexShrink: 0, flex: 1, minWidth: 0 }}>
+      <Box
+        sx={{
+          display: 'flex',
+          flexWrap: { xs: 'nowrap', sm: 'wrap' },
+          alignItems: 'center',
+          justifyContent: 'flex-end',
+          gap: 0.5,
+          flexShrink: 0,
+          flex: { xs: '0 0 auto', sm: 1 },
+          minWidth: 0,
+        }}
+      >
       <Button
         variant="outlined"
         size="small"
@@ -581,11 +592,26 @@ export default function MapTopBar({
           <MenuItem
             onClick={() => {
               setMoreMenuAnchor(null);
-              setImportDialogOpen(true);
+              if (importedOccurrenceCount > 0 && moreButtonAnchorRef.current) {
+                setImportSummaryAnchor(moreButtonAnchorRef.current);
+              } else {
+                setImportDialogOpen(true);
+              }
             }}
           >
             <ListItemIcon><UploadFile fontSize="small" /></ListItemIcon>
             <ListItemText primary={`Import${importedOccurrenceCount > 0 ? ` (${importedOccurrenceCount})` : ''}`} />
+          </MenuItem>
+        )}
+        {importedOccurrenceCount > 0 && onClearImport && (
+          <MenuItem
+            onClick={() => {
+              onClearImport();
+              setMoreMenuAnchor(null);
+            }}
+          >
+            <ListItemIcon><DeleteOutline fontSize="small" /></ListItemIcon>
+            <ListItemText primary="Clear import" />
           </MenuItem>
         )}
         {savedOccurrences.length > 0 && (
@@ -632,6 +658,43 @@ export default function MapTopBar({
               </MenuItem>
             ),
           ].filter(Boolean)}
+        {onSceneModeChange && (
+          <MenuItem
+            onClick={() => {
+              setMoreMenuAnchor(null);
+              if (moreButtonAnchorRef.current) {
+                setViewMenuAnchor(moreButtonAnchorRef.current);
+              }
+            }}
+          >
+            <ListItemIcon><Public fontSize="small" /></ListItemIcon>
+            <ListItemText primary="View options" />
+          </MenuItem>
+        )}
+        <MenuItem
+          onClick={() => {
+            setMoreMenuAnchor(null);
+            if (moreButtonAnchorRef.current) {
+              setAboutMenuAnchor(moreButtonAnchorRef.current);
+            }
+          }}
+        >
+          <ListItemIcon><InfoOutlined fontSize="small" /></ListItemIcon>
+          <ListItemText primary="About" />
+        </MenuItem>
+        <MenuItem
+          onClick={() => {
+            setMoreMenuAnchor(null);
+            setHelpOpen(true);
+          }}
+        >
+          <ListItemIcon><HelpOutline fontSize="small" /></ListItemIcon>
+          <ListItemText primary="Help" />
+        </MenuItem>
+        <MenuItem component="a" href={githubUrl} target="_blank" rel="noopener noreferrer" onClick={() => setMoreMenuAnchor(null)}>
+          <ListItemIcon><GitHub fontSize="small" /></ListItemIcon>
+          <ListItemText primary="View on GitHub" />
+        </MenuItem>
       </Menu>
       <Popover
         open={Boolean(filterAnchor)}
@@ -804,7 +867,7 @@ export default function MapTopBar({
               startIcon={<DeleteOutline />}
               onClick={onClearImport}
               aria-label="Clear imported occurrences"
-              sx={{ minWidth: 0, ml: 0.5, flexShrink: 0 }}
+              sx={{ minWidth: 0, ml: 0.5, flexShrink: 0, display: { xs: 'none', sm: 'inline-flex' } }}
             >
               Clear
             </Button>
@@ -877,7 +940,7 @@ export default function MapTopBar({
             aria-label="Export"
             aria-haspopup="true"
             aria-expanded={Boolean(exportMenuAnchor)}
-            sx={{ minWidth: 0, display: 'inline-flex' }}
+            sx={{ minWidth: 0, display: { xs: 'none', sm: 'inline-flex' } }}
           >
             Export
           </Button>
@@ -968,7 +1031,7 @@ export default function MapTopBar({
             aria-label="View options"
             aria-haspopup="true"
             aria-expanded={Boolean(viewMenuAnchor)}
-            sx={{ minWidth: 0 }}
+            sx={{ minWidth: 0, display: { xs: 'none', sm: 'inline-flex' } }}
           >
             View
           </Button>
@@ -1073,6 +1136,7 @@ export default function MapTopBar({
               alignSelf: 'center',
               backgroundColor: '#ffffff',
               opacity: 0.9,
+              display: { xs: 'none', sm: 'block' },
             }}
           />
           <Button
@@ -1084,7 +1148,7 @@ export default function MapTopBar({
             aria-label="About"
             aria-haspopup="true"
             aria-expanded={Boolean(aboutMenuAnchor)}
-            sx={{ minWidth: 0, '& .MuiButton-startIcon': { mr: { xs: 0, sm: 0.5 } } }}
+            sx={{ minWidth: 0, display: { xs: 'none', sm: 'inline-flex' }, '& .MuiButton-startIcon': { mr: { xs: 0, sm: 0.5 } } }}
           >
             <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>About</Box>
           </Button>
@@ -1095,6 +1159,7 @@ export default function MapTopBar({
             sx={{
               color: 'rgba(255,255,255,0.9)',
               p: 0.5,
+              display: { xs: 'none', sm: 'inline-flex' },
               '&:hover': { backgroundColor: 'rgba(255,255,255,0.08)' },
             }}
           >
@@ -1110,6 +1175,7 @@ export default function MapTopBar({
             sx={{
               color: 'rgba(255,255,255,0.9)',
               p: 0.5,
+              display: { xs: 'none', sm: 'inline-flex' },
               '&:hover': { backgroundColor: 'rgba(255,255,255,0.08)' },
             }}
           >
