@@ -533,7 +533,7 @@ export default function MapTopBar({
         aria-expanded={Boolean(filterAnchor)}
         sx={{
           minWidth: 0,
-          display: { xs: 'none', sm: 'inline-flex' },
+          display: { xs: 'none', md: 'inline-flex' },
           bgcolor: filterAnchor ? 'action.selected' : undefined,
           '&:hover': { bgcolor: 'action.hover' },
         }}
@@ -551,7 +551,7 @@ export default function MapTopBar({
         aria-haspopup="true"
         aria-expanded={Boolean(moreMenuAnchor)}
         sx={{
-          display: { xs: 'inline-flex', sm: 'none' },
+          display: { xs: 'inline-flex', md: 'none' },
           color: 'rgba(255,255,255,0.9)',
         }}
       >
@@ -731,7 +731,7 @@ export default function MapTopBar({
             aria-label="Saved regions"
             aria-haspopup="true"
             aria-expanded={Boolean(savedMenuAnchor)}
-            sx={{ minWidth: 0, display: { xs: 'none', sm: 'inline-flex' } }}
+            sx={{ minWidth: 0, display: { xs: 'none', md: 'inline-flex' } }}
           >
             Saved
           </Button>
@@ -801,7 +801,7 @@ export default function MapTopBar({
             aria-label="Import GBIF dataset (CSV or JSON)"
             aria-haspopup={importedOccurrenceCount > 0 ? 'dialog' : undefined}
             aria-expanded={importedOccurrenceCount > 0 ? Boolean(importSummaryAnchor) : undefined}
-            sx={{ minWidth: 0, display: { xs: 'none', sm: 'inline-flex' } }}
+            sx={{ minWidth: 0, display: { xs: 'none', md: 'inline-flex' } }}
           >
             Import{importedOccurrenceCount > 0 ? ` (${importedOccurrenceCount})` : ''}
           </Button>
@@ -867,7 +867,7 @@ export default function MapTopBar({
               startIcon={<DeleteOutline />}
               onClick={onClearImport}
               aria-label="Clear imported occurrences"
-              sx={{ minWidth: 0, ml: 0.5, flexShrink: 0, display: { xs: 'none', sm: 'inline-flex' } }}
+              sx={{ minWidth: 0, ml: 0.5, flexShrink: 0, display: { xs: 'none', md: 'inline-flex' } }}
             >
               Clear
             </Button>
@@ -883,7 +883,7 @@ export default function MapTopBar({
             startIcon={savedOccurrences.length > 0 ? <Bookmark /> : <BookmarkBorder />}
             onClick={(e) => setSavedOccurrencesAnchor(e.currentTarget)}
             aria-label={savedOccurrences.length > 0 ? `Saved occurrences (${savedOccurrences.length})` : 'Saved occurrences'}
-            sx={{ minWidth: 0, display: { xs: 'none', sm: 'inline-flex' } }}
+            sx={{ minWidth: 0, display: { xs: 'none', md: 'inline-flex' } }}
           >
             Saved{savedOccurrences.length > 0 ? ` (${savedOccurrences.length})` : ''}
           </Button>
@@ -940,7 +940,7 @@ export default function MapTopBar({
             aria-label="Export"
             aria-haspopup="true"
             aria-expanded={Boolean(exportMenuAnchor)}
-            sx={{ minWidth: 0, display: { xs: 'none', sm: 'inline-flex' } }}
+            sx={{ minWidth: 0, display: { xs: 'none', md: 'inline-flex' } }}
           >
             Export
           </Button>
@@ -1031,7 +1031,7 @@ export default function MapTopBar({
             aria-label="View options"
             aria-haspopup="true"
             aria-expanded={Boolean(viewMenuAnchor)}
-            sx={{ minWidth: 0, display: { xs: 'none', sm: 'inline-flex' } }}
+            sx={{ minWidth: 0, display: { xs: 'none', md: 'inline-flex' } }}
           >
             View
           </Button>
@@ -1136,21 +1136,21 @@ export default function MapTopBar({
               alignSelf: 'center',
               backgroundColor: '#ffffff',
               opacity: 0.9,
-              display: { xs: 'none', sm: 'block' },
+              display: { xs: 'none', md: 'block' },
             }}
           />
           <Button
             variant="outlined"
             size="small"
             startIcon={<InfoOutlined />}
-            endIcon={<ArrowDropDown sx={{ display: { xs: 'none', sm: 'block' } }} />}
+            endIcon={<ArrowDropDown sx={{ display: { xs: 'none', md: 'block' } }} />}
             onClick={(e) => setAboutMenuAnchor(e.currentTarget)}
             aria-label="About"
             aria-haspopup="true"
             aria-expanded={Boolean(aboutMenuAnchor)}
-            sx={{ minWidth: 0, display: { xs: 'none', sm: 'inline-flex' }, '& .MuiButton-startIcon': { mr: { xs: 0, sm: 0.5 } } }}
+            sx={{ minWidth: 0, display: { xs: 'none', md: 'inline-flex' }, '& .MuiButton-startIcon': { mr: { xs: 0, md: 0.5 } } }}
           >
-            <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>About</Box>
+            <Box component="span" sx={{ display: { xs: 'none', md: 'inline' } }}>About</Box>
           </Button>
           <IconButton
             size="small"
@@ -1159,7 +1159,7 @@ export default function MapTopBar({
             sx={{
               color: 'rgba(255,255,255,0.9)',
               p: 0.5,
-              display: { xs: 'none', sm: 'inline-flex' },
+              display: { xs: 'none', md: 'inline-flex' },
               '&:hover': { backgroundColor: 'rgba(255,255,255,0.08)' },
             }}
           >
@@ -1175,7 +1175,7 @@ export default function MapTopBar({
             sx={{
               color: 'rgba(255,255,255,0.9)',
               p: 0.5,
-              display: { xs: 'none', sm: 'inline-flex' },
+              display: { xs: 'none', md: 'inline-flex' },
               '&:hover': { backgroundColor: 'rgba(255,255,255,0.08)' },
             }}
           >
