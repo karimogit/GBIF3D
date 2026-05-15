@@ -90,6 +90,8 @@ export default function GlobeViewer({
   const fetchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fetchAbortRef = useRef<AbortController | null>(null);
   const fetchGenerationRef = useRef(0);
+  const viewBoundsRef = useRef(viewBounds);
+  viewBoundsRef.current = viewBounds;
   const onOccurrencesChangeRef = useRef(onOccurrencesChange);
   onOccurrencesChangeRef.current = onOccurrencesChange;
 
@@ -156,13 +158,9 @@ export default function GlobeViewer({
   const hasTaxonFilter =
     (filters.taxonKeys?.length ?? 0) > 0 || filters.taxonKey != null;
 
-  const fetchBounds = useMemo(
-    () => selectedRegionBounds ?? viewBounds,
-    [selectedRegionBounds, viewBounds]
-  );
-
-  // Refetch when region/filter inputs change. For "Current view", selectedRegionBounds
-  // is null, so fetchBounds tracks debounced camera bounds.
+  // Refetch when region or filters change — not on every camera bounds tick (that aborted
+  // in-flight GBIF requests before they could finish). For "Current view", use the latest
+  // camera bounds at fetch time via viewBoundsRef.
   useEffect(() => {
     if (fetchTimeoutRef.current) clearTimeout(fetchTimeoutRef.current);
     fetchAbortRef.current?.abort();
@@ -178,14 +176,15 @@ export default function GlobeViewer({
     fetchTimeoutRef.current = setTimeout(() => {
       const controller = new AbortController();
       fetchAbortRef.current = controller;
-      fetchOccurrences(fetchBounds, controller.signal, generation);
+      const bounds = selectedRegionBounds ?? viewBoundsRef.current;
+      fetchOccurrences(bounds, controller.signal, generation);
       fetchTimeoutRef.current = null;
     }, FETCH_DEBOUNCE_MS);
     return () => {
       if (fetchTimeoutRef.current) clearTimeout(fetchTimeoutRef.current);
       fetchAbortRef.current?.abort();
     };
-  }, [fetchBounds, fetchOccurrences, hasTaxonFilter]);
+  }, [selectedRegionBounds, fetchOccurrences, hasTaxonFilter]);
 
   const displayedOccurrences = useMemo(() => {
     // Only filter API occurrences by region; show all imported points regardless of selected region
