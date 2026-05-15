@@ -1,21 +1,26 @@
 import { searchOccurrences, suggestSpecies, GBIFApiError, TAXON_CLASS_KEYS } from '@/lib/gbif';
 import { clearCache } from '@/lib/cache';
 
-const mockGet = jest.fn();
+jest.mock('axios', () => {
+  const get = jest.fn();
+  return {
+    __esModule: true,
+    default: {
+      create: jest.fn(() => ({ get })),
+      isCancel: jest.fn(() => false),
+    },
+    __mockGet: get,
+  };
+});
 
-jest.mock('axios', () => ({
-  __esModule: true,
-  default: {
-    create: jest.fn(() => ({ get: mockGet })),
-    isCancel: jest.fn(() => false),
-  },
-}));
+const mockGet = (jest.requireMock('axios') as { __mockGet: jest.Mock }).__mockGet;
 
 describe('GBIF API', () => {
   beforeEach(() => {
     clearCache();
     mockGet.mockReset();
     jest.restoreAllMocks();
+    delete (global as typeof globalThis & { fetch?: unknown }).fetch;
   });
 
   describe('searchOccurrences', () => {
@@ -89,7 +94,7 @@ describe('GBIF API', () => {
 
   describe('suggestSpecies', () => {
     it('returns species suggestions for a query', async () => {
-      jest.spyOn(global, 'fetch').mockResolvedValueOnce({
+      (global as typeof globalThis & { fetch: jest.Mock }).fetch = jest.fn().mockResolvedValueOnce({
         ok: true,
         json: async () => [{ key: 1, scientificName: 'Pinus sylvestris', canonicalName: 'Pinus sylvestris' }],
       } as Response);
