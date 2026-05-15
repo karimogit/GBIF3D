@@ -29,8 +29,21 @@ const REQUEST_TIMEOUT_MS = 30000;
 const RATE_LIMIT_BACKOFF_MS = 8000;
 const MAX_RETRIES_ON_429 = 2;
 
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+function delay(ms: number, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) return Promise.reject(new DOMException('Aborted', 'AbortError'));
+  return new Promise((resolve, reject) => {
+    const cleanup = () => signal?.removeEventListener('abort', abort);
+    const timeout = setTimeout(() => {
+      cleanup();
+      resolve();
+    }, ms);
+    const abort = () => {
+      clearTimeout(timeout);
+      cleanup();
+      reject(new DOMException('Aborted', 'AbortError'));
+    };
+    signal?.addEventListener('abort', abort, { once: true });
+  });
 }
 
 const api = axios.create({
@@ -50,6 +63,10 @@ export class GBIFApiError extends Error {
   }
 }
 
+export interface GBIFRequestOptions {
+  signal?: AbortSignal;
+}
+
 /** Serialize params for GBIF API; arrays become repeatable params (e.g. taxonKey=1&taxonKey=2) */
 function serializeOccurrenceParams(
   params: Record<string, string | number | number[] | undefined>
@@ -67,7 +84,8 @@ function serializeOccurrenceParams(
 }
 
 export async function searchOccurrences(
-  filters: OccurrenceFilters
+  filters: OccurrenceFilters,
+  options: GBIFRequestOptions = {}
 ): Promise<GBIFOccurrenceSearchResponse> {
   const params: Record<string, string | number | number[] | undefined> = {
     limit: filters.limit ?? OCCURRENCE_LIMIT,
@@ -120,11 +138,13 @@ export async function searchOccurrences(
         {
           params: params as Record<string, unknown>,
           paramsSerializer: (p) => serializeOccurrenceParams(p as Record<string, string | number | number[] | undefined>),
+          signal: options.signal,
         }
       );
       setCache(key, data, OCCURRENCE_CACHE_TTL_MS);
       return data;
     } catch (err) {
+      if (options.signal?.aborted || axios.isCancel(err)) throw err;
       const ax = err as AxiosError<{ message?: string; code?: string; error?: string }>;
       const status = ax.response?.status;
       const body = ax.response?.data;
@@ -136,10 +156,9 @@ export async function searchOccurrences(
             : typeof body === 'string'
               ? body
               : undefined;
-      // For 400 errors, include more detail about what was sent
       const errorMsg =
         status === 400
-          ? bodyMsg ?? `Invalid search parameters. Check date range, region bounds, and filters. Sent: ${JSON.stringify(params)}`
+          ? bodyMsg ?? 'Invalid search parameters. Check date range, region bounds, and filters.'
           : bodyMsg ?? ax.message ?? 'GBIF occurrence search failed';
       lastErr = new GBIFApiError(errorMsg, status, typeof body === 'object' && body !== null && 'code' in body ? (body as { code?: string }).code : undefined);
       if (status === 429 && attempt < MAX_RETRIES_ON_429) {
@@ -147,7 +166,7 @@ export async function searchOccurrences(
         const waitMs = typeof retryAfter === 'string' && /^\d+$/.test(retryAfter)
           ? Math.min(60000, parseInt(retryAfter, 10) * 1000)
           : RATE_LIMIT_BACKOFF_MS;
-        await delay(waitMs);
+        await delay(waitMs, options.signal);
         continue;
       }
       throw lastErr;
@@ -162,14 +181,15 @@ export async function searchOccurrences(
  * requests to reduce rate-limit risk.
  */
 export async function searchOccurrencesChunked(
-  filters: OccurrenceFilters & { geometry?: string }
+  filters: OccurrenceFilters & { geometry?: string },
+  options: GBIFRequestOptions = {}
 ): Promise<GBIFOccurrenceSearchResponse> {
   const maxTotal = Math.min(
     Math.max(1, filters.limit ?? OCCURRENCE_LIMIT),
     OCCURRENCE_MAX_TOTAL
   );
   if (maxTotal <= OCCURRENCE_CHUNK_SIZE) {
-    return searchOccurrences({ ...filters, limit: maxTotal, offset: 0 });
+    return searchOccurrences({ ...filters, limit: maxTotal, offset: 0 }, options);
   }
   const allResults: GBIFOccurrence[] = [];
   let totalCount = 0;
@@ -177,13 +197,14 @@ export async function searchOccurrencesChunked(
   let offset = 0;
   while (allResults.length < maxTotal && !endOfRecords) {
     const limit = Math.min(OCCURRENCE_CHUNK_SIZE, maxTotal - allResults.length);
-    const res = await searchOccurrences({ ...filters, limit, offset });
+    if (options.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+    const res = await searchOccurrences({ ...filters, limit, offset }, options);
     allResults.push(...res.results);
     totalCount = res.count;
     endOfRecords = res.endOfRecords;
     if (res.results.length < limit || endOfRecords) break;
     offset += limit;
-    if (offset < maxTotal) await delay(CHUNK_DELAY_MS);
+    if (offset < maxTotal) await delay(CHUNK_DELAY_MS, options.signal);
   }
   return {
     offset: 0,

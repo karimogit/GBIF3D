@@ -20,6 +20,14 @@ describe('cache', () => {
       clearCache();
       expect(getCached('k')).toBeNull();
     });
+
+    it('evicts oldest entries when the cache grows too large', () => {
+      for (let i = 0; i < 205; i++) {
+        setCache(`k${i}`, i);
+      }
+      expect(getCached('k0')).toBeNull();
+      expect(getCached<number>('k204')).toBe(204);
+    });
   });
 
   describe('cacheKey', () => {
