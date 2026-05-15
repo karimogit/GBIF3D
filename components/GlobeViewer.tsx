@@ -55,6 +55,10 @@ interface GlobeViewerProps {
   savedOccurrenceKeys?: Set<number>;
   /** When set, select this occurrence (opens info box and flies to it). */
   selectedOccurrenceKey?: number | null;
+  /** Monotonic id that lets repeated selections of the same occurrence retrigger. */
+  selectedOccurrenceRequestId?: number;
+  /** Called once the selection command has been applied or abandoned. */
+  onSelectedOccurrenceHandled?: () => void;
 }
 
 export default function GlobeViewer({
@@ -76,12 +80,16 @@ export default function GlobeViewer({
   importedOccurrences = [],
   savedOccurrenceKeys,
   selectedOccurrenceKey,
+  selectedOccurrenceRequestId,
+  onSelectedOccurrenceHandled,
 }: GlobeViewerProps) {
   const [occurrences, setOccurrences] = useState<GBIFOccurrence[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [viewBounds, setViewBounds] = useState<Bounds>(DEFAULT_BOUNDS);
   const fetchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fetchAbortRef = useRef<AbortController | null>(null);
+  const fetchGenerationRef = useRef(0);
   const onOccurrencesChangeRef = useRef(onOccurrencesChange);
   onOccurrencesChangeRef.current = onOccurrencesChange;
 
@@ -94,7 +102,7 @@ export default function GlobeViewer({
   );
 
   const fetchOccurrences = useCallback(
-    async (bounds: Bounds) => {
+    async (bounds: Bounds, signal: AbortSignal, generation: number) => {
       setLoading(true);
       setError(null);
       try {
@@ -105,10 +113,12 @@ export default function GlobeViewer({
           geometry,
           country: country || undefined,
           limit: filters.limit ?? 1000,
-        });
+        }, { signal });
+        if (signal.aborted || generation !== fetchGenerationRef.current) return;
         setOccurrences(res.results);
         onOccurrencesChangeRef.current?.(res.results);
       } catch (err) {
+        if (signal.aborted || generation !== fetchGenerationRef.current) return;
         const message =
           err instanceof GBIFApiError
             ? err.message
@@ -119,7 +129,9 @@ export default function GlobeViewer({
         setOccurrences([]);
         onOccurrencesChangeRef.current?.([]);
       } finally {
-        setLoading(false);
+        if (!signal.aborted && generation === fetchGenerationRef.current) {
+          setLoading(false);
+        }
       }
     },
     // Refetch when these filters change; add new filter keys here and in lib/gbif searchOccurrences params
@@ -144,23 +156,36 @@ export default function GlobeViewer({
   const hasTaxonFilter =
     (filters.taxonKeys?.length ?? 0) > 0 || filters.taxonKey != null;
 
-  // Refetch only when region or filters change — not on zoom/pan (viewBounds).
+  const fetchBounds = useMemo(
+    () => selectedRegionBounds ?? viewBounds,
+    [selectedRegionBounds, viewBounds]
+  );
+
+  // Refetch when region/filter inputs change. For "Current view", selectedRegionBounds
+  // is null, so fetchBounds tracks debounced camera bounds.
   useEffect(() => {
     if (fetchTimeoutRef.current) clearTimeout(fetchTimeoutRef.current);
+    fetchAbortRef.current?.abort();
+    const generation = fetchGenerationRef.current + 1;
+    fetchGenerationRef.current = generation;
     if (!hasTaxonFilter) {
       setOccurrences([]);
       onOccurrencesChangeRef.current?.([]);
       setError(null);
+      setLoading(false);
       return;
     }
     fetchTimeoutRef.current = setTimeout(() => {
-      fetchOccurrences(selectedRegionBounds ?? viewBounds);
+      const controller = new AbortController();
+      fetchAbortRef.current = controller;
+      fetchOccurrences(fetchBounds, controller.signal, generation);
       fetchTimeoutRef.current = null;
     }, FETCH_DEBOUNCE_MS);
     return () => {
       if (fetchTimeoutRef.current) clearTimeout(fetchTimeoutRef.current);
+      fetchAbortRef.current?.abort();
     };
-  }, [selectedRegionBounds, fetchOccurrences, hasTaxonFilter]);
+  }, [fetchBounds, fetchOccurrences, hasTaxonFilter]);
 
   const displayedOccurrences = useMemo(() => {
     // Only filter API occurrences by region; show all imported points regardless of selected region
@@ -200,6 +225,8 @@ export default function GlobeViewer({
         occurrences={displayedOccurrences}
         savedOccurrenceKeys={savedOccurrenceKeys}
         selectedOccurrenceKey={selectedOccurrenceKey}
+        selectedOccurrenceRequestId={selectedOccurrenceRequestId}
+        onSelectedOccurrenceHandled={onSelectedOccurrenceHandled}
         onBoundsChange={handleBoundsChange}
         flyToBounds={flyToBoundsProp !== undefined ? (flyToBoundsProp ?? undefined) : (selectedRegionBounds ?? undefined)}
         drawRegionMode={drawRegionMode}

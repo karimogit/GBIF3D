@@ -111,8 +111,11 @@ function occurrencesToCSV(occurrences: GBIFOccurrence[]): string {
     ...Array.from(allKeys).filter((k) => !preferredOrder.includes(k)).sort(),
   ];
 
-  const escape = (v: unknown): string =>
-    v == null ? '' : String(v).includes(',') ? `"${String(v).replace(/"/g, '""')}"` : String(v);
+  const escape = (v: unknown): string => {
+    if (v == null) return '';
+    const s = String(v);
+    return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
   const rows = occurrences.map((o) =>
     headers.map((h) => escape((o as unknown as Record<string, unknown>)[h])).join(',')
   );
@@ -186,6 +189,7 @@ export default function Home() {
   const [importedOccurrences, setImportedOccurrences] = useState<GBIFOccurrence[]>([]);
   const [savedOccurrences, setSavedOccurrences] = useState<GBIFOccurrence[]>([]);
   const [selectedOccurrenceKey, setSelectedOccurrenceKey] = useState<number | null>(null);
+  const [selectedOccurrenceRequestId, setSelectedOccurrenceRequestId] = useState(0);
   const allOccurrencesRef = useRef<GBIFOccurrence[]>([]);
 
   useEffect(() => {
@@ -281,7 +285,12 @@ export default function Home() {
 
   const handleExportPDF = useCallback(() => {
     const regionName = getRegionDisplayName(selectedRegionId, favorites, placeSearchResult);
-    const opts = { occurrences: allOccurrences, filters, regionName: regionName || undefined };
+    const opts = {
+      occurrences: allOccurrences,
+      filters,
+      regionName: regionName || undefined,
+      repoUrl: process.env.NEXT_PUBLIC_GITHUB_REPO_URL,
+    };
     let generated = false;
     const onCanvasReady = (e: Event) => {
       if (generated) return;
@@ -361,8 +370,11 @@ export default function Home() {
 
   const handleSelectOccurrence = useCallback((key: number) => {
     setSelectedOccurrenceKey(key);
-    // Reset after a short delay so clicking the same occurrence again will work
-    setTimeout(() => setSelectedOccurrenceKey(null), 100);
+    setSelectedOccurrenceRequestId((id) => id + 1);
+  }, []);
+
+  const handleSelectedOccurrenceHandled = useCallback(() => {
+    setSelectedOccurrenceKey(null);
   }, []);
 
   return (
@@ -406,6 +418,8 @@ export default function Home() {
             importedOccurrences={importedOccurrences}
             savedOccurrenceKeys={savedOccurrenceKeys}
             selectedOccurrenceKey={selectedOccurrenceKey}
+            selectedOccurrenceRequestId={selectedOccurrenceRequestId}
+            onSelectedOccurrenceHandled={handleSelectedOccurrenceHandled}
           />
         </ErrorBoundary>
         <OccurrenceTimeline

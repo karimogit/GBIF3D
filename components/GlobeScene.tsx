@@ -154,7 +154,7 @@ function occurrenceToDescription(
       : sci || vern || 'Unknown species';
   const date = occ.eventDate || (occ.year ? String(occ.year) : '—');
   const loc = occ.locality || occ.countryCode || '—';
-  const url = `https://www.gbif.org/occurrence/${occ.key}`;
+  const gbifUrl = occ.key > 0 ? `https://www.gbif.org/occurrence/${occ.key}` : null;
   const validUrls = (imageUrls ?? []).filter((u) => typeof u === 'string' && /^https:\/\//.test(u)).slice(0, 4);
   const fullUrls = validUrls.map(toFullSizeUrl);
   const photoBox =
@@ -216,7 +216,7 @@ ${validUrls
       ${line('Dataset', dataset)}
       ${line('IUCN status', iucn)}
       <div style="margin-top: 10px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center;">
-        <a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer" class="gbif-infobox-view-button" style="display: inline-block; padding: 8px 14px; background: #4caf50; color: #fff; border-radius: 6px; text-decoration: none; font-weight: 500; font-size: 14px;">View on GBIF →</a>
+        ${gbifUrl ? `<a href="${escapeHtml(gbifUrl)}" target="_blank" rel="noopener noreferrer" class="gbif-infobox-view-button" style="display: inline-block; padding: 8px 14px; background: #4caf50; color: #fff; border-radius: 6px; text-decoration: none; font-weight: 500; font-size: 14px;">View on GBIF →</a>` : '<span style="display: inline-block; padding: 8px 0; color: rgba(255,255,255,0.75); font-size: 13px;">Imported record</span>'}
         <a href="#" class="${SAVE_BUTTON_CLASS}" data-key="${occ.key}" data-action="${savedKeys?.has(occ.key) ? 'remove' : 'add'}" style="display: inline-block; padding: 8px 14px; background: ${savedKeys?.has(occ.key) ? 'rgba(76, 175, 80, 0.3)' : 'rgba(255,255,255,0.15)'}; color: ${savedKeys?.has(occ.key) ? '#2e7d32' : 'rgba(255,255,255,0.9)'}; border: 1px solid rgba(255,255,255,0.3); border-radius: 6px; text-decoration: none; font-weight: 500; font-size: 14px;">${savedKeys?.has(occ.key) ? 'Saved ✓' : 'Save'}</a>
       </div>
     </div>
@@ -327,23 +327,32 @@ function OccurrenceImageLoader({
     }
     const viewer = v;
     let cancelled = false;
+    let activeController: AbortController | null = null;
+    let requestSeq = 0;
     const remove = viewer.selectedEntityChanged.addEventListener((entity: Cesium.Entity | undefined) => {
       if (cancelled) return;
+      activeController?.abort();
       const key = entity?.id != null ? Number(entity.id) : NaN;
       if (!Number.isInteger(key) || key < 1) {
         return;
       }
-      fetch(`/api/occurrence/${key}/image`)
+      const controller = new AbortController();
+      activeController = controller;
+      const seq = ++requestSeq;
+      fetch(`/api/occurrence/${key}/image`, { signal: controller.signal })
         .then((res) => res.json())
         .then((data: { urls?: string[] }) => {
-          if (!cancelled && Array.isArray(data?.urls)) onImageLoaded(key, data.urls);
+          if (!cancelled && !controller.signal.aborted && seq === requestSeq && Array.isArray(data?.urls)) {
+            onImageLoaded(key, data.urls);
+          }
         })
         .catch(() => {
-          if (!cancelled) onImageLoaded(key, []);
+          if (!cancelled && !controller.signal.aborted && seq === requestSeq) onImageLoaded(key, []);
         });
     });
     return () => {
       cancelled = true;
+      activeController?.abort();
       try {
         if (typeof remove === 'function') remove();
       } catch {
@@ -595,12 +604,16 @@ function FlyToBounds({ bounds }: { bounds: Bounds }) {
 /** Selects an occurrence entity by key and flies to it, opening the info box. */
 function SelectOccurrence({
   occurrenceKey,
+  requestId,
   occurrences,
   usePrimitiveMode,
+  onHandled,
 }: {
   occurrenceKey: number | null;
+  requestId?: number;
   occurrences: GBIFOccurrence[];
   usePrimitiveMode: boolean;
+  onHandled?: () => void;
 }) {
   const cesium = useCesium();
   useEffect(() => {
@@ -613,7 +626,10 @@ function SelectOccurrence({
       return;
     }
     const occ = occurrences.find((o) => o.key === occurrenceKey);
-    if (!occ || occ.decimalLatitude == null || occ.decimalLongitude == null) return;
+    if (!occ || occ.decimalLatitude == null || occ.decimalLongitude == null) {
+      onHandled?.();
+      return;
+    }
 
     const position = Cesium.Cartesian3.fromDegrees(
       occ.decimalLongitude,
@@ -638,11 +654,14 @@ function SelectOccurrence({
               if (infoEntity) viewer.selectedEntity = infoEntity;
             } catch {
               // viewer may be destroyed
+            } finally {
+              onHandled?.();
             }
           },
         });
       } catch {
         // viewer may be destroyed
+        onHandled?.();
       }
       return;
     }
@@ -659,6 +678,8 @@ function SelectOccurrence({
         retryCount++;
         if (retryCount < MAX_RETRIES) {
           timeoutId = setTimeout(findAndSelectEntity, 50);
+        } else {
+          onHandled?.();
         }
         return;
       }
@@ -677,11 +698,14 @@ function SelectOccurrence({
               viewer.selectedEntity = entity;
             } catch {
               // viewer may be destroyed
+            } finally {
+              onHandled?.();
             }
           },
         });
       } catch {
         // viewer may be destroyed
+        onHandled?.();
       }
     };
 
@@ -691,7 +715,7 @@ function SelectOccurrence({
       cancelled = true;
       if (timeoutId != null) clearTimeout(timeoutId);
     };
-  }, [cesium?.viewer, occurrenceKey, occurrences, usePrimitiveMode]);
+  }, [cesium?.viewer, occurrenceKey, requestId, occurrences, usePrimitiveMode, onHandled]);
   return null;
 }
 
@@ -1216,6 +1240,10 @@ interface GlobeSceneProps {
   savedOccurrenceKeys?: Set<number>;
   /** When set, select this occurrence (opens info box and flies to it). */
   selectedOccurrenceKey?: number | null;
+  /** Monotonic id that lets repeated selections of the same occurrence retrigger. */
+  selectedOccurrenceRequestId?: number;
+  /** Called once the selection command has been applied or abandoned. */
+  onSelectedOccurrenceHandled?: () => void;
 }
 
 export default function GlobeScene({
@@ -1231,6 +1259,8 @@ export default function GlobeScene({
   photorealistic3D = false,
   savedOccurrenceKeys,
   selectedOccurrenceKey,
+  selectedOccurrenceRequestId,
+  onSelectedOccurrenceHandled,
 }: GlobeSceneProps) {
   const [isClient, setIsClient] = useState(false);
   const [ionEnabled, setIonEnabled] = useState(false);
@@ -1242,6 +1272,12 @@ export default function GlobeScene({
   const usePrimitiveMode = occurrences.length > MAX_OCCURRENCES_FOR_ENTITIES;
   const displayedOccurrenceKey =
     selectedOccurrenceKey ?? pickedOccurrenceKey;
+
+  useEffect(() => {
+    if (selectedOccurrenceKey != null) {
+      setPickedOccurrenceKey(selectedOccurrenceKey);
+    }
+  }, [selectedOccurrenceKey, selectedOccurrenceRequestId]);
 
   const handleOccurrenceImageLoaded = useCallback((occurrenceKey: number, urls: string[]) => {
     if (urls.length > 0) setImageUrlsByKey((prev) => ({ ...prev, [occurrenceKey]: urls }));
@@ -1331,8 +1367,10 @@ export default function GlobeScene({
       {selectedOccurrenceKey != null && (
         <SelectOccurrence
           occurrenceKey={selectedOccurrenceKey}
+          requestId={selectedOccurrenceRequestId}
           occurrences={occurrences}
           usePrimitiveMode={usePrimitiveMode}
+          onHandled={onSelectedOccurrenceHandled}
         />
       )}
       {drawRegionMode && onDrawnBounds && (

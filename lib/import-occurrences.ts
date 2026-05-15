@@ -36,6 +36,10 @@ const CSV_HEADER_ALIASES: Record<string, string> = {
   'datasetkey': 'datasetKey',
 };
 
+const MAX_IMPORT_FILE_BYTES = 25 * 1024 * 1024;
+const MAX_ZIP_ENTRIES = 100;
+const MAX_UNCOMPRESSED_ENTRY_BYTES = 25 * 1024 * 1024;
+
 function normalizeHeader(h: string): string {
   const trimmed = h.trim();
   const lower = trimmed.toLowerCase().replace(/\s+/g, ' ');
@@ -100,28 +104,39 @@ function rowToOccurrence(row: Record<string, unknown>, syntheticKey: number): GB
   };
 }
 
-/**
- * Split a line by a single delimiter, respecting double-quoted fields.
- */
-function parseLineByDelimiter(line: string, delimiter: string): string[] {
-  const out: string[] = [];
+/** Parse delimited text with RFC-4180-style quoted fields and escaped quotes. */
+function parseDelimitedRows(text: string, delimiter: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
   let cur = '';
   let inQuotes = false;
-  for (let i = 0; i < line.length; i++) {
-    const c = line[i];
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
     if (c === '"') {
-      inQuotes = !inQuotes;
-    } else if (inQuotes) {
-      cur += c;
-    } else if (c === delimiter) {
-      out.push(cur);
+      if (inQuotes && text[i + 1] === '"') {
+        cur += '"';
+        i += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (c === delimiter && !inQuotes) {
+      row.push(cur);
       cur = '';
+    } else if ((c === '\n' || c === '\r') && !inQuotes) {
+      row.push(cur);
+      rows.push(row);
+      row = [];
+      cur = '';
+      if (c === '\r' && text[i + 1] === '\n') i += 1;
     } else {
       cur += c;
     }
   }
-  out.push(cur);
-  return out;
+  if (cur.length > 0 || row.length > 0) {
+    row.push(cur);
+    rows.push(row);
+  }
+  return rows;
 }
 
 /** Detect delimiter from first line: prefer the most frequent of comma, semicolon, or tab (GBIF exports are often TSV or semicolon-separated). */
@@ -132,7 +147,8 @@ function detectDelimiter(firstLine: string): string {
   let inQuotes = false;
   for (let i = 0; i < firstLine.length; i++) {
     const c = firstLine[i];
-    if (c === '"') inQuotes = !inQuotes;
+      if (c === '"' && inQuotes && firstLine[i + 1] === '"') i += 1;
+      else if (c === '"') inQuotes = !inQuotes;
     else if (!inQuotes) {
       if (c === '\t') tabs += 1;
       else if (c === ',') commas += 1;
@@ -144,14 +160,6 @@ function detectDelimiter(firstLine: string): string {
   return ',';
 }
 
-/** Simple CSV/TSV line parse (handles quoted fields; uses comma, semicolon, or tab). */
-function parseCSVLine(line: string, delimiter?: string): string[] {
-  if (delimiter !== undefined) return parseLineByDelimiter(line, delimiter);
-  return parseLineByDelimiter(line, ',').length >= parseLineByDelimiter(line, '\t').length
-    ? parseLineByDelimiter(line, ',')
-    : parseLineByDelimiter(line, '\t');
-}
-
 /**
  * Parse CSV/TSV text (header row + data). Expects GBIF/Darwin Core style columns.
  * Strips BOM. Detects tab vs comma delimiter so values like "Locality, Region" don't break columns.
@@ -159,17 +167,16 @@ function parseCSVLine(line: string, delimiter?: string): string[] {
  */
 export function parseOccurrencesCSV(text: string): GBIFOccurrence[] {
   const raw = text.replace(/^\uFEFF/, ''); // BOM
-  const lines = raw.split(/\r?\n/).filter((l) => l.trim());
-  if (lines.length < 2) return [];
-  const headerLine = lines[0];
+  const headerLine = raw.split(/\r?\n/, 1)[0] ?? '';
   const delimiter = detectDelimiter(headerLine);
-  const headerValues = parseLineByDelimiter(headerLine, delimiter);
+  const rows = parseDelimitedRows(raw, delimiter).filter((r) => r.some((v) => v.trim()));
+  if (rows.length < 2) return [];
+  const headerValues = rows[0];
   const headers = headerValues.map((h) => normalizeHeader(h.trim()) || camelCase(h.trim()));
   const results: GBIFOccurrence[] = [];
   let syntheticKey = -1;
-  for (let i = 1; i < lines.length; i++) {
-    const line = lines[i];
-    const values = parseLineByDelimiter(line, delimiter);
+  for (let i = 1; i < rows.length; i++) {
+    const values = rows[i];
     const row: Record<string, unknown> = {};
     headers.forEach((h, j) => {
       if (h) row[h] = values[j]?.trim();
@@ -235,19 +242,32 @@ function parseOccurrencesText(text: string, filename: string): GBIFOccurrence[] 
 }
 
 export async function parseOccurrencesFile(file: File): Promise<GBIFOccurrence[]> {
+  if (file.size > MAX_IMPORT_FILE_BYTES) {
+    throw new Error('Import file is too large');
+  }
   const ext = file.name.split('.').pop()?.toLowerCase();
 
   if (ext === 'zip') {
     const arrayBuffer = await file.arrayBuffer();
     const zip = await JSZip.loadAsync(arrayBuffer);
     const names = Object.keys(zip.files);
+    if (names.length > MAX_ZIP_ENTRIES) {
+      throw new Error('ZIP file contains too many entries');
+    }
     const csvName = names.find((n) => /\.csv$/i.test(n));
     const jsonName = names.find((n) => /\.json$/i.test(n));
     const candidate = csvName ?? jsonName ?? names.find((n) => !n.endsWith('/') && !n.startsWith('__'));
     if (!candidate) return [];
     const entry = zip.files[candidate];
     if (!entry || entry.dir) return [];
+    const entrySize = (entry as typeof entry & { _data?: { uncompressedSize?: number } })._data?.uncompressedSize;
+    if (entrySize != null && entrySize > MAX_UNCOMPRESSED_ENTRY_BYTES) {
+      throw new Error('ZIP entry is too large');
+    }
     const text = await entry.async('string');
+    if (text.length > MAX_UNCOMPRESSED_ENTRY_BYTES) {
+      throw new Error('ZIP entry is too large');
+    }
     return parseOccurrencesText(text, candidate);
   }
 
