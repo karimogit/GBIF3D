@@ -126,7 +126,12 @@ export default function SpeciesSearch({
           label={label}
           placeholder={placeholder}
           error={!!error}
-          helperText={error ?? 'Scientific or common (English) name. Pick a genus or family for broader results.'}
+          helperText={
+            error ??
+            ((multiple ? (valueArray?.length ?? 0) : valueSingle ? 1 : 0) === 0
+              ? 'Pick a species from the list — typing alone does not search. Or choose a taxonomic group below.'
+              : 'Scientific or common (English) name. Pick a genus or family for broader results.')
+          }
           InputProps={{
             ...params.InputProps,
             endAdornment: (

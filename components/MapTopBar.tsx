@@ -414,6 +414,7 @@ export default function MapTopBar({
         }}
       >
         Filters
+        {(filters.taxonKeys?.length ?? 0) > 0 || filters.taxonKey != null ? ' • active' : ''}
       </Button>
       {/* On mobile: single hamburger menu; on desktop: individual buttons */}
       <IconButton

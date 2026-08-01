@@ -17,9 +17,9 @@ const DEFAULT_BOUNDS: Bounds = {
   north: 90,
 };
 
-// How long to wait after camera/filters change before refetching occurrences.
-// Kept under 1s so zoom/pan with \"Current view\" feels responsive.
-const FETCH_DEBOUNCE_MS = 800;
+// Debounce before refetching. Shorter for filter changes; region/camera uses the same
+// delay but loading feedback starts immediately so the UI doesn't look idle.
+const FETCH_DEBOUNCE_MS = 400;
 
 interface GlobeViewerProps {
   filters: OccurrenceFilters;
@@ -158,9 +158,52 @@ export default function GlobeViewer({
   const hasTaxonFilter =
     (filters.taxonKeys?.length ?? 0) > 0 || filters.taxonKey != null;
 
+  /** Stable signature so filter edits always retrigger the fetch effect. */
+  const filterFetchKey = useMemo(
+    () =>
+      JSON.stringify({
+        taxonKey: filters.taxonKey ?? null,
+        taxonKeys: filters.taxonKeys ?? null,
+        year: filters.year ?? null,
+        eventDate: filters.eventDate ?? null,
+        iucnRedListCategory: filters.iucnRedListCategory ?? null,
+        basisOfRecord: filters.basisOfRecord ?? null,
+        continent: filters.continent ?? null,
+        country: filters.country ?? null,
+        datasetKey: filters.datasetKey ?? null,
+        institutionCode: filters.institutionCode ?? null,
+        limit: filters.limit ?? null,
+        offset: filters.offset ?? null,
+        selectedCountryCode: selectedCountryCode ?? null,
+      }),
+    [
+      filters.taxonKey,
+      filters.taxonKeys,
+      filters.year,
+      filters.eventDate,
+      filters.iucnRedListCategory,
+      filters.basisOfRecord,
+      filters.continent,
+      filters.country,
+      filters.datasetKey,
+      filters.institutionCode,
+      filters.limit,
+      filters.offset,
+      selectedCountryCode,
+    ]
+  );
+
+  const regionFetchKey = useMemo(
+    () =>
+      selectedRegionBounds
+        ? `${selectedRegionBounds.west},${selectedRegionBounds.south},${selectedRegionBounds.east},${selectedRegionBounds.north}`
+        : 'camera',
+    [selectedRegionBounds]
+  );
+
   // Refetch when region or filters change — not on every camera bounds tick (that aborted
-  // in-flight GBIF requests before they could finish). For "Current view", use the latest
-  // camera bounds at fetch time via viewBoundsRef.
+  // in-flight GBIF requests before they could finish). With no fixed region, use camera
+  // bounds at fetch time via viewBoundsRef.
   useEffect(() => {
     if (fetchTimeoutRef.current) clearTimeout(fetchTimeoutRef.current);
     fetchAbortRef.current?.abort();
@@ -173,6 +216,7 @@ export default function GlobeViewer({
       setLoading(false);
       return;
     }
+    setLoading(true);
     fetchTimeoutRef.current = setTimeout(() => {
       const controller = new AbortController();
       fetchAbortRef.current = controller;
@@ -184,7 +228,7 @@ export default function GlobeViewer({
       if (fetchTimeoutRef.current) clearTimeout(fetchTimeoutRef.current);
       fetchAbortRef.current?.abort();
     };
-  }, [selectedRegionBounds, fetchOccurrences, hasTaxonFilter]);
+  }, [regionFetchKey, filterFetchKey, fetchOccurrences, hasTaxonFilter, selectedRegionBounds]);
 
   const displayedOccurrences = useMemo(() => {
     // Only filter API occurrences by region; show all imported points regardless of selected region
@@ -346,9 +390,30 @@ export default function GlobeViewer({
               zIndex: 999,
             }}
           >
-            {`Loading occurrences… (up to ${(filters.limit ?? OCCURRENCE_MAX_TOTAL).toLocaleString()} records)`}
+            {`Loading occurrences from GBIF… (up to ${(filters.limit ?? OCCURRENCE_MAX_TOTAL).toLocaleString()} records)`}
           </div>
         </>
+      )}
+      {!loading && hasTaxonFilter && displayedOccurrences.length === 0 && !error && (
+        <div
+          role="status"
+          style={{
+            position: 'absolute',
+            bottom: 16,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            padding: '8px 16px',
+            background: 'rgba(0, 0, 0, 0.7)',
+            color: '#fff',
+            borderRadius: 8,
+            maxWidth: '90%',
+            fontSize: 14,
+            zIndex: 999,
+            textAlign: 'center',
+          }}
+        >
+          No occurrences found for this species in the current area. Try a broader region (e.g. World) or another filter.
+        </div>
       )}
       {error && (
         <div
