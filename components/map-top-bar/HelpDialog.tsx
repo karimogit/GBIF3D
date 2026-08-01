@@ -24,7 +24,7 @@ export default function HelpDialog({
       <DialogTitle>How GBIF 3D works</DialogTitle>
       <DialogContent>
         <Typography variant="body2" color="text.secondary" component="div" sx={{ '& p': { mb: 1.25 } }}>
-          <p><strong>1. Pick a region</strong> — Use the Region menu to choose a predefined region, search for a place, or use the current view.</p>
+          <p><strong>1. Pick a region</strong> — Search for a place by name, or choose a predefined region (World, Europe, etc.) from the list. With no region selected, data uses the area visible on the globe when you apply filters.</p>
           <p><strong>2. Add species filters</strong> — Open Filters to search by species/taxon, taxonomic group, IUCN status, date range, and advanced options (e.g. country, dataset, institution).</p>
           <p><strong>3. Import your own data</strong> — Use Import to add GBIF-style CSV or JSON files; imported points appear alongside API data.</p>
           <p><strong>4. Explore the globe</strong> — Each dot is an occurrence. Rotate, pan, and zoom to see where records are concentrated. Use the fullscreen icon to go fullscreen.</p>

@@ -151,7 +151,6 @@ export default function MapTopBar({
 
   const staticOptions = useMemo(() => {
     const list: RegionOption[] = [
-      { id: 'current-view', label: 'Current view' },
       ...(drawnBounds != null ? [{ id: 'drawn', label: 'Drawn region' }] : []),
       ...REGIONS.map((r) => ({ id: r.id, label: r.name })),
       ...(favorites.length > 0
@@ -278,6 +277,7 @@ export default function MapTopBar({
             onChange={handleChange}
             onInputChange={(_, v) => setPlaceQuery(v)}
             options={options}
+            clearOnEscape
             getOptionLabel={(o) => o.label}
             isOptionEqualToValue={(a, b) => a.id === b.id && a.label === b.label}
             groupBy={(o) => o.group ?? ''}

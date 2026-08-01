@@ -27,7 +27,6 @@ import { SAVE_OCCURRENCE_EVENT } from '@/components/GlobeScene';
 
 const REGION_ID_DRAWN = 'drawn';
 const REGION_ID_PLACE = 'place';
-const REGION_ID_CURRENT_VIEW = 'current-view';
 
 const VIEW_STORAGE_KEY = 'gbif-globe-view';
 const VALID_SCENE_MODES = ['3D', '2D'] as const;
@@ -135,11 +134,9 @@ function getSelectedRegionBounds(
   selectedRegionId: string,
   favorites: FavoriteRegion[],
   drawnBounds: Bounds | null,
-  placeSearchResult: { name: string; bounds: Bounds; countryCode?: string } | null,
-  viewBounds: Bounds | null
+  placeSearchResult: { name: string; bounds: Bounds; countryCode?: string } | null
 ): Bounds | null {
   if (!selectedRegionId) return null;
-  if (selectedRegionId === REGION_ID_CURRENT_VIEW) return viewBounds ?? null;
   if (selectedRegionId === REGION_ID_DRAWN && drawnBounds) return drawnBounds;
   if (selectedRegionId === REGION_ID_PLACE && placeSearchResult) return placeSearchResult.bounds;
   const fromRegions = getRegionBounds(selectedRegionId);
@@ -154,7 +151,6 @@ function getRegionDisplayName(
   placeSearchResult: { name: string; bounds: Bounds; countryCode?: string } | null
 ): string {
   if (!selectedRegionId) return '';
-  if (selectedRegionId === REGION_ID_CURRENT_VIEW) return 'Current view';
   if (selectedRegionId === REGION_ID_DRAWN) return 'Drawn region';
   if (selectedRegionId === REGION_ID_PLACE && placeSearchResult) return placeSearchResult.name;
   const fromRegions = REGIONS.find((r) => r.id === selectedRegionId);
@@ -169,7 +165,7 @@ export default function Home() {
     limit: 1000,
   });
   const [occurrences, setOccurrences] = useState<GBIFOccurrence[]>([]);
-  const [selectedRegionId, setSelectedRegionId] = useState(REGION_ID_CURRENT_VIEW);
+  const [selectedRegionId, setSelectedRegionId] = useState('');
   const [favorites, setFavorites] = useState<FavoriteRegion[]>([]);
   const [drawnBounds, setDrawnBounds] = useState<Bounds | null>(null);
   const [placeSearchResult, setPlaceSearchResult] = useState<{
@@ -180,7 +176,6 @@ export default function Home() {
   const [drawRegionMode, setDrawRegionMode] = useState(false);
   const [sceneMode, setSceneMode] = useState<'3D' | '2D'>('3D');
   const [baseMap, setBaseMap] = useState<'bing' | 'osm' | 'positron' | 'dark-matter' | 'opentopomap'>('bing');
-  const [viewBounds, setViewBounds] = useState<Bounds | null>(null);
   const [photorealistic3D, setPhotorealistic3D] = useState(false);
   const [selectedYear, setSelectedYear] = useState<number | null>(null);
   const [selectedMonth, setSelectedMonth] = useState<number | null>(null);
@@ -311,8 +306,7 @@ export default function Home() {
     selectedRegionId,
     favorites,
     drawnBounds,
-    placeSearchResult,
-    viewBounds
+    placeSearchResult
   );
   // When a predefined country region is selected (2-letter id), pass ISO country code to restrict API
   const selectedCountryCode =
@@ -392,16 +386,9 @@ export default function Home() {
           <GlobeViewer
             filters={filters}
             onOccurrencesChange={setOccurrences}
-            selectedRegionBounds={
-              selectedRegionId === REGION_ID_CURRENT_VIEW
-                ? null
-                : selectedRegionBounds
-            }
-            selectedCountryCode={selectedRegionId === REGION_ID_CURRENT_VIEW ? null : selectedCountryCode}
-            flyToBounds={selectedRegionId === REGION_ID_CURRENT_VIEW ? null : (selectedRegionBounds ?? undefined)}
-            onViewBoundsChange={(b) => {
-              setViewBounds(b);
-            }}
+            selectedRegionBounds={selectedRegionBounds}
+            selectedCountryCode={selectedCountryCode}
+            flyToBounds={selectedRegionBounds ?? undefined}
             drawRegionMode={drawRegionMode}
             onDrawnBounds={handleDrawnBounds}
             drawnBounds={drawnBounds}
