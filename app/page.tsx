@@ -180,8 +180,6 @@ export default function Home() {
   const [drawRegionMode, setDrawRegionMode] = useState(false);
   const [sceneMode, setSceneMode] = useState<'3D' | '2D'>('3D');
   const [baseMap, setBaseMap] = useState<'bing' | 'osm' | 'positron' | 'dark-matter' | 'opentopomap'>('bing');
-  const viewBoundsRef = useRef<Bounds | null>(null);
-  const [hasViewBounds, setHasViewBounds] = useState(false);
   const [viewBounds, setViewBounds] = useState<Bounds | null>(null);
   const [photorealistic3D, setPhotorealistic3D] = useState(false);
   const [selectedYear, setSelectedYear] = useState<number | null>(null);
@@ -402,16 +400,13 @@ export default function Home() {
             selectedCountryCode={selectedRegionId === REGION_ID_CURRENT_VIEW ? null : selectedCountryCode}
             flyToBounds={selectedRegionId === REGION_ID_CURRENT_VIEW ? null : (selectedRegionBounds ?? undefined)}
             onViewBoundsChange={(b) => {
-              viewBoundsRef.current = b;
               setViewBounds(b);
-              setHasViewBounds(true);
             }}
             drawRegionMode={drawRegionMode}
             onDrawnBounds={handleDrawnBounds}
             drawnBounds={drawnBounds}
             sceneMode={sceneMode}
             baseMap={baseMap}
-            environmentalLayer="none"
             photorealistic3D={photorealistic3D}
             timeFilterYear={selectedYear}
             timeFilterMonth={selectedMonth}
