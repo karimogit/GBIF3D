@@ -34,150 +34,25 @@ import BookmarkBorder from '@mui/icons-material/BookmarkBorder';
 import DeleteOutline from '@mui/icons-material/DeleteOutline';
 import IconButton from '@mui/material/IconButton';
 import CircularProgress from '@mui/material/CircularProgress';
-import Paper from '@mui/material/Paper';
-import Link from '@mui/material/Link';
-import Popover from '@mui/material/Popover';
 import Dialog from '@mui/material/Dialog';
+import Popover from '@mui/material/Popover';
 import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
 import DialogActions from '@mui/material/DialogActions';
 import { REGIONS } from '@/lib/regions';
-import type { FavoriteRegion } from '@/lib/favorites';
 import type { Bounds } from '@/lib/geometry';
-import type { OccurrenceFilters, GBIFOccurrence } from '@/types/gbif';
 import FilterForm from './FilterForm';
+import ImportSummaryContent from './map-top-bar/ImportSummaryContent';
+import HelpDialog from './map-top-bar/HelpDialog';
+import AboutMenuContent from './map-top-bar/AboutMenuContent';
+import {
+  type MapTopBarProps,
+  type RegionOption,
+  GITHUB_REPO_DEFAULT,
+  PLACES_DEBOUNCE_MS,
+} from './map-top-bar/types';
 
-interface RegionOption {
-  id: string;
-  label: string;
-  group?: string;
-  bounds?: Bounds;
-  /** ISO country code when option is a place in a country; used for API filter */
-  countryCode?: string;
-}
-
-interface MapTopBarProps {
-  selectedRegionId: string;
-  onRegionChange: (regionId: string) => void;
-  favorites: FavoriteRegion[];
-  drawnBounds: { west: number; south: number; east: number; north: number } | null;
-  placeSearchResult: { name: string; bounds: Bounds; countryCode?: string } | null;
-  onPlaceSelect: (bounds: Bounds, name: string, countryCode?: string) => void;
-  filters: OccurrenceFilters;
-  onFiltersChange: (f: OccurrenceFilters) => void;
-  /** Draw region on the globe */
-  onStartDrawRegion?: () => void;
-  drawRegionMode?: boolean;
-  onCancelDrawRegion?: () => void;
-  /** Save drawn region as favorite; shown when drawnBounds is set */
-  onSaveDrawnRegion?: () => void;
-  /** Clear drawn region; shown when selected region is drawn */
-  onClearDrawnRegion?: () => void;
-  /** Remove a saved favorite */
-  onRemoveFavorite?: (id: string) => void;
-  onExportImage?: () => void;
-  onExportGeoJSON?: () => void;
-  onExportCSV?: () => void;
-  onExportPDF?: () => void;
-  occurrenceCount?: number;
-  /** Import GBIF occurrence CSV/JSON; called with selected file */
-  onImportFile?: (file: File) => void;
-  /** Number of imported occurrences (for showing count and clear button) */
-  importedOccurrenceCount?: number;
-  /** Imported occurrence records (for summary: species list, etc.) */
-  importedOccurrences?: GBIFOccurrence[];
-  /** Clear imported occurrences; shown when importedOccurrenceCount > 0 */
-  onClearImport?: () => void;
-  /** Saved occurrences (from info box Save button); show list and remove */
-  savedOccurrences?: GBIFOccurrence[];
-  /** When clicking a saved occurrence, select it (opens info box and flies to it). */
-  onSelectOccurrence?: (key: number) => void;
-  onRemoveSavedOccurrence?: (key: number) => void;
-  /** Current scene mode (3D / 2D); shown in View menu */
-  sceneMode?: '3D' | '2D';
-  /** Called when user selects a scene mode from the View menu */
-  onSceneModeChange?: (mode: '3D' | '2D') => void;
-  /** Current base map (imagery); shown in View menu */
-  baseMap?: 'bing' | 'osm' | 'positron' | 'dark-matter' | 'opentopomap';
-  /** Called when user selects a base map from the View menu */
-  onBaseMapChange?: (baseMap: 'bing' | 'osm' | 'positron' | 'dark-matter' | 'opentopomap') => void;
-  /** Google Photorealistic 3D Tiles overlay (Cesium Ion) */
-  photorealistic3D?: boolean;
-  onPhotorealistic3DChange?: (enabled: boolean) => void;
-  /** GitHub repo URL for the "View on GitHub" button (e.g. https://github.com/org/gbif-globe) */
-  githubUrl?: string;
-}
-
-const GITHUB_REPO_DEFAULT = 'https://github.com/karimogit/GBIF3D';
-
-const PLACES_DEBOUNCE_MS = 400;
-
-/** Summary of imported occurrences: record count, species list, and actions */
-function ImportSummaryContent({
-  importedOccurrences,
-  onChooseFile,
-  onClear,
-  hasClear,
-}: {
-  importedOccurrences: GBIFOccurrence[];
-  onChooseFile: () => void;
-  onClear: () => void;
-  hasClear: boolean;
-}) {
-  const { total, speciesList } = useMemo(() => {
-    const total = importedOccurrences.length;
-    const byName = new Map<string, number>();
-    for (const o of importedOccurrences) {
-      const name = (o.scientificName || o.vernacularName || 'Unknown')?.trim() || 'Unknown';
-      byName.set(name, (byName.get(name) ?? 0) + 1);
-    }
-    const speciesList = Array.from(byName.entries())
-      .sort((a, b) => b[1] - a[1])
-      .map(([name, count]) => ({ name, count }));
-    return { total, speciesList };
-  }, [importedOccurrences]);
-
-  return (
-    <Box>
-      <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 1 }}>
-        Import summary
-      </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-        {total.toLocaleString()} record{total !== 1 ? 's' : ''}, {speciesList.length} species
-      </Typography>
-      <Box sx={{ maxHeight: 220, overflowY: 'auto', mb: 2, border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1 }}>
-        {speciesList.length === 0 ? (
-          <Typography variant="body2" color="text.secondary">
-            No species names in data
-          </Typography>
-        ) : (
-          <Box component="ul" sx={{ m: 0, pl: 2.5 }}>
-            {speciesList.map(({ name, count }) => (
-              <Typography key={name} component="li" variant="body2" sx={{ py: 0.25 }}>
-                {name}
-                {count > 1 && (
-                  <Typography component="span" variant="caption" color="text.secondary" sx={{ ml: 0.5 }}>
-                    ({count})
-                  </Typography>
-                )}
-              </Typography>
-            ))}
-          </Box>
-        )}
-      </Box>
-      <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-        <Button size="small" variant="outlined" startIcon={<UploadFile />} onClick={onChooseFile}>
-          Choose another file
-        </Button>
-        {hasClear && (
-          <Button size="small" color="secondary" startIcon={<DeleteOutline />} onClick={onClear}>
-            Clear import
-          </Button>
-        )}
-      </Box>
-    </Box>
-  );
-}
+export type { MapTopBarProps } from './map-top-bar/types';
 
 export default function MapTopBar({
   selectedRegionId,
@@ -276,7 +151,6 @@ export default function MapTopBar({
 
   const staticOptions = useMemo(() => {
     const list: RegionOption[] = [
-      { id: 'current-view', label: 'Current view' },
       ...(drawnBounds != null ? [{ id: 'drawn', label: 'Drawn region' }] : []),
       ...REGIONS.map((r) => ({ id: r.id, label: r.name })),
       ...(favorites.length > 0
@@ -403,6 +277,7 @@ export default function MapTopBar({
             onChange={handleChange}
             onInputChange={(_, v) => setPlaceQuery(v)}
             options={options}
+            clearOnEscape
             getOptionLabel={(o) => o.label}
             isOptionEqualToValue={(a, b) => a.id === b.id && a.label === b.label}
             groupBy={(o) => o.group ?? ''}
@@ -539,6 +414,7 @@ export default function MapTopBar({
         }}
       >
         Filters
+        {(filters.taxonKeys?.length ?? 0) > 0 || filters.taxonKey != null ? ' • active' : ''}
       </Button>
       {/* On mobile: single hamburger menu; on desktop: individual buttons */}
       <IconButton
@@ -1186,29 +1062,7 @@ export default function MapTopBar({
       </Box>
 
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
-        <Dialog
-          open={helpOpen}
-          onClose={() => setHelpOpen(false)}
-          maxWidth="sm"
-          PaperProps={{ sx: { borderRadius: 2, m: 1, maxWidth: 'min(360px, calc(100vw - 16px))' } }}
-        >
-          <DialogTitle>How GBIF 3D works</DialogTitle>
-          <DialogContent>
-            <Typography variant="body2" color="text.secondary" component="div" sx={{ '& p': { mb: 1.25 } }}>
-              <p><strong>1. Pick a region</strong> — Use the Region menu to choose a predefined region, search for a place, or use the current view.</p>
-              <p><strong>2. Add species filters</strong> — Open Filters to search by species/taxon, taxonomic group, IUCN status, date range, and advanced options (e.g. country, dataset, institution).</p>
-              <p><strong>3. Import your own data</strong> — Use Import to add GBIF-style CSV or JSON files; imported points appear alongside API data.</p>
-              <p><strong>4. Explore the globe</strong> — Each dot is an occurrence. Rotate, pan, and zoom to see where records are concentrated. Use the fullscreen icon to go fullscreen.</p>
-              <p><strong>5. Use the timeline</strong> — Click a year (and optionally a month) at the bottom to focus on that period. Click “All” to reset.</p>
-              <p><strong>6. Draw your own area</strong> — Use Draw region to define a custom box on the globe and fetch occurrences for that area; you can save it as a favorite.</p>
-              <p><strong>7. Export</strong> — Use Export to save the current data as an image, GeoJSON, CSV, or a PDF report.</p>
-              <p><strong>Navigation tips</strong> — Left-click and drag to rotate (3D) or pan (2D); right-click and drag to pan; use the mouse wheel to zoom; on touch, drag to pan and pinch to zoom.</p>
-            </Typography>
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setHelpOpen(false)}>Close</Button>
-          </DialogActions>
-        </Dialog>
+        <HelpDialog open={helpOpen} onClose={() => setHelpOpen(false)} />
         <Menu
           anchorEl={aboutMenuAnchor}
           open={Boolean(aboutMenuAnchor)}
@@ -1217,23 +1071,7 @@ export default function MapTopBar({
           transformOrigin={{ vertical: 'top', horizontal: 'right' }}
           slotProps={{ paper: { sx: { mt: 1, minWidth: 280, maxWidth: 'min(420px, calc(100vw - 24px))' } } }}
         >
-          <Paper component="div" sx={{ p: 2, boxShadow: 'none', backgroundColor: 'transparent' }}>
-            <Typography variant="subtitle1" fontWeight={600} gutterBottom>
-              GBIF 3D
-            </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-              Explore where species have been recorded on an interactive 3D globe. Data comes from GBIF: millions of observations from museums, surveys, and citizen science.
-            </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-              Pick a region or search for a place, import your own GBIF-style datasets, filter by species or year, and draw your own area. Each dot is an occurrence; colors show IUCN status. Use the <strong>timeline</strong> at the bottom to filter by year. Use <strong>View</strong> for 3D/2D, base maps, and optional Photorealistic 3D. Export current data as image, GeoJSON, CSV, or PDF.
-            </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-              Built with Next.js, Cesium (Resium), and the GBIF API.
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Developer: <Link href="https://kar.im" target="_blank" rel="noopener noreferrer">Karim Osman</Link>
-            </Typography>
-          </Paper>
+          <AboutMenuContent />
         </Menu>
       </Box>
       </Box>
