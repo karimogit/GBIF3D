@@ -150,7 +150,7 @@ export default function FilterForm({
   };
 
   return (
-    <Box sx={{ minWidth: 280, maxWidth: 360, p: 0 }}>
+    <Box sx={{ minWidth: { xs: 0, sm: 280 }, maxWidth: { xs: '100%', sm: 360 }, width: '100%', p: 0 }}>
       <Box sx={{ mt: 1.5 }}>
         <SpeciesSearch
           multiple
