@@ -34,6 +34,8 @@ import BookmarkBorder from '@mui/icons-material/BookmarkBorder';
 import DeleteOutline from '@mui/icons-material/DeleteOutline';
 import IconButton from '@mui/material/IconButton';
 import CircularProgress from '@mui/material/CircularProgress';
+import useMediaQuery from '@mui/material/useMediaQuery';
+import { useTheme } from '@mui/material/styles';
 import Dialog from '@mui/material/Dialog';
 import Popover from '@mui/material/Popover';
 import DialogTitle from '@mui/material/DialogTitle';
@@ -92,7 +94,20 @@ export default function MapTopBar({
   const [placeQuery, setPlaceQuery] = useState('');
   const [placeResults, setPlaceResults] = useState<RegionOption[]>([]);
   const [placeLoading, setPlaceLoading] = useState(false);
+  const [filterOpen, setFilterOpen] = useState(false);
   const [filterAnchor, setFilterAnchor] = useState<null | HTMLElement>(null);
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+
+  const openFilters = useCallback((anchor?: HTMLElement | null) => {
+    if (anchor) setFilterAnchor(anchor);
+    setFilterOpen(true);
+  }, []);
+
+  const closeFilters = useCallback(() => {
+    setFilterOpen(false);
+    setFilterAnchor(null);
+  }, []);
   const [exportMenuAnchor, setExportMenuAnchor] = useState<null | HTMLElement>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
@@ -402,14 +417,14 @@ export default function MapTopBar({
         size="small"
         startIcon={<FilterList />}
         endIcon={<ArrowDropDown />}
-        onClick={(e) => setFilterAnchor(e.currentTarget)}
+        onClick={(e) => openFilters(e.currentTarget)}
         aria-label="Filters"
         aria-haspopup="true"
-        aria-expanded={Boolean(filterAnchor)}
+        aria-expanded={filterOpen}
         sx={{
           minWidth: 0,
           display: { xs: 'none', md: 'inline-flex' },
-          bgcolor: filterAnchor ? 'action.selected' : undefined,
+          bgcolor: filterOpen ? 'action.selected' : undefined,
           '&:hover': { bgcolor: 'action.hover' },
         }}
       >
@@ -445,9 +460,7 @@ export default function MapTopBar({
         <MenuItem
           onClick={() => {
             setMoreMenuAnchor(null);
-            if (moreButtonAnchorRef.current) {
-              setFilterAnchor(moreButtonAnchorRef.current);
-            }
+            openFilters();
           }}
         >
           <ListItemIcon><FilterList fontSize="small" /></ListItemIcon>
@@ -572,10 +585,29 @@ export default function MapTopBar({
           <ListItemText primary="View on GitHub" />
         </MenuItem>
       </Menu>
+      <Dialog
+        open={filterOpen && isMobile}
+        onClose={closeFilters}
+        fullWidth
+        maxWidth="sm"
+        PaperProps={{ sx: { borderRadius: 2, m: 1, maxWidth: 'min(420px, calc(100vw - 16px))' } }}
+      >
+        <DialogTitle>Filters</DialogTitle>
+        <DialogContent dividers>
+          <FilterForm
+            filters={filters}
+            onFiltersChange={onFiltersChange}
+            speciesSearchId="topbar-filter-species"
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeFilters}>Done</Button>
+        </DialogActions>
+      </Dialog>
       <Popover
-        open={Boolean(filterAnchor)}
+        open={filterOpen && !isMobile && Boolean(filterAnchor)}
         anchorEl={filterAnchor}
-        onClose={() => setFilterAnchor(null)}
+        onClose={closeFilters}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
         transformOrigin={{ vertical: 'top', horizontal: 'left' }}
         slotProps={{
@@ -585,10 +617,7 @@ export default function MapTopBar({
               mt: 2,
               p: 2,
               maxHeight: 'min(85vh, 520px)',
-              maxWidth: {
-                xs: 'calc(100vw - 24px)',
-                md: 'min(420px, calc(100vw - 220px))',
-              },
+              maxWidth: 'min(420px, calc(100vw - 24px))',
               overflow: 'auto',
             },
           },
