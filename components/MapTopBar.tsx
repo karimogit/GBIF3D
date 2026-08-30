@@ -585,7 +585,10 @@ export default function MapTopBar({
               mt: 2,
               p: 2,
               maxHeight: 'min(85vh, 520px)',
-              maxWidth: 'min(420px, calc(100vw - 220px))',
+              maxWidth: {
+                xs: 'calc(100vw - 24px)',
+                md: 'min(420px, calc(100vw - 220px))',
+              },
               overflow: 'auto',
             },
           },
