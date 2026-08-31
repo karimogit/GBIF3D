@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Viewer } from 'resium';
 import * as Cesium from 'cesium';
 import type { GBIFOccurrence } from '@/types/gbif';
-import type { Bounds } from '@/lib/geometry';
+import type { Bounds, DrawnRegion, LonLat } from '@/lib/geometry';
 import {
   MAX_OCCURRENCES_FOR_ENTITIES,
   SAVE_OCCURRENCE_EVENT,
@@ -52,8 +52,9 @@ interface GlobeSceneProps {
   onBoundsChange: (bounds: Bounds) => void;
   flyToBounds?: Bounds | null;
   drawRegionMode?: boolean;
-  onDrawnBounds?: (bounds: Bounds) => void;
+  onDrawnRegion?: (region: DrawnRegion) => void;
   drawnBounds?: Bounds | null;
+  drawnPolygon?: LonLat[] | null;
   sceneMode?: SceneModeType;
   baseMap?: BaseMapType;
   environmentalLayer?: 'none' | 'landcover';
@@ -71,8 +72,9 @@ export default function GlobeScene({
   onBoundsChange,
   flyToBounds,
   drawRegionMode = false,
-  onDrawnBounds,
+  onDrawnRegion,
   drawnBounds,
+  drawnPolygon,
   sceneMode = '3D',
   baseMap = 'osm',
   environmentalLayer = 'none',
@@ -188,10 +190,12 @@ export default function GlobeScene({
           onHandled={onSelectedOccurrenceHandled}
         />
       )}
-      {drawRegionMode && onDrawnBounds && (
-        <DrawRegionHandler active onDrawnBounds={onDrawnBounds} />
+      {drawRegionMode && onDrawnRegion && (
+        <DrawRegionHandler active onDrawnRegion={onDrawnRegion} />
       )}
-      {drawnBounds && <DrawnRegionOverlay bounds={drawnBounds} />}
+      {drawnBounds && (
+        <DrawnRegionOverlay bounds={drawnBounds} polygon={drawnPolygon ?? undefined} />
+      )}
       {usePrimitiveMode ? (
         <>
           <OccurrencePointsPrimitive

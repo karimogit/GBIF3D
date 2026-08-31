@@ -23,6 +23,7 @@ export interface MapTopBarProps {
   onStartDrawRegion?: () => void;
   drawRegionMode?: boolean;
   onCancelDrawRegion?: () => void;
+  onFinishDrawRegion?: () => void;
   onSaveDrawnRegion?: () => void;
   onClearDrawnRegion?: () => void;
   onRemoveFavorite?: (id: string) => void;

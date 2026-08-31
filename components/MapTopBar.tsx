@@ -68,6 +68,7 @@ export default function MapTopBar({
   onStartDrawRegion,
   drawRegionMode = false,
   onCancelDrawRegion,
+  onFinishDrawRegion,
   onSaveDrawnRegion,
   onClearDrawnRegion,
   onRemoveFavorite,
@@ -213,8 +214,9 @@ export default function MapTopBar({
         right: 'max(8px, env(safe-area-inset-right))',
         zIndex: 1300,
         display: 'flex',
+        flexDirection: { xs: 'column', md: 'row' },
         flexWrap: 'wrap',
-        alignItems: 'center',
+        alignItems: { xs: 'stretch', md: 'center' },
         justifyContent: 'space-between',
         gap: 1,
         backgroundColor: 'transparent',
@@ -238,7 +240,18 @@ export default function MapTopBar({
         },
       }}
     >
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0, flex: { xs: '1 1 100%', sm: 1 }, maxWidth: { sm: 'calc(100% - 200px)' }, pointerEvents: 'auto' }}>
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1,
+          minWidth: 0,
+          flex: { xs: '1 1 auto', md: 1 },
+          maxWidth: { md: 'calc(100% - 200px)' },
+          width: { xs: '100%', md: 'auto' },
+          pointerEvents: 'auto',
+        }}
+      >
         <Box
           sx={{
             display: 'flex',
@@ -248,6 +261,7 @@ export default function MapTopBar({
             py: 0.5,
             borderRadius: 1,
             backgroundColor: 'rgba(255, 255, 255, 0.92)',
+            flexShrink: 0,
           }}
         >
           <Box
@@ -266,9 +280,8 @@ export default function MapTopBar({
             display: 'flex',
             alignItems: 'center',
             gap: 0.5,
-            flex: { xs: 1, sm: 'none' },
-            minWidth: { xs: 160, sm: 0 },
-            maxWidth: { xs: '100%', sm: 'none' },
+            flex: 1,
+            minWidth: 0,
             backgroundColor: 'rgba(255, 255, 255, 0.92)',
             borderRadius: 1,
             border: '1px solid rgba(0, 0, 0, 0.12)',
@@ -309,7 +322,7 @@ export default function MapTopBar({
               </li>
             )}
             size="small"
-            sx={{ minWidth: { xs: 0, sm: 260 } }}
+            sx={{ flex: 1, minWidth: 0, width: '100%' }}
             loading={placeLoading}
             renderInput={(params) => (
               <TextField
@@ -318,6 +331,7 @@ export default function MapTopBar({
                 size="small"
                 variant="outlined"
                 sx={{
+                  width: '100%',
                   ...(value
                     ? {
                         '& .MuiOutlinedInput-input': {
@@ -347,22 +361,36 @@ export default function MapTopBar({
           {onStartDrawRegion != null && (
             <>
               {drawRegionMode && onCancelDrawRegion ? (
-                <Button
-                  variant="text"
-                  size="small"
-                  color="secondary"
-                  onClick={onCancelDrawRegion}
-                  aria-label="Cancel drawing"
-                  sx={{ minWidth: 0, flexShrink: 0 }}
-                >
-                  Cancel
-                </Button>
+                <>
+                  {onFinishDrawRegion && (
+                    <Button
+                      variant="text"
+                      size="small"
+                      color="primary"
+                      onClick={onFinishDrawRegion}
+                      aria-label="Finish drawing polygon"
+                      sx={{ minWidth: 0, flexShrink: 0 }}
+                    >
+                      Done
+                    </Button>
+                  )}
+                  <Button
+                    variant="text"
+                    size="small"
+                    color="secondary"
+                    onClick={onCancelDrawRegion}
+                    aria-label="Cancel drawing"
+                    sx={{ minWidth: 0, flexShrink: 0 }}
+                  >
+                    Cancel
+                  </Button>
+                </>
               ) : (
                 <IconButton
                   size="small"
                   onClick={onStartDrawRegion}
                   disabled={drawRegionMode}
-                  aria-label="Draw a region on the globe"
+                  aria-label="Draw a polygon region on the globe"
                   sx={{ flexShrink: 0 }}
                 >
                   <EditOutlined fontSize="small" />
@@ -377,7 +405,7 @@ export default function MapTopBar({
                       startIcon={<BookmarkAdd />}
                       onClick={onSaveDrawnRegion}
                       aria-label="Save drawn region as favorite"
-                      sx={{ minWidth: 0, flexShrink: 0 }}
+                      sx={{ minWidth: 0, flexShrink: 0, display: { xs: 'none', sm: 'inline-flex' } }}
                     >
                       Save
                     </Button>
@@ -390,7 +418,7 @@ export default function MapTopBar({
                       startIcon={<DeleteOutline />}
                       onClick={onClearDrawnRegion}
                       aria-label="Clear drawn region"
-                      sx={{ minWidth: 0, flexShrink: 0 }}
+                      sx={{ minWidth: 0, flexShrink: 0, display: { xs: 'none', sm: 'inline-flex' } }}
                     >
                       Clear
                     </Button>
@@ -400,15 +428,36 @@ export default function MapTopBar({
             </>
           )}
         </Box>
+        <IconButton
+          size="small"
+          onClick={(e) => {
+            moreButtonAnchorRef.current = e.currentTarget;
+            setMoreMenuAnchor(e.currentTarget);
+          }}
+          aria-label="Menu"
+          aria-haspopup="true"
+          aria-expanded={Boolean(moreMenuAnchor)}
+          sx={{
+            display: { xs: 'inline-flex', md: 'none' },
+            flexShrink: 0,
+            backgroundColor: 'rgba(255, 255, 255, 0.92)',
+            border: '1px solid rgba(0, 0, 0, 0.12)',
+            borderRadius: 1,
+            color: 'text.primary',
+          }}
+        >
+          <MenuIcon fontSize="small" />
+        </IconButton>
+      </Box>
       <Box
         sx={{
-          display: 'flex',
-          flexWrap: { xs: 'nowrap', sm: 'wrap' },
+          display: { xs: 'none', md: 'flex' },
+          flexWrap: 'wrap',
           alignItems: 'center',
           justifyContent: 'flex-end',
           gap: 0.5,
           flexShrink: 0,
-          flex: { xs: '0 0 auto', sm: 1 },
+          flex: 1,
           minWidth: 0,
         }}
       >
@@ -431,23 +480,7 @@ export default function MapTopBar({
         Filters
         {(filters.taxonKeys?.length ?? 0) > 0 || filters.taxonKey != null ? ' • active' : ''}
       </Button>
-      {/* On mobile: single hamburger menu; on desktop: individual buttons */}
-      <IconButton
-        size="small"
-        onClick={(e) => {
-          moreButtonAnchorRef.current = e.currentTarget;
-          setMoreMenuAnchor(e.currentTarget);
-        }}
-        aria-label="Menu"
-        aria-haspopup="true"
-        aria-expanded={Boolean(moreMenuAnchor)}
-        sx={{
-          display: { xs: 'inline-flex', md: 'none' },
-          color: 'rgba(255,255,255,0.9)',
-        }}
-      >
-        <MenuIcon fontSize="small" />
-      </IconButton>
+      {/* Mobile hamburger menu (button is in the search row above) */}
       <Menu
         anchorEl={moreMenuAnchor}
         open={Boolean(moreMenuAnchor)}
@@ -1105,7 +1138,6 @@ export default function MapTopBar({
         >
           <AboutMenuContent />
         </Menu>
-      </Box>
       </Box>
     </Box>
   );

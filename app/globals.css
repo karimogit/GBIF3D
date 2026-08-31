@@ -81,19 +81,23 @@ html, body {
   display: none !important;
 }
 
-/* Species info box: small gap below the top bar */
+/* Species info box: centered below the top bar (matches filter/dialog placement) */
 .cesium-infoBox {
-  margin-top: 40px;
+  margin-top: 56px;
+  left: 50% !important;
+  right: auto !important;
+  transform: translateX(-50%);
+  width: min(420px, calc(100vw - 16px));
+  max-width: min(420px, calc(100vw - 16px));
+  border-radius: 8px;
 }
 
-/* Mobile: Cesium defaults to 40% width (~150px on phones) — use nearly full width */
+/* Mobile: nearly full width, centered */
 @media (max-width: 600px) {
   .cesium-infoBox {
     width: calc(100vw - 16px);
     max-width: calc(100vw - 16px);
-    right: 8px;
-    border-right: 1px solid #444;
-    border-radius: 7px;
+    margin-top: max(56px, calc(48px + env(safe-area-inset-top)));
   }
 }
 .cesium-viewer-fullscreenContainer {

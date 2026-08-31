@@ -1,4 +1,4 @@
-import { boundsToWktPolygon, rectangleToBounds, geoJsonBboxToBounds } from '@/lib/geometry';
+import { boundsToWktPolygon, rectangleToBounds, geoJsonBboxToBounds, coordsToWktPolygon, pointInPolygon, boundsFromCoords } from '@/lib/geometry';
 
 describe('geometry', () => {
   describe('boundsToWktPolygon', () => {
@@ -52,6 +52,48 @@ describe('geometry', () => {
     it('throws when bbox has fewer than 4 elements', () => {
       expect(() => geoJsonBboxToBounds([])).toThrow('at least 4 elements');
       expect(() => geoJsonBboxToBounds([1, 2, 3])).toThrow('at least 4 elements');
+    });
+  });
+
+  describe('coordsToWktPolygon', () => {
+    it('produces closed counter-clockwise WKT from vertices', () => {
+      const wkt = coordsToWktPolygon([
+        [10, 58],
+        [20, 58],
+        [20, 62],
+        [10, 62],
+      ]);
+      expect(wkt).toMatch(/^POLYGON\(\(/);
+      expect(wkt).toContain('10 58');
+      expect(wkt).toContain('20 62');
+    });
+  });
+
+  describe('pointInPolygon', () => {
+    const square: [number, number][] = [
+      [0, 0],
+      [10, 0],
+      [10, 10],
+      [0, 10],
+    ];
+
+    it('returns true for points inside', () => {
+      expect(pointInPolygon(5, 5, square)).toBe(true);
+    });
+
+    it('returns false for points outside', () => {
+      expect(pointInPolygon(15, 5, square)).toBe(false);
+    });
+  });
+
+  describe('boundsFromCoords', () => {
+    it('computes bounding box from vertices', () => {
+      const b = boundsFromCoords([
+        [10, 58],
+        [20, 62],
+        [15, 60],
+      ]);
+      expect(b).toEqual({ west: 10, south: 58, east: 20, north: 62 });
     });
   });
 });
