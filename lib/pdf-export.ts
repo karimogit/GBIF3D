@@ -167,6 +167,8 @@ export interface PdfExportOptions {
   filters: OccurrenceFilters;
   /** Optional region name (e.g. "Europe", "Drawn region", place name) */
   regionName?: string;
+  /** Optional WKT polygon for the selected region boundary */
+  regionPolygonWkt?: string;
   /** Optional map snapshot data URL (JPEG) from globe canvas */
   mapImageDataUrl?: string;
   /** Optional repository URL for the generated-by footer link. */
@@ -226,6 +228,7 @@ export function generateOccurrencePdf({
   occurrences,
   filters,
   regionName,
+  regionPolygonWkt,
   mapImageDataUrl,
   repoUrl,
 }: PdfExportOptions): void {
@@ -242,6 +245,13 @@ export function generateOccurrencePdf({
   if (regionName?.trim()) {
     doc.text(`Region: ${regionName.trim()}`, MARGIN, y);
     y += 6;
+  }
+
+  if (regionPolygonWkt?.trim()) {
+    const wkt = `Region polygon (WKT): ${regionPolygonWkt.trim()}`;
+    const lines = doc.splitTextToSize(wkt, PAGE_WIDTH_MM - 2 * MARGIN);
+    doc.text(lines, MARGIN, y);
+    y += lines.length * 4 + 2;
   }
 
   const filterLines = filterSummary(filters);

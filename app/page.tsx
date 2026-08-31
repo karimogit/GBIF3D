@@ -16,8 +16,16 @@ import {
   type FavoriteRegion,
 } from '@/lib/favorites';
 import type { Bounds } from '@/lib/geometry';
+import { boundsToWktPolygon } from '@/lib/geometry';
 import { generateOccurrencePdf } from '@/lib/pdf-export';
 import { parseOccurrencesFile } from '@/lib/import-occurrences';
+import { getDisplayedOccurrences } from '@/lib/displayed-occurrences';
+import {
+  type ExportDataOptions,
+  occurrencesToGeoJSON,
+  occurrencesToCSV,
+  downloadBlob,
+} from '@/lib/export-data';
 import {
   getSavedOccurrences,
   addSavedOccurrence,
@@ -52,82 +60,6 @@ function loadViewFromStorage(): { sceneMode: '3D' | '2D'; baseMap: typeof VALID_
     // ignore
   }
   return null;
-}
-
-function occurrencesToGeoJSON(occurrences: GBIFOccurrence[]): string {
-  const features = occurrences
-    .filter(
-      (o) =>
-        o.decimalLatitude != null &&
-        o.decimalLongitude != null &&
-        Number.isFinite(o.decimalLatitude) &&
-        Number.isFinite(o.decimalLongitude)
-    )
-    .map((o) => ({
-      type: 'Feature' as const,
-      geometry: {
-        type: 'Point' as const,
-        coordinates: [o.decimalLongitude!, o.decimalLatitude!],
-      },
-      // Include the full GBIF occurrence record (plus any imported fields) as properties
-      properties: { ...o },
-    }));
-  const fc = { type: 'FeatureCollection' as const, features };
-  return JSON.stringify(fc, null, 2);
-}
-
-function occurrencesToCSV(occurrences: GBIFOccurrence[]): string {
-  // Build a header row that covers all keys present in the occurrence objects.
-  // Start with a preferred order for common GBIF fields, then append any extras.
-  const preferredOrder = [
-    'key',
-    'scientificName',
-    'vernacularName',
-    'decimalLatitude',
-    'decimalLongitude',
-    'year',
-    'month',
-    'day',
-    'eventDate',
-    'locality',
-    'countryCode',
-    'iucnRedListCategory',
-    'basisOfRecord',
-    'datasetKey',
-    'datasetName',
-    'occurrenceID',
-    'institutionCode',
-    'recordedBy',
-  ];
-
-  const allKeys = new Set<string>();
-  for (const o of occurrences) {
-    Object.keys(o as object).forEach((k) => allKeys.add(k));
-  }
-
-  const headers = [
-    ...preferredOrder.filter((k) => allKeys.has(k)),
-    ...Array.from(allKeys).filter((k) => !preferredOrder.includes(k)).sort(),
-  ];
-
-  const escape = (v: unknown): string => {
-    if (v == null) return '';
-    const s = String(v);
-    return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-  };
-  const rows = occurrences.map((o) =>
-    headers.map((h) => escape((o as unknown as Record<string, unknown>)[h])).join(',')
-  );
-  return [headers.join(','), ...rows].join('\n');
-}
-
-function downloadBlob(blob: Blob, filename: string) {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 100);
 }
 
 function getSelectedRegionBounds(
@@ -215,6 +147,27 @@ export default function Home() {
   );
   allOccurrencesRef.current = allOccurrences;
 
+  const selectedRegionBounds = getSelectedRegionBounds(
+    selectedRegionId,
+    favorites,
+    drawnBounds,
+    placeSearchResult
+  );
+
+  const displayedOccurrences = useMemo(
+    () =>
+      getDisplayedOccurrences(
+        occurrences,
+        importedOccurrences,
+        selectedRegionBounds,
+        selectedYear,
+        selectedMonth
+      ),
+    [occurrences, importedOccurrences, selectedRegionBounds, selectedYear, selectedMonth]
+  );
+
+  const regionDisplayName = getRegionDisplayName(selectedRegionId, favorites, placeSearchResult);
+
   const savedOccurrenceKeys = useMemo(
     () => new Set(savedOccurrences.map((o) => o.key)),
     [savedOccurrences]
@@ -264,50 +217,60 @@ export default function Home() {
     window.dispatchEvent(new CustomEvent('gbif-globe-export-image'));
   }, []);
 
-  const handleExportGeoJSON = useCallback(() => {
-    const geojson = occurrencesToGeoJSON(allOccurrences);
-    const blob = new Blob([geojson], { type: 'application/geo+json' });
-    downloadBlob(blob, 'gbif-occurrences.geojson');
-  }, [allOccurrences]);
-
-  const handleExportCSV = useCallback(() => {
-    const csv = occurrencesToCSV(allOccurrences);
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
-    downloadBlob(blob, 'gbif-occurrences.csv');
-  }, [allOccurrences]);
-
-  const handleExportPDF = useCallback(() => {
-    const regionName = getRegionDisplayName(selectedRegionId, favorites, placeSearchResult);
-    const opts = {
-      occurrences: allOccurrences,
-      filters,
-      regionName: regionName || undefined,
-      repoUrl: process.env.NEXT_PUBLIC_GITHUB_REPO_URL,
-    };
-    let generated = false;
-    const onCanvasReady = (e: Event) => {
-      if (generated) return;
-      generated = true;
-      window.removeEventListener('gbif-globe-export-pdf-canvas-ready', onCanvasReady);
-      const detail = (e as CustomEvent<{ imageDataUrl: string | null }>).detail;
-      generateOccurrencePdf({ ...opts, mapImageDataUrl: detail?.imageDataUrl ?? undefined });
-    };
-    window.addEventListener('gbif-globe-export-pdf-canvas-ready', onCanvasReady);
-    window.dispatchEvent(new CustomEvent('gbif-globe-export-pdf'));
-    setTimeout(() => {
-      if (generated) return;
-      generated = true;
-      window.removeEventListener('gbif-globe-export-pdf-canvas-ready', onCanvasReady);
-      generateOccurrencePdf(opts);
-    }, 2500);
-  }, [allOccurrences, filters, selectedRegionId, favorites, placeSearchResult]);
-
-  const selectedRegionBounds = getSelectedRegionBounds(
-    selectedRegionId,
-    favorites,
-    drawnBounds,
-    placeSearchResult
+  const handleExportGeoJSON = useCallback(
+    (opts: ExportDataOptions) => {
+      const data = opts.scope === 'visible' ? displayedOccurrences : allOccurrences;
+      const regionBounds = opts.includePolygon ? selectedRegionBounds : null;
+      const geojson = occurrencesToGeoJSON(data, regionBounds, regionDisplayName || undefined);
+      const blob = new Blob([geojson], { type: 'application/geo+json' });
+      downloadBlob(blob, 'gbif-occurrences.geojson');
+    },
+    [allOccurrences, displayedOccurrences, selectedRegionBounds, regionDisplayName]
   );
+
+  const handleExportCSV = useCallback(
+    (opts: ExportDataOptions) => {
+      const data = opts.scope === 'visible' ? displayedOccurrences : allOccurrences;
+      const regionBounds = opts.includePolygon ? selectedRegionBounds : null;
+      const csv = occurrencesToCSV(data, regionBounds, regionDisplayName || undefined);
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+      downloadBlob(blob, 'gbif-occurrences.csv');
+    },
+    [allOccurrences, displayedOccurrences, selectedRegionBounds, regionDisplayName]
+  );
+
+  const handleExportPDF = useCallback(
+    (opts: ExportDataOptions) => {
+      const data = opts.scope === 'visible' ? displayedOccurrences : allOccurrences;
+      const regionBounds = opts.includePolygon ? selectedRegionBounds : null;
+      const pdfOpts = {
+        occurrences: data,
+        filters,
+        regionName: regionDisplayName || undefined,
+        regionPolygonWkt: regionBounds ? boundsToWktPolygon(regionBounds) : undefined,
+        repoUrl: process.env.NEXT_PUBLIC_GITHUB_REPO_URL,
+      };
+      let generated = false;
+      const onCanvasReady = (e: Event) => {
+        if (generated) return;
+        generated = true;
+        window.removeEventListener('gbif-globe-export-pdf-canvas-ready', onCanvasReady);
+        const detail = (e as CustomEvent<{ imageDataUrl: string | null }>).detail;
+        generateOccurrencePdf({ ...pdfOpts, mapImageDataUrl: detail?.imageDataUrl ?? undefined });
+      };
+      window.addEventListener('gbif-globe-export-pdf-canvas-ready', onCanvasReady);
+      window.dispatchEvent(new CustomEvent('gbif-globe-export-pdf'));
+      setTimeout(() => {
+        if (generated) return;
+        generated = true;
+        window.removeEventListener('gbif-globe-export-pdf-canvas-ready', onCanvasReady);
+        generateOccurrencePdf(pdfOpts);
+      }, 2500);
+    },
+    [allOccurrences, displayedOccurrences, filters, selectedRegionBounds, regionDisplayName]
+  );
+
+
   // When a predefined country region is selected (2-letter id), pass ISO country code to restrict API
   const selectedCountryCode =
     selectedRegionId === REGION_ID_PLACE && placeSearchResult?.countryCode
@@ -437,6 +400,9 @@ export default function Home() {
           onExportCSV={handleExportCSV}
           onExportPDF={handleExportPDF}
           occurrenceCount={allOccurrences.length}
+          visibleOccurrenceCount={displayedOccurrences.length}
+          regionBounds={selectedRegionBounds}
+          regionName={regionDisplayName || undefined}
           onImportFile={handleImportFile}
           importedOccurrenceCount={importedOccurrences.length}
           importedOccurrences={importedOccurrences}

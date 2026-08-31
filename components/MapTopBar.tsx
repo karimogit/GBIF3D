@@ -47,6 +47,8 @@ import FilterForm from './FilterForm';
 import ImportSummaryContent from './map-top-bar/ImportSummaryContent';
 import HelpDialog from './map-top-bar/HelpDialog';
 import AboutMenuContent from './map-top-bar/AboutMenuContent';
+import ExportDataDialog from './map-top-bar/ExportDataDialog';
+import type { ExportDataFormat, ExportDataOptions } from '@/lib/export-data';
 import {
   type MapTopBarProps,
   type RegionOption,
@@ -76,6 +78,9 @@ export default function MapTopBar({
   onExportCSV,
   onExportPDF,
   occurrenceCount = 0,
+  visibleOccurrenceCount = 0,
+  regionBounds = null,
+  regionName,
   onImportFile,
   importedOccurrenceCount = 0,
   importedOccurrences = [],
@@ -109,6 +114,7 @@ export default function MapTopBar({
     setFilterAnchor(null);
   }, []);
   const [exportMenuAnchor, setExportMenuAnchor] = useState<null | HTMLElement>(null);
+  const [exportDialogFormat, setExportDialogFormat] = useState<ExportDataFormat | null>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [importSummaryAnchor, setImportSummaryAnchor] = useState<null | HTMLElement>(null);
@@ -120,6 +126,24 @@ export default function MapTopBar({
   const [moreMenuAnchor, setMoreMenuAnchor] = useState<null | HTMLElement>(null);
   const placeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const moreButtonAnchorRef = useRef<HTMLElement | null>(null);
+
+  const openExportDialog = useCallback((format: ExportDataFormat) => {
+    setExportMenuAnchor(null);
+    setMoreMenuAnchor(null);
+    setExportDialogFormat(format);
+  }, []);
+
+  const handleExportConfirm = useCallback(
+    (opts: ExportDataOptions) => {
+      if (exportDialogFormat === 'geojson') onExportGeoJSON?.(opts);
+      else if (exportDialogFormat === 'csv') onExportCSV?.(opts);
+      else if (exportDialogFormat === 'pdf') onExportPDF?.(opts);
+      setExportDialogFormat(null);
+    },
+    [exportDialogFormat, onExportGeoJSON, onExportCSV, onExportPDF]
+  );
+
+  const hasExportableData = occurrenceCount > 0 || visibleOccurrenceCount > 0;
 
   const fetchPlaces = useCallback(async (q: string) => {
     if (!q || q.length < 2) {
@@ -529,19 +553,19 @@ export default function MapTopBar({
               </MenuItem>
             ),
             onExportGeoJSON && (
-              <MenuItem key="more-export-geojson" onClick={() => { onExportGeoJSON?.(); setMoreMenuAnchor(null); }} disabled={occurrenceCount === 0}>
+              <MenuItem key="more-export-geojson" onClick={() => openExportDialog('geojson')} disabled={!hasExportableData}>
                 <ListItemIcon><MapOutlined fontSize="small" /></ListItemIcon>
                 <ListItemText primary="Export as GeoJSON" />
               </MenuItem>
             ),
             onExportCSV && (
-              <MenuItem key="more-export-csv" onClick={() => { onExportCSV?.(); setMoreMenuAnchor(null); }} disabled={occurrenceCount === 0}>
+              <MenuItem key="more-export-csv" onClick={() => openExportDialog('csv')} disabled={!hasExportableData}>
                 <ListItemIcon><TableChartOutlined fontSize="small" /></ListItemIcon>
                 <ListItemText primary="Export as CSV" />
               </MenuItem>
             ),
             onExportPDF && (
-              <MenuItem key="more-export-pdf" onClick={() => { onExportPDF?.(); setMoreMenuAnchor(null); }} disabled={occurrenceCount === 0}>
+              <MenuItem key="more-export-pdf" onClick={() => openExportDialog('pdf')} disabled={!hasExportableData}>
                 <ListItemIcon><PictureAsPdfOutlined fontSize="small" /></ListItemIcon>
                 <ListItemText primary="Export as PDF" />
               </MenuItem>
@@ -878,48 +902,39 @@ export default function MapTopBar({
               onExportGeoJSON && (
                 <MenuItem
                   key="export-geojson"
-                  onClick={() => {
-                    onExportGeoJSON();
-                    setExportMenuAnchor(null);
-                  }}
-                  disabled={occurrenceCount === 0}
+                  onClick={() => openExportDialog('geojson')}
+                  disabled={!hasExportableData}
                 >
                   <ListItemIcon>
                     <MapOutlined fontSize="small" />
                   </ListItemIcon>
-                  <ListItemText primary="Export as GeoJSON" secondary={occurrenceCount === 0 ? 'No data' : undefined} />
+                  <ListItemText primary="Export as GeoJSON" secondary={!hasExportableData ? 'No data' : undefined} />
                 </MenuItem>
               ),
               onExportCSV && (
                 <MenuItem
                   key="export-csv"
-                  onClick={() => {
-                    onExportCSV();
-                    setExportMenuAnchor(null);
-                  }}
-                  disabled={occurrenceCount === 0}
+                  onClick={() => openExportDialog('csv')}
+                  disabled={!hasExportableData}
                 >
                   <ListItemIcon>
                     <TableChartOutlined fontSize="small" />
                   </ListItemIcon>
-                  <ListItemText primary="Export as CSV" secondary={occurrenceCount === 0 ? 'No data' : undefined} />
+                  <ListItemText primary="Export as CSV" secondary={!hasExportableData ? 'No data' : undefined} />
                 </MenuItem>
               ),
               onExportPDF && (
                 <MenuItem
                   key="export-pdf"
-                  onClick={() => {
-                    onExportPDF();
-                    setExportMenuAnchor(null);
-                  }}
-                  disabled={occurrenceCount === 0}
+                  onClick={() => openExportDialog('pdf')}
+                  disabled={!hasExportableData}
                 >
                   <ListItemIcon>
                     <PictureAsPdfOutlined fontSize="small" />
                   </ListItemIcon>
                   <ListItemText
                     primary="Export as PDF"
-                    secondary={occurrenceCount === 0 ? 'No data' : 'Species summary & filter info'}
+                    secondary={!hasExportableData ? 'No data' : 'Species summary & filter info'}
                   />
                 </MenuItem>
               ),
@@ -1094,6 +1109,16 @@ export default function MapTopBar({
       </Box>
 
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
+        <ExportDataDialog
+          open={exportDialogFormat != null}
+          format={exportDialogFormat}
+          visibleCount={visibleOccurrenceCount}
+          allCount={occurrenceCount}
+          hasRegion={regionBounds != null}
+          regionName={regionName}
+          onClose={() => setExportDialogFormat(null)}
+          onConfirm={handleExportConfirm}
+        />
         <HelpDialog open={helpOpen} onClose={() => setHelpOpen(false)} />
         <Menu
           anchorEl={aboutMenuAnchor}

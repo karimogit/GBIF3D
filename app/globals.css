@@ -86,14 +86,23 @@ html, body {
   margin-top: 40px;
 }
 
-/* Mobile: Cesium defaults to 40% width (~150px on phones) — use nearly full width */
-@media (max-width: 600px) {
+/* Mobile/tablet: Cesium defaults to 40% width (~150px on phones) — use nearly full width */
+@media (max-width: 900px) {
   .cesium-infoBox {
-    width: calc(100vw - 16px);
-    max-width: calc(100vw - 16px);
-    right: 8px;
+    width: calc(100vw - 16px) !important;
+    max-width: calc(100vw - 16px) !important;
+    left: 8px !important;
+    right: 8px !important;
     border-right: 1px solid #444;
     border-radius: 7px;
+  }
+  .cesium-infoBox-iframe {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+  .cesium-infoBox-description {
+    width: 100% !important;
+    max-width: 100% !important;
   }
 }
 .cesium-viewer-fullscreenContainer {
