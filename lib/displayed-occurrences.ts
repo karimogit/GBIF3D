@@ -1,5 +1,5 @@
 import type { GBIFOccurrence } from '@/types/gbif';
-import { pointInBounds, type Bounds } from './geometry';
+import { pointInBounds, pointInPolygon, type Bounds, type LonLat } from './geometry';
 import { occurrenceYear, occurrenceMonth } from './occurrence-date';
 
 /** Occurrences shown on the map (region + timeline filters applied). */
@@ -8,7 +8,8 @@ export function getDisplayedOccurrences(
   importedOccurrences: GBIFOccurrence[],
   selectedRegionBounds: Bounds | null,
   timeFilterYear: number | null,
-  timeFilterMonth: number | null
+  timeFilterMonth: number | null,
+  drawnPolygon?: LonLat[] | null
 ): GBIFOccurrence[] {
   const apiInRegion =
     selectedRegionBounds != null
@@ -16,6 +17,9 @@ export function getDisplayedOccurrences(
           const lon = o.decimalLongitude;
           const lat = o.decimalLatitude;
           if (lon == null || lat == null) return false;
+          if (drawnPolygon && drawnPolygon.length >= 3) {
+            return pointInPolygon(lon, lat, drawnPolygon);
+          }
           return pointInBounds(lon, lat, selectedRegionBounds);
         })
       : occurrences;

@@ -4,8 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Tooltip from '@mui/material/Tooltip';
 import GlobeScene from './GlobeScene';
 import { searchOccurrencesChunked, OCCURRENCE_MAX_TOTAL } from '@/lib/gbif';
-import { boundsToWktPolygon } from '@/lib/geometry';
-import type { Bounds } from '@/lib/geometry';
+import { boundsToWktPolygon, coordsToWktPolygon } from '@/lib/geometry';
+import type { Bounds, DrawnRegion, LonLat } from '@/lib/geometry';
 import type { GBIFOccurrence, OccurrenceFilters } from '@/types/gbif';
 import { GBIFApiError } from '@/lib/gbif';
 import { getDisplayedOccurrences } from '@/lib/displayed-occurrences';
@@ -32,11 +32,13 @@ interface GlobeViewerProps {
   flyToBounds?: Bounds | null;
   /** Called when the camera view bounds change (e.g. for "Save current view") */
   onViewBoundsChange?: (bounds: Bounds) => void;
-  /** When true, two clicks on the globe define a region and call onDrawnBounds */
+  /** When true, click on the globe to draw a polygon region */
   drawRegionMode?: boolean;
-  onDrawnBounds?: (bounds: Bounds) => void;
-  /** Drawn region to display on the globe */
+  onDrawnRegion?: (region: DrawnRegion) => void;
+  /** Drawn region bounding box to display on the globe */
   drawnBounds?: Bounds | null;
+  /** Polygon vertices when the user drew a custom shape */
+  drawnPolygon?: LonLat[] | null;
   /** Scene mode: 3D globe or 2D map (from top bar View menu) */
   sceneMode?: '3D' | '2D';
   /** Base map / imagery (from View menu) */
@@ -69,8 +71,9 @@ export default function GlobeViewer({
   flyToBounds: flyToBoundsProp = undefined,
   onViewBoundsChange,
   drawRegionMode = false,
-  onDrawnBounds,
+  onDrawnRegion,
   drawnBounds = null,
+  drawnPolygon = null,
   sceneMode = '3D',
   baseMap = 'bing',
   environmentalLayer = 'none',
@@ -108,7 +111,10 @@ export default function GlobeViewer({
       setLoading(true);
       setError(null);
       try {
-        const geometry = boundsToWktPolygon(bounds);
+        const geometry =
+          drawnPolygon && drawnPolygon.length >= 3
+            ? coordsToWktPolygon(drawnPolygon)
+            : boundsToWktPolygon(bounds);
         const country = selectedCountryCode?.trim().toUpperCase() ?? filters.country;
         const res = await searchOccurrencesChunked({
           ...filters,
@@ -152,6 +158,7 @@ export default function GlobeViewer({
       filters.institutionCode,
       filters.limit,
       filters.offset,
+      drawnPolygon,
     ]
   );
 
@@ -237,9 +244,10 @@ export default function GlobeViewer({
         importedOccurrences ?? [],
         selectedRegionBounds ?? null,
         timeFilterYear ?? null,
-        timeFilterMonth ?? null
+        timeFilterMonth ?? null,
+        drawnPolygon
       ),
-    [occurrences, importedOccurrences, selectedRegionBounds, timeFilterYear, timeFilterMonth]
+    [occurrences, importedOccurrences, selectedRegionBounds, drawnPolygon, timeFilterYear, timeFilterMonth]
   );
 
   return (
@@ -260,8 +268,9 @@ export default function GlobeViewer({
         onBoundsChange={handleBoundsChange}
         flyToBounds={flyToBoundsProp !== undefined ? (flyToBoundsProp ?? undefined) : (selectedRegionBounds ?? undefined)}
         drawRegionMode={drawRegionMode}
-        onDrawnBounds={onDrawnBounds}
+        onDrawnRegion={onDrawnRegion}
         drawnBounds={drawnBounds}
+        drawnPolygon={drawnPolygon}
         sceneMode={sceneMode}
         baseMap={baseMap === 'bing' ? 'bing-aerial' : baseMap}
         environmentalLayer={environmentalLayer}
@@ -345,7 +354,7 @@ export default function GlobeViewer({
             pointerEvents: 'none',
           }}
         >
-          Click two points on the globe to draw a region
+          Click to add polygon points. Double-click or tap Done to finish.
         </div>
       )}
       {loading && (

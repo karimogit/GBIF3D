@@ -1,5 +1,5 @@
 import type { GBIFOccurrence } from '@/types/gbif';
-import { boundsToWktPolygon, getBboxFromCoords, padBounds, type Bounds } from './geometry';
+import { boundsToWktPolygon, getBboxFromCoords, padBounds, type Bounds, type LonLat } from './geometry';
 
 /** Bounding box that covers occurrence points, with padding for map framing. */
 export function boundsFromOccurrences(occurrences: GBIFOccurrence[]): Bounds | null {
@@ -53,10 +53,24 @@ function boundsToGeoJsonPolygon(bounds: Bounds): GeoJsonPolygonFeature['geometry
   };
 }
 
+function polygonToGeoJsonPolygon(polygon: LonLat[]): GeoJsonPolygonFeature['geometry'] {
+  const ring = [...polygon];
+  const first = ring[0];
+  const last = ring[ring.length - 1];
+  if (first[0] !== last[0] || first[1] !== last[1]) {
+    ring.push(first);
+  }
+  return {
+    type: 'Polygon',
+    coordinates: [ring],
+  };
+}
+
 export function occurrencesToGeoJSON(
   occurrences: GBIFOccurrence[],
   regionBounds?: Bounds | null,
-  regionName?: string
+  regionName?: string,
+  regionPolygon?: LonLat[] | null
 ): string {
   const features: (GeoJsonPointFeature | GeoJsonPolygonFeature)[] = occurrences
     .filter(
@@ -78,7 +92,10 @@ export function occurrencesToGeoJSON(
   if (regionBounds) {
     features.push({
       type: 'Feature',
-      geometry: boundsToGeoJsonPolygon(regionBounds),
+      geometry:
+        regionPolygon && regionPolygon.length >= 3
+          ? polygonToGeoJsonPolygon(regionPolygon)
+          : boundsToGeoJsonPolygon(regionBounds),
       properties: {
         type: 'region',
         name: regionName?.trim() || 'Region boundary',
@@ -93,7 +110,8 @@ export function occurrencesToGeoJSON(
 export function occurrencesToCSV(
   occurrences: GBIFOccurrence[],
   regionBounds?: Bounds | null,
-  regionName?: string
+  regionName?: string,
+  regionPolygonWkt?: string
 ): string {
   const preferredOrder = [
     'key',
@@ -138,7 +156,9 @@ export function occurrencesToCSV(
   const meta: string[] = [];
   if (regionBounds) {
     if (regionName?.trim()) meta.push(`# Region: ${regionName.trim()}`);
-    meta.push(`# Region polygon (WKT): ${boundsToWktPolygon(regionBounds)}`);
+    meta.push(
+      `# Region polygon (WKT): ${regionPolygonWkt ?? boundsToWktPolygon(regionBounds)}`
+    );
   }
 
   const body = [headers.join(','), ...rows].join('\n');
