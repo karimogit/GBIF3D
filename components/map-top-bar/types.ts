@@ -1,6 +1,7 @@
 import type { FavoriteRegion } from '@/lib/favorites';
 import type { Bounds } from '@/lib/geometry';
 import type { OccurrenceFilters, GBIFOccurrence } from '@/types/gbif';
+import type { ExportDataOptions } from '@/lib/export-data';
 
 export interface RegionOption {
   id: string;
@@ -28,10 +29,13 @@ export interface MapTopBarProps {
   onClearDrawnRegion?: () => void;
   onRemoveFavorite?: (id: string) => void;
   onExportImage?: () => void;
-  onExportGeoJSON?: () => void;
-  onExportCSV?: () => void;
-  onExportPDF?: () => void;
+  onExportGeoJSON?: (opts: ExportDataOptions) => void;
+  onExportCSV?: (opts: ExportDataOptions) => void;
+  onExportPDF?: (opts: ExportDataOptions) => void;
   occurrenceCount?: number;
+  visibleOccurrenceCount?: number;
+  regionBounds?: Bounds | null;
+  regionName?: string;
   onImportFile?: (file: File) => void;
   importedOccurrenceCount?: number;
   importedOccurrences?: GBIFOccurrence[];

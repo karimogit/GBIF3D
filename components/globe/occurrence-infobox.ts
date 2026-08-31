@@ -128,7 +128,7 @@ ${validUrls
   const rank = occ.taxonRank?.trim() || '';
 
   return `
-    <div style="font-family: system-ui; width: 100%; max-width: 400px; min-width: 0; font-size: 13px; line-height: 1.45;">
+    <div style="font-family: system-ui; width: 100%; max-width: 100%; min-width: 0; font-size: 13px; line-height: 1.45;">
       ${photoBox}
       <strong style="display: block; word-break: break-word;">${escapeHtml(name)}</strong>
       ${rank ? ` <span style="color: #666; font-weight: normal;">(${escapeHtml(rank)})</span>` : ''}<br/>

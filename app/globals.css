@@ -92,12 +92,20 @@ html, body {
   border-radius: 8px;
 }
 
-/* Mobile: nearly full width, centered */
-@media (max-width: 600px) {
+/* Mobile/tablet: nearly full width, centered below top bar */
+@media (max-width: 900px) {
   .cesium-infoBox {
     width: calc(100vw - 16px);
     max-width: calc(100vw - 16px);
     margin-top: max(56px, calc(48px + env(safe-area-inset-top)));
+  }
+  .cesium-infoBox-iframe {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+  .cesium-infoBox-description {
+    width: 100% !important;
+    max-width: 100% !important;
   }
 }
 .cesium-viewer-fullscreenContainer {

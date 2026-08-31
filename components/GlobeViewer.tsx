@@ -4,11 +4,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Tooltip from '@mui/material/Tooltip';
 import GlobeScene from './GlobeScene';
 import { searchOccurrencesChunked, OCCURRENCE_MAX_TOTAL } from '@/lib/gbif';
-import { boundsToWktPolygon, coordsToWktPolygon, pointInBounds, pointInPolygon } from '@/lib/geometry';
+import { boundsToWktPolygon, coordsToWktPolygon } from '@/lib/geometry';
 import type { Bounds, DrawnRegion, LonLat } from '@/lib/geometry';
 import type { GBIFOccurrence, OccurrenceFilters } from '@/types/gbif';
 import { GBIFApiError } from '@/lib/gbif';
-import { occurrenceYear, occurrenceMonth } from '@/lib/occurrence-date';
+import { getDisplayedOccurrences } from '@/lib/displayed-occurrences';
 
 const DEFAULT_BOUNDS: Bounds = {
   west: -180,
@@ -237,33 +237,18 @@ export default function GlobeViewer({
     };
   }, [regionFetchKey, filterFetchKey, fetchOccurrences, hasTaxonFilter, selectedRegionBounds]);
 
-  const displayedOccurrences = useMemo(() => {
-    // Only filter API occurrences by region; show all imported points regardless of selected region
-    const apiInRegion =
-      selectedRegionBounds != null
-        ? occurrences.filter((o) => {
-            const lon = o.decimalLongitude;
-            const lat = o.decimalLatitude;
-            if (lon == null || lat == null) return false;
-            if (drawnPolygon && drawnPolygon.length >= 3) {
-              return pointInPolygon(lon, lat, drawnPolygon);
-            }
-            return pointInBounds(lon, lat, selectedRegionBounds!);
-          })
-        : occurrences;
-    let combined = [...apiInRegion, ...(importedOccurrences ?? [])];
-    if (timeFilterYear == null) return combined;
-    return combined.filter((o) => {
-      const year = occurrenceYear(o);
-      if (year !== timeFilterYear) return false;
-      // When no month is selected, show ALL occurrences for the year (including those without month data)
-      if (timeFilterMonth == null) return true;
-      // When a month is selected, only show occurrences that match that month
-      // Occurrences without month data are excluded when filtering by month
-      const month = occurrenceMonth(o);
-      return month === timeFilterMonth;
-    });
-  }, [occurrences, importedOccurrences, selectedRegionBounds, drawnPolygon, timeFilterYear, timeFilterMonth]);
+  const displayedOccurrences = useMemo(
+    () =>
+      getDisplayedOccurrences(
+        occurrences,
+        importedOccurrences ?? [],
+        selectedRegionBounds ?? null,
+        timeFilterYear ?? null,
+        timeFilterMonth ?? null,
+        drawnPolygon
+      ),
+    [occurrences, importedOccurrences, selectedRegionBounds, drawnPolygon, timeFilterYear, timeFilterMonth]
+  );
 
   return (
     <div

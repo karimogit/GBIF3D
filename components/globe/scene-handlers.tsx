@@ -27,6 +27,12 @@ import {
 import type { DrawnRegion, LonLat } from '@/lib/geometry';
 import { boundsFromCoords } from '@/lib/geometry';
 import {
+  restoreCameraState,
+  saveCameraState,
+  setTopDownExportView,
+  waitForSceneRender,
+} from './export-camera';
+import {
   type BaseMapType,
   type SceneModeType,
   createImageryProvider,
@@ -169,33 +175,51 @@ export function ExportImageHandler() {
   return null;
 }
 
-/** Listens for export-pdf event; captures globe canvas and dispatches canvas-ready with data URL for PDF. */
+/** Listens for export-pdf event; frames top-down, captures globe canvas, restores camera. */
 export function ExportPdfCanvasHandler() {
   const cesium = useCesium();
   useEffect(() => {
     const viewer = cesium?.viewer;
     const handler = (e: Event) => {
+      const detail = (e as CustomEvent<ExportRegionDetail>).detail ?? { scope: 'full' as const };
+      const frameBounds = detail.frameBounds ?? null;
+      const dispatchReady = (imageDataUrl: string | null) => {
+        window.dispatchEvent(
+          new CustomEvent(EXPORT_PDF_CANVAS_READY_EVENT, { detail: { imageDataUrl } })
+        );
+      };
       try {
         const canvas = viewer?.scene?.canvas;
-        if (!canvas) {
-          window.dispatchEvent(
-            new CustomEvent(EXPORT_PDF_CANVAS_READY_EVENT, { detail: { imageDataUrl: null } })
-          );
+        if (!viewer || !canvas) {
+          dispatchReady(null);
           return;
         }
-        const detail = (e as CustomEvent<ExportRegionDetail>).detail;
-        viewer.scene.requestRender();
-        requestAnimationFrame(() => {
-          const prepared = prepareCanvasForExport(canvas as HTMLCanvasElement, viewer, detail);
-          const dataUrl = captureCanvasAsDataUrl(prepared);
-          window.dispatchEvent(
-            new CustomEvent(EXPORT_PDF_CANVAS_READY_EVENT, { detail: { imageDataUrl: dataUrl } })
-          );
-        });
+        const savedCamera = saveCameraState(viewer);
+        const capture = () => {
+          try {
+            const prepared = prepareCanvasForExport(canvas as HTMLCanvasElement, viewer, detail);
+            const dataUrl = captureCanvasAsDataUrl(prepared);
+            dispatchReady(dataUrl);
+          } catch {
+            dispatchReady(null);
+          } finally {
+            try {
+              restoreCameraState(viewer, savedCamera);
+              viewer.scene.requestRender();
+            } catch {
+              // viewer may be destroyed
+            }
+          }
+        };
+        if (frameBounds) {
+          setTopDownExportView(viewer, frameBounds);
+          void waitForSceneRender(viewer).then(capture);
+        } else {
+          viewer.scene.requestRender();
+          void waitForSceneRender(viewer).then(capture);
+        }
       } catch {
-        window.dispatchEvent(
-          new CustomEvent(EXPORT_PDF_CANVAS_READY_EVENT, { detail: { imageDataUrl: null } })
-        );
+        dispatchReady(null);
       }
     };
     window.addEventListener(EXPORT_PDF_EVENT, handler);

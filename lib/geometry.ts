@@ -95,6 +95,20 @@ export function getBboxFromCoords(
   ];
 }
 
+/** Add padding around bounds for nicer map framing (fraction of span, with minimum degrees). */
+export function padBounds(bounds: Bounds, fraction = 0.1, minPad = 0.01): Bounds {
+  const lonSpan = bounds.east - bounds.west;
+  const latSpan = bounds.north - bounds.south;
+  const padLon = Math.max(lonSpan * fraction, minPad);
+  const padLat = Math.max(latSpan * fraction, minPad);
+  return {
+    west: bounds.west - padLon,
+    south: bounds.south - padLat,
+    east: bounds.east + padLon,
+    north: bounds.north + padLat,
+  };
+}
+
 /** Bounding box from polygon or polyline vertices. */
 export function boundsFromCoords(coords: LonLat[]): Bounds {
   const [west, south, east, north] = getBboxFromCoords(coords);

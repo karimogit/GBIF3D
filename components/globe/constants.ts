@@ -12,6 +12,8 @@ export interface ExportRegionDetail {
   scope: ExportScope;
   bounds?: { west: number; south: number; east: number; north: number };
   polygon?: [number, number][];
+  /** When set, reframes the camera top-down over these bounds before capture. */
+  frameBounds?: { west: number; south: number; east: number; north: number };
 }
 export const LIGHTBOX_EVENT = 'gbif-globe-lightbox';
 
