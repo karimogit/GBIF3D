@@ -1,5 +1,20 @@
 import type { GBIFOccurrence } from '@/types/gbif';
-import { boundsToWktPolygon, type Bounds } from './geometry';
+import { boundsToWktPolygon, getBboxFromCoords, padBounds, type Bounds } from './geometry';
+
+/** Bounding box that covers occurrence points, with padding for map framing. */
+export function boundsFromOccurrences(occurrences: GBIFOccurrence[]): Bounds | null {
+  const coords: [number, number][] = [];
+  for (const o of occurrences) {
+    const lon = o.decimalLongitude;
+    const lat = o.decimalLatitude;
+    if (lon == null || lat == null || !Number.isFinite(lon) || !Number.isFinite(lat)) continue;
+    coords.push([lon, lat]);
+  }
+  if (coords.length === 0) return null;
+  const [west, south, east, north] = getBboxFromCoords(coords);
+  return padBounds({ west, south, east, north });
+}
+
 
 export type ExportScope = 'visible' | 'all';
 

@@ -16,12 +16,13 @@ import {
   type FavoriteRegion,
 } from '@/lib/favorites';
 import type { Bounds } from '@/lib/geometry';
-import { boundsToWktPolygon } from '@/lib/geometry';
+import { boundsToWktPolygon, padBounds } from '@/lib/geometry';
 import { generateOccurrencePdf } from '@/lib/pdf-export';
 import { parseOccurrencesFile } from '@/lib/import-occurrences';
 import { getDisplayedOccurrences } from '@/lib/displayed-occurrences';
 import {
   type ExportDataOptions,
+  boundsFromOccurrences,
   occurrencesToGeoJSON,
   occurrencesToCSV,
   downloadBlob,
@@ -243,6 +244,10 @@ export default function Home() {
     (opts: ExportDataOptions) => {
       const data = opts.scope === 'visible' ? displayedOccurrences : allOccurrences;
       const regionBounds = opts.includePolygon ? selectedRegionBounds : null;
+      const mapBounds =
+        selectedRegionBounds != null
+          ? padBounds(selectedRegionBounds)
+          : boundsFromOccurrences(data);
       const pdfOpts = {
         occurrences: data,
         filters,
@@ -259,13 +264,15 @@ export default function Home() {
         generateOccurrencePdf({ ...pdfOpts, mapImageDataUrl: detail?.imageDataUrl ?? undefined });
       };
       window.addEventListener('gbif-globe-export-pdf-canvas-ready', onCanvasReady);
-      window.dispatchEvent(new CustomEvent('gbif-globe-export-pdf'));
+      window.dispatchEvent(
+        new CustomEvent('gbif-globe-export-pdf', { detail: { bounds: mapBounds } })
+      );
       setTimeout(() => {
         if (generated) return;
         generated = true;
         window.removeEventListener('gbif-globe-export-pdf-canvas-ready', onCanvasReady);
         generateOccurrencePdf(pdfOpts);
-      }, 2500);
+      }, 4000);
     },
     [allOccurrences, displayedOccurrences, filters, selectedRegionBounds, regionDisplayName]
   );
