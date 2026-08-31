@@ -1,6 +1,12 @@
 'use client';
 
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
+import DialogActions from '@mui/material/DialogActions';
+import Button from '@mui/material/Button';
+import Typography from '@mui/material/Typography';
 import GlobeViewer from '@/components/GlobeViewerDynamic';
 import MapTopBar from '@/components/MapTopBar';
 import OccurrenceTimeline from '@/components/OccurrenceTimeline';
@@ -15,7 +21,7 @@ import {
   removeFavorite,
   type FavoriteRegion,
 } from '@/lib/favorites';
-import type { Bounds } from '@/lib/geometry';
+import type { Bounds, DrawnRegion, LonLat } from '@/lib/geometry';
 import { generateOccurrencePdf } from '@/lib/pdf-export';
 import { parseOccurrencesFile } from '@/lib/import-occurrences';
 import {
@@ -24,6 +30,7 @@ import {
   removeSavedOccurrence,
 } from '@/lib/saved-occurrences';
 import { SAVE_OCCURRENCE_EVENT } from '@/components/GlobeScene';
+import type { ExportRegionDetail } from '@/components/globe/constants';
 
 const REGION_ID_DRAWN = 'drawn';
 const REGION_ID_PLACE = 'place';
@@ -168,6 +175,8 @@ export default function Home() {
   const [selectedRegionId, setSelectedRegionId] = useState('');
   const [favorites, setFavorites] = useState<FavoriteRegion[]>([]);
   const [drawnBounds, setDrawnBounds] = useState<Bounds | null>(null);
+  const [drawnPolygon, setDrawnPolygon] = useState<LonLat[] | null>(null);
+  const [exportScopePrompt, setExportScopePrompt] = useState<'image' | 'pdf' | null>(null);
   const [placeSearchResult, setPlaceSearchResult] = useState<{
     name: string;
     bounds: Bounds;
@@ -260,9 +269,37 @@ export default function Home() {
     return () => window.removeEventListener(SAVE_OCCURRENCE_EVENT, handler);
   }, []);
 
+  const hasDrawnRegion = drawnBounds != null;
+
+  const buildExportDetail = useCallback(
+    (scope: 'full' | 'region'): ExportRegionDetail => ({
+      scope,
+      ...(scope === 'region' && drawnBounds
+        ? {
+            bounds: drawnBounds,
+            ...(drawnPolygon ? { polygon: drawnPolygon } : {}),
+          }
+        : {}),
+    }),
+    [drawnBounds, drawnPolygon]
+  );
+
+  const runImageExport = useCallback(
+    (scope: 'full' | 'region') => {
+      window.dispatchEvent(
+        new CustomEvent('gbif-globe-export-image', { detail: buildExportDetail(scope) })
+      );
+    },
+    [buildExportDetail]
+  );
+
   const handleExportImage = useCallback(() => {
-    window.dispatchEvent(new CustomEvent('gbif-globe-export-image'));
-  }, []);
+    if (hasDrawnRegion) {
+      setExportScopePrompt('image');
+      return;
+    }
+    runImageExport('full');
+  }, [hasDrawnRegion, runImageExport]);
 
   const handleExportGeoJSON = useCallback(() => {
     const geojson = occurrencesToGeoJSON(allOccurrences);
@@ -276,31 +313,54 @@ export default function Home() {
     downloadBlob(blob, 'gbif-occurrences.csv');
   }, [allOccurrences]);
 
+  const runPdfExport = useCallback(
+    (scope: 'full' | 'region') => {
+      const regionName = getRegionDisplayName(selectedRegionId, favorites, placeSearchResult);
+      const opts = {
+        occurrences: allOccurrences,
+        filters,
+        regionName: regionName || undefined,
+        repoUrl: process.env.NEXT_PUBLIC_GITHUB_REPO_URL,
+      };
+      let generated = false;
+      const onCanvasReady = (e: Event) => {
+        if (generated) return;
+        generated = true;
+        window.removeEventListener('gbif-globe-export-pdf-canvas-ready', onCanvasReady);
+        const detail = (e as CustomEvent<{ imageDataUrl: string | null }>).detail;
+        generateOccurrencePdf({ ...opts, mapImageDataUrl: detail?.imageDataUrl ?? undefined });
+      };
+      window.addEventListener('gbif-globe-export-pdf-canvas-ready', onCanvasReady);
+      window.dispatchEvent(
+        new CustomEvent('gbif-globe-export-pdf', { detail: buildExportDetail(scope) })
+      );
+      setTimeout(() => {
+        if (generated) return;
+        generated = true;
+        window.removeEventListener('gbif-globe-export-pdf-canvas-ready', onCanvasReady);
+        generateOccurrencePdf(opts);
+      }, 2500);
+    },
+    [allOccurrences, filters, selectedRegionId, favorites, placeSearchResult, buildExportDetail]
+  );
+
   const handleExportPDF = useCallback(() => {
-    const regionName = getRegionDisplayName(selectedRegionId, favorites, placeSearchResult);
-    const opts = {
-      occurrences: allOccurrences,
-      filters,
-      regionName: regionName || undefined,
-      repoUrl: process.env.NEXT_PUBLIC_GITHUB_REPO_URL,
-    };
-    let generated = false;
-    const onCanvasReady = (e: Event) => {
-      if (generated) return;
-      generated = true;
-      window.removeEventListener('gbif-globe-export-pdf-canvas-ready', onCanvasReady);
-      const detail = (e as CustomEvent<{ imageDataUrl: string | null }>).detail;
-      generateOccurrencePdf({ ...opts, mapImageDataUrl: detail?.imageDataUrl ?? undefined });
-    };
-    window.addEventListener('gbif-globe-export-pdf-canvas-ready', onCanvasReady);
-    window.dispatchEvent(new CustomEvent('gbif-globe-export-pdf'));
-    setTimeout(() => {
-      if (generated) return;
-      generated = true;
-      window.removeEventListener('gbif-globe-export-pdf-canvas-ready', onCanvasReady);
-      generateOccurrencePdf(opts);
-    }, 2500);
-  }, [allOccurrences, filters, selectedRegionId, favorites, placeSearchResult]);
+    if (hasDrawnRegion) {
+      setExportScopePrompt('pdf');
+      return;
+    }
+    runPdfExport('full');
+  }, [hasDrawnRegion, runPdfExport]);
+
+  const handleExportScopeChoice = useCallback(
+    (scope: 'full' | 'region') => {
+      const kind = exportScopePrompt;
+      setExportScopePrompt(null);
+      if (kind === 'image') runImageExport(scope);
+      else if (kind === 'pdf') runPdfExport(scope);
+    },
+    [exportScopePrompt, runImageExport, runPdfExport]
+  );
 
   const selectedRegionBounds = getSelectedRegionBounds(
     selectedRegionId,
@@ -324,6 +384,7 @@ export default function Home() {
     setFavorites(getFavorites());
     setSelectedRegionId(added.id);
     setDrawnBounds(null);
+    setDrawnPolygon(null);
   }, [drawnBounds]);
 
   const handleRemoveFavorite = useCallback((id: string) => {
@@ -332,10 +393,15 @@ export default function Home() {
     if (selectedRegionId === id) setSelectedRegionId('');
   }, [selectedRegionId]);
 
-  const handleDrawnBounds = useCallback((b: Bounds) => {
-    setDrawnBounds(b);
+  const handleDrawnRegion = useCallback((region: DrawnRegion) => {
+    setDrawnBounds(region.bounds);
+    setDrawnPolygon(region.polygon ?? null);
     setSelectedRegionId(REGION_ID_DRAWN);
     setDrawRegionMode(false);
+  }, []);
+
+  const handleFinishDrawRegion = useCallback(() => {
+    window.dispatchEvent(new CustomEvent('gbif-globe-finish-draw'));
   }, []);
 
   const handleCancelDrawRegion = useCallback(() => {
@@ -344,6 +410,7 @@ export default function Home() {
 
   const handleClearDrawnRegion = useCallback(() => {
     setDrawnBounds(null);
+    setDrawnPolygon(null);
     setSelectedRegionId('');
   }, []);
 
@@ -381,6 +448,29 @@ export default function Home() {
       }}
     >
       <Lightbox />
+      <Dialog
+        open={exportScopePrompt != null}
+        onClose={() => setExportScopePrompt(null)}
+        maxWidth="xs"
+        fullWidth
+        PaperProps={{ sx: { borderRadius: 2, m: 1, maxWidth: 'min(420px, calc(100vw - 16px))' } }}
+      >
+        <DialogTitle>Export map</DialogTitle>
+        <DialogContent dividers>
+          <Typography variant="body2" color="text.secondary">
+            You have a drawn region on the map. Export the full screen or only the drawn polygon area?
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ flexDirection: 'column', alignItems: 'stretch', gap: 1, px: 2, pb: 2 }}>
+          <Button variant="contained" onClick={() => handleExportScopeChoice('region')}>
+            Drawn region only
+          </Button>
+          <Button variant="outlined" onClick={() => handleExportScopeChoice('full')}>
+            Full screen
+          </Button>
+          <Button onClick={() => setExportScopePrompt(null)}>Cancel</Button>
+        </DialogActions>
+      </Dialog>
       <div style={{ position: 'absolute', inset: 0 }}>
         <ErrorBoundary>
           <GlobeViewer
@@ -390,8 +480,9 @@ export default function Home() {
             selectedCountryCode={selectedCountryCode}
             flyToBounds={selectedRegionBounds ?? undefined}
             drawRegionMode={drawRegionMode}
-            onDrawnBounds={handleDrawnBounds}
+            onDrawnRegion={handleDrawnRegion}
             drawnBounds={drawnBounds}
+            drawnPolygon={selectedRegionId === REGION_ID_DRAWN ? drawnPolygon : null}
             sceneMode={sceneMode}
             baseMap={baseMap}
             photorealistic3D={photorealistic3D}
@@ -429,6 +520,7 @@ export default function Home() {
           onStartDrawRegion={() => setDrawRegionMode(true)}
           drawRegionMode={drawRegionMode}
           onCancelDrawRegion={handleCancelDrawRegion}
+          onFinishDrawRegion={handleFinishDrawRegion}
           onSaveDrawnRegion={handleSaveDrawnRegion}
           onClearDrawnRegion={handleClearDrawnRegion}
           onRemoveFavorite={handleRemoveFavorite}

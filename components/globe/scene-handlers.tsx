@@ -11,16 +11,21 @@ import {
   EXPORT_IMAGE_EVENT,
   EXPORT_PDF_CANVAS_READY_EVENT,
   EXPORT_PDF_EVENT,
+  FINISH_DRAW_EVENT,
   LIGHTBOX_EVENT,
   LIGHTBOX_PHOTO_CLASS,
   SAVE_BUTTON_CLASS,
   SAVE_OCCURRENCE_EVENT,
   SELECTED_INFO_ENTITY_ID,
+  type ExportRegionDetail,
 } from './constants';
 import {
   captureCanvasAsDataUrl,
   downloadCanvasAsPng,
+  prepareCanvasForExport,
 } from './export-utils';
+import type { DrawnRegion, LonLat } from '@/lib/geometry';
+import { boundsFromCoords } from '@/lib/geometry';
 import {
   type BaseMapType,
   type SceneModeType,
@@ -144,13 +149,15 @@ export function ExportImageHandler() {
       return;
     }
     const viewer = v;
-    const handler = () => {
+    const handler = (e: Event) => {
       try {
         const canvas = viewer.scene?.canvas;
         if (!canvas) return;
+        const detail = (e as CustomEvent<ExportRegionDetail>).detail;
         viewer.scene.requestRender();
         requestAnimationFrame(() => {
-          downloadCanvasAsPng(canvas as HTMLCanvasElement, 'gbif-globe.png');
+          const prepared = prepareCanvasForExport(canvas as HTMLCanvasElement, viewer, detail);
+          downloadCanvasAsPng(prepared, 'gbif-globe.png');
         });
       } catch {
         // ignore
@@ -167,7 +174,7 @@ export function ExportPdfCanvasHandler() {
   const cesium = useCesium();
   useEffect(() => {
     const viewer = cesium?.viewer;
-    const handler = () => {
+    const handler = (e: Event) => {
       try {
         const canvas = viewer?.scene?.canvas;
         if (!canvas) {
@@ -176,9 +183,11 @@ export function ExportPdfCanvasHandler() {
           );
           return;
         }
+        const detail = (e as CustomEvent<ExportRegionDetail>).detail;
         viewer.scene.requestRender();
         requestAnimationFrame(() => {
-          const dataUrl = captureCanvasAsDataUrl(canvas as HTMLCanvasElement);
+          const prepared = prepareCanvasForExport(canvas as HTMLCanvasElement, viewer, detail);
+          const dataUrl = captureCanvasAsDataUrl(prepared);
           window.dispatchEvent(
             new CustomEvent(EXPORT_PDF_CANVAS_READY_EVENT, { detail: { imageDataUrl: dataUrl } })
           );
@@ -695,8 +704,14 @@ export function EnvironmentalOverlaySync({ layer }: { layer: 'none' | 'landcover
   return null;
 }
 
-/** Renders the drawn region as a rectangle entity (using Cesium API directly). */
-export function DrawnRegionOverlay({ bounds }: { bounds: Bounds }) {
+/** Renders the drawn region as a polygon or rectangle entity. */
+export function DrawnRegionOverlay({
+  bounds,
+  polygon,
+}: {
+  bounds: Bounds;
+  polygon?: LonLat[];
+}) {
   const cesium = useCesium();
   useEffect(() => {
     let v: (typeof cesium)['viewer'];
@@ -707,37 +722,129 @@ export function DrawnRegionOverlay({ bounds }: { bounds: Bounds }) {
       return;
     }
     const viewer = v;
-    const { west, south, east, north } = bounds;
-    const entity = viewer.entities.add({
-      rectangle: {
-        coordinates: Cesium.Rectangle.fromDegrees(west, south, east, north),
-        fill: false,
-        outline: true,
-        outlineColor: Cesium.Color.fromCssColorString('#78b578'),
-        outlineWidth: 32,
-      },
-    });
+    const outlineColor = Cesium.Color.fromCssColorString('#78b578');
+    const fillColor = Cesium.Color.fromCssColorString('#78b578').withAlpha(0.12);
+
+    let entity: Cesium.Entity;
+    if (polygon && polygon.length >= 3) {
+      const positions = polygon.map(([lon, lat]) =>
+        Cesium.Cartesian3.fromDegrees(lon, lat)
+      );
+      entity = viewer.entities.add({
+        polygon: {
+          hierarchy: new Cesium.PolygonHierarchy(positions),
+          material: fillColor,
+          outline: true,
+          outlineColor,
+          outlineWidth: 2,
+          height: 0,
+        },
+      });
+    } else {
+      const { west, south, east, north } = bounds;
+      entity = viewer.entities.add({
+        rectangle: {
+          coordinates: Cesium.Rectangle.fromDegrees(west, south, east, north),
+          fill: false,
+          outline: true,
+          outlineColor,
+          outlineWidth: 32,
+        },
+      });
+    }
     return () => {
       viewer.entities.remove(entity);
     };
-  }, [cesium?.viewer, bounds.west, bounds.south, bounds.east, bounds.north]);
+  }, [cesium?.viewer, bounds.west, bounds.south, bounds.east, bounds.north, polygon]);
   return null;
 }
 
-/** Two-click rectangle drawing on the globe; reports bounds via onDrawnBounds. */
+/** Multi-click polygon drawing on the globe; double-click or finish event completes the shape. */
 export function DrawRegionHandler({
   active,
-  onDrawnBounds,
+  onDrawnRegion,
 }: {
   active: boolean;
-  onDrawnBounds: (b: Bounds) => void;
+  onDrawnRegion: (region: DrawnRegion) => void;
 }) {
   const cesium = useCesium();
-  const firstClickRef = useRef<Cesium.Cartographic | null>(null);
+  const verticesRef = useRef<LonLat[]>([]);
+  const previewEntitiesRef = useRef<Cesium.Entity[]>([]);
+
+  const clearPreview = (viewer: Cesium.Viewer) => {
+    for (const entity of previewEntitiesRef.current) {
+      viewer.entities.remove(entity);
+    }
+    previewEntitiesRef.current = [];
+  };
+
+  const updatePreview = (viewer: Cesium.Viewer, vertices: LonLat[]) => {
+    clearPreview(viewer);
+    if (vertices.length === 0) return;
+
+    const pointColor = Cesium.Color.fromCssColorString('#78b578');
+    for (const [lon, lat] of vertices) {
+      const point = viewer.entities.add({
+        position: Cesium.Cartesian3.fromDegrees(lon, lat),
+        point: {
+          pixelSize: 8,
+          color: pointColor,
+          outlineColor: Cesium.Color.WHITE,
+          outlineWidth: 1,
+          disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        },
+      });
+      previewEntitiesRef.current.push(point);
+    }
+
+    if (vertices.length >= 2) {
+      const positions = vertices.map(([lon, lat]) =>
+        Cesium.Cartesian3.fromDegrees(lon, lat)
+      );
+      const line = viewer.entities.add({
+        polyline: {
+          positions,
+          width: 2,
+          material: pointColor,
+          clampToGround: true,
+        },
+      });
+      previewEntitiesRef.current.push(line);
+    }
+
+    if (vertices.length >= 3) {
+      const closed = [...vertices, vertices[0]];
+      const positions = closed.map(([lon, lat]) =>
+        Cesium.Cartesian3.fromDegrees(lon, lat)
+      );
+      const poly = viewer.entities.add({
+        polygon: {
+          hierarchy: new Cesium.PolygonHierarchy(positions),
+          material: Cesium.Color.fromCssColorString('#78b578').withAlpha(0.15),
+          outline: true,
+          outlineColor: pointColor,
+          outlineWidth: 2,
+          height: 0,
+        },
+      });
+      previewEntitiesRef.current.push(poly);
+    }
+  };
+
+  const finishPolygon = (viewer: Cesium.Viewer) => {
+    const vertices = verticesRef.current;
+    if (vertices.length < 3) return;
+    clearPreview(viewer);
+    verticesRef.current = [];
+    onDrawnRegion({
+      bounds: boundsFromCoords(vertices),
+      polygon: vertices,
+    });
+  };
 
   useEffect(() => {
     if (!active) {
-      firstClickRef.current = null;
+      verticesRef.current = [];
       return;
     }
     let v: (typeof cesium)['viewer'];
@@ -750,44 +857,43 @@ export function DrawRegionHandler({
     const viewer = v;
     const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
 
-    handler.setInputAction((event: { position: Cesium.Cartesian2 }) => {
+    const pickLonLat = (position: Cesium.Cartesian2): LonLat | null => {
       try {
-        const ray = viewer.camera.getPickRay(event.position);
-        if (!ray) return;
-        const position = viewer.scene.globe.pick(ray, viewer.scene);
-        if (!position) return;
-        const carto = Cesium.Cartographic.fromCartesian(position);
-        const lonDeg = Cesium.Math.toDegrees(carto.longitude);
-        const latDeg = Cesium.Math.toDegrees(carto.latitude);
-
-        const first = firstClickRef.current;
-        if (first == null) {
-          firstClickRef.current = new Cesium.Cartographic(
-            carto.longitude,
-            carto.latitude,
-            carto.height
-          );
-          return;
-        }
-
-        const lon1 = Cesium.Math.toDegrees(first.longitude);
-        const lat1 = Cesium.Math.toDegrees(first.latitude);
-        const west = Math.min(lon1, lonDeg);
-        const east = Math.max(lon1, lonDeg);
-        const south = Math.min(lat1, latDeg);
-        const north = Math.max(lat1, latDeg);
-        firstClickRef.current = null;
-        onDrawnBounds(rectangleToBounds(west, south, east, north));
+        const ray = viewer.camera.getPickRay(position);
+        if (!ray) return null;
+        const cartesian = viewer.scene.globe.pick(ray, viewer.scene);
+        if (!cartesian) return null;
+        const carto = Cesium.Cartographic.fromCartesian(cartesian);
+        return [
+          Cesium.Math.toDegrees(carto.longitude),
+          Cesium.Math.toDegrees(carto.latitude),
+        ];
       } catch {
-        // ignore pick/camera errors
+        return null;
       }
+    };
+
+    handler.setInputAction((event: { position: Cesium.Cartesian2 }) => {
+      const coord = pickLonLat(event.position);
+      if (!coord) return;
+      verticesRef.current = [...verticesRef.current, coord];
+      updatePreview(viewer, verticesRef.current);
     }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+
+    handler.setInputAction(() => {
+      finishPolygon(viewer);
+    }, Cesium.ScreenSpaceEventType.LEFT_DOUBLE_CLICK);
+
+    const onFinishEvent = () => finishPolygon(viewer);
+    window.addEventListener(FINISH_DRAW_EVENT, onFinishEvent);
 
     return () => {
       if (!handler.isDestroyed()) handler.destroy();
-      firstClickRef.current = null;
+      clearPreview(viewer);
+      verticesRef.current = [];
+      window.removeEventListener(FINISH_DRAW_EVENT, onFinishEvent);
     };
-  }, [active, cesium?.viewer, onDrawnBounds]);
+  }, [active, cesium?.viewer, onDrawnRegion]);
 
   return null;
 }
