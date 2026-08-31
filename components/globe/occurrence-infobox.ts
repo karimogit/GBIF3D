@@ -86,7 +86,7 @@ export function occurrenceToDescription(
   const fullUrls = validUrls.map(toFullSizeUrl);
   const photoBox =
     validUrls.length > 0
-      ? `<div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 10px; width: 100%; max-width: 228px;">
+      ? `<div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 10px; width: 100%; max-width: 100%;">
 ${validUrls
   .map(
     (u, i) =>
@@ -128,7 +128,7 @@ ${validUrls
   const rank = occ.taxonRank?.trim() || '';
 
   return `
-    <div style="font-family: system-ui; max-width: 400px; min-width: 280px; font-size: 13px; line-height: 1.45;">
+    <div style="font-family: system-ui; width: 100%; max-width: 400px; min-width: 0; font-size: 13px; line-height: 1.45;">
       ${photoBox}
       <strong style="display: block; word-break: break-word;">${escapeHtml(name)}</strong>
       ${rank ? ` <span style="color: #666; font-weight: normal;">(${escapeHtml(rank)})</span>` : ''}<br/>
