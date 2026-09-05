@@ -1,5 +1,13 @@
 import type { GBIFOccurrence } from '@/types/gbif';
-import { boundsToWktPolygon, getBboxFromCoords, padBounds, type Bounds, type LonLat } from './geometry';
+import {
+  boundsCrossAntimeridian,
+  boundsToWktPolygon,
+  getBboxFromCoords,
+  padBounds,
+  splitPolygonAtAntimeridian,
+  type Bounds,
+  type LonLat,
+} from './geometry';
 
 /** Bounding box that covers occurrence points, with padding for map framing. */
 export function boundsFromOccurrences(occurrences: GBIFOccurrence[]): Bounds | null {
@@ -14,7 +22,6 @@ export function boundsFromOccurrences(occurrences: GBIFOccurrence[]): Bounds | n
   const [west, south, east, north] = getBboxFromCoords(coords);
   return padBounds({ west, south, east, north });
 }
-
 
 export type ExportScope = 'visible' | 'all';
 
@@ -31,39 +38,58 @@ interface GeoJsonPointFeature {
   properties: Record<string, unknown>;
 }
 
-interface GeoJsonPolygonFeature {
+type GeoJsonAreaGeometry =
+  | { type: 'Polygon'; coordinates: number[][][] }
+  | { type: 'MultiPolygon'; coordinates: number[][][][] };
+
+interface GeoJsonAreaFeature {
   type: 'Feature';
-  geometry: { type: 'Polygon'; coordinates: number[][][] };
+  geometry: GeoJsonAreaGeometry;
   properties: Record<string, unknown>;
 }
 
-function boundsToGeoJsonPolygon(bounds: Bounds): GeoJsonPolygonFeature['geometry'] {
-  const { west, south, east, north } = bounds;
-  return {
-    type: 'Polygon',
-    coordinates: [
-      [
-        [west, south],
-        [west, north],
-        [east, north],
-        [east, south],
-        [west, south],
-      ],
-    ],
-  };
+/** Closed counter-clockwise ring (RFC 7946 exterior ring orientation). */
+function rectangleRing(west: number, south: number, east: number, north: number): number[][] {
+  return [
+    [west, south],
+    [east, south],
+    [east, north],
+    [west, north],
+    [west, south],
+  ];
 }
 
-function polygonToGeoJsonPolygon(polygon: LonLat[]): GeoJsonPolygonFeature['geometry'] {
-  const ring = [...polygon];
+function boundsToGeoJsonGeometry(bounds: Bounds): GeoJsonAreaGeometry {
+  const { west, south, east, north } = bounds;
+  if (boundsCrossAntimeridian(bounds)) {
+    return {
+      type: 'MultiPolygon',
+      coordinates: [[rectangleRing(west, south, 180, north)], [rectangleRing(-180, south, east, north)]],
+    };
+  }
+  return { type: 'Polygon', coordinates: [rectangleRing(west, south, east, north)] };
+}
+
+function ringSignedArea(ring: number[][]): number {
+  let area = 0;
+  for (let i = 0; i < ring.length - 1; i++) {
+    area += ring[i][0] * ring[i + 1][1] - ring[i + 1][0] * ring[i][1];
+  }
+  return area / 2;
+}
+
+function closedCounterClockwiseRing(polygon: LonLat[]): number[][] {
+  const ring: number[][] = polygon.map(([lon, lat]) => [lon, lat]);
   const first = ring[0];
   const last = ring[ring.length - 1];
-  if (first[0] !== last[0] || first[1] !== last[1]) {
-    ring.push(first);
-  }
-  return {
-    type: 'Polygon',
-    coordinates: [ring],
-  };
+  if (first[0] !== last[0] || first[1] !== last[1]) ring.push([first[0], first[1]]);
+  return ringSignedArea(ring) < 0 ? ring.reverse() : ring;
+}
+
+function polygonToGeoJsonGeometry(polygon: LonLat[]): GeoJsonAreaGeometry {
+  const rings = splitPolygonAtAntimeridian(polygon).map(closedCounterClockwiseRing);
+  if (rings.length === 1) return { type: 'Polygon', coordinates: [rings[0]] };
+  return { type: 'MultiPolygon', coordinates: rings.map((r) => [r]) };
 }
 
 export function occurrencesToGeoJSON(
@@ -72,7 +98,7 @@ export function occurrencesToGeoJSON(
   regionName?: string,
   regionPolygon?: LonLat[] | null
 ): string {
-  const features: (GeoJsonPointFeature | GeoJsonPolygonFeature)[] = occurrences
+  const features: (GeoJsonPointFeature | GeoJsonAreaFeature)[] = occurrences
     .filter(
       (o) =>
         o.decimalLatitude != null &&
@@ -94,8 +120,8 @@ export function occurrencesToGeoJSON(
       type: 'Feature',
       geometry:
         regionPolygon && regionPolygon.length >= 3
-          ? polygonToGeoJsonPolygon(regionPolygon)
-          : boundsToGeoJsonPolygon(regionBounds),
+          ? polygonToGeoJsonGeometry(regionPolygon)
+          : boundsToGeoJsonGeometry(regionBounds),
       properties: {
         type: 'region',
         name: regionName?.trim() || 'Region boundary',
@@ -107,62 +133,78 @@ export function occurrencesToGeoJSON(
   return JSON.stringify(fc, null, 2);
 }
 
+const CSV_PREFERRED_COLUMNS = [
+  'key',
+  'gbifKey',
+  'scientificName',
+  'vernacularName',
+  'decimalLatitude',
+  'decimalLongitude',
+  'year',
+  'month',
+  'day',
+  'eventDate',
+  'locality',
+  'countryCode',
+  'iucnRedListCategory',
+  'basisOfRecord',
+  'datasetKey',
+  'datasetName',
+  'occurrenceID',
+  'institutionCode',
+  'recordedBy',
+];
+
+/** Column names for region metadata; repeated on every row so the file stays a plain CSV table. */
+export const CSV_REGION_NAME_COLUMN = 'regionName';
+export const CSV_REGION_WKT_COLUMN = 'regionWkt';
+
+/**
+ * Quote a CSV cell. Text cells that a spreadsheet would treat as a formula (`=`, `+`, `-`, `@`, tab, CR)
+ * are prefixed with an apostrophe; numeric values are left as-is so coordinates stay numbers.
+ */
+export function csvCell(v: unknown): string {
+  if (v == null) return '';
+  let s = typeof v === 'object' ? JSON.stringify(v) : String(v);
+  if (typeof v !== 'number' && /^[=+\-@\t\r]/.test(s) && !/^[+-]?\d+(\.\d+)?$/.test(s)) {
+    s = `'${s}`;
+  }
+  return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
 export function occurrencesToCSV(
   occurrences: GBIFOccurrence[],
   regionBounds?: Bounds | null,
   regionName?: string,
   regionPolygonWkt?: string
 ): string {
-  const preferredOrder = [
-    'key',
-    'scientificName',
-    'vernacularName',
-    'decimalLatitude',
-    'decimalLongitude',
-    'year',
-    'month',
-    'day',
-    'eventDate',
-    'locality',
-    'countryCode',
-    'iucnRedListCategory',
-    'basisOfRecord',
-    'datasetKey',
-    'datasetName',
-    'occurrenceID',
-    'institutionCode',
-    'recordedBy',
-  ];
-
   const allKeys = new Set<string>();
   for (const o of occurrences) {
     Object.keys(o as object).forEach((k) => allKeys.add(k));
   }
 
   const headers = [
-    ...preferredOrder.filter((k) => allKeys.has(k)),
-    ...Array.from(allKeys).filter((k) => !preferredOrder.includes(k)).sort(),
+    ...CSV_PREFERRED_COLUMNS.filter((k) => allKeys.has(k)),
+    ...Array.from(allKeys)
+      .filter((k) => !CSV_PREFERRED_COLUMNS.includes(k))
+      .sort(),
   ];
 
-  const escape = (v: unknown): string => {
-    if (v == null) return '';
-    const s = String(v);
-    return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-  };
-  const rows = occurrences.map((o) =>
-    headers.map((h) => escape((o as unknown as Record<string, unknown>)[h])).join(',')
-  );
-
-  const meta: string[] = [];
+  const regionCells: string[] = [];
   if (regionBounds) {
-    if (regionName?.trim()) meta.push(`# Region: ${regionName.trim()}`);
-    meta.push(
-      `# Region polygon (WKT): ${regionPolygonWkt ?? boundsToWktPolygon(regionBounds)}`
+    headers.push(CSV_REGION_NAME_COLUMN, CSV_REGION_WKT_COLUMN);
+    regionCells.push(
+      csvCell(regionName?.trim() || 'Region boundary'),
+      csvCell(regionPolygonWkt ?? boundsToWktPolygon(regionBounds))
     );
   }
 
-  const body = [headers.join(','), ...rows].join('\n');
-  return meta.length > 0 ? `${meta.join('\n')}\n${body}` : body;
+  const dataHeaders = regionBounds ? headers.slice(0, -2) : headers;
+  const rows = occurrences.map((o) =>
+    [...dataHeaders.map((h) => csvCell((o as unknown as Record<string, unknown>)[h])), ...regionCells].join(',')
+  );
+
+  return [headers.join(','), ...rows].join('\r\n');
 }
 
 export function downloadBlob(blob: Blob, filename: string): void {

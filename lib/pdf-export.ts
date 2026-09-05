@@ -4,6 +4,7 @@
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import type { GBIFOccurrence, OccurrenceFilters } from '@/types/gbif';
+import { occurrenceYear } from './occurrence-date';
 
 const MARGIN = 14;
 const PAGE_WIDTH_MM = 210;
@@ -15,6 +16,9 @@ const SMALL_FONT_SIZE = 9;
 const HEADER_BAR_HEIGHT_MM = 4;
 const HEADER_HEIGHT_MM = 22;
 const FOOTER_Y_MM = PAGE_HEIGHT_MM - 12;
+/** Table rows may not run into the header on continuation pages or the footer on any page. */
+const TABLE_TOP_MARGIN_MM = HEADER_HEIGHT_MM + 4;
+const TABLE_BOTTOM_MARGIN_MM = PAGE_HEIGHT_MM - FOOTER_Y_MM + 6;
 
 const GBIF_URL = 'https://www.gbif.org';
 const DEFAULT_GLOBE_REPO_URL = 'https://github.com/karimogit/GBIF3D';
@@ -58,7 +62,8 @@ function buildSpeciesSummary(occurrences: GBIFOccurrence[]): SpeciesRow[] {
       vernacularName: string;
       count: number;
       iucn: string;
-      years: number[];
+      minYear: number | null;
+      maxYear: number | null;
       countries: Set<string>;
       exampleLat?: number;
       exampleLon?: number;
@@ -74,7 +79,7 @@ function buildSpeciesSummary(occurrences: GBIFOccurrence[]): SpeciesRow[] {
     const sci = occ.scientificName ?? occ.species ?? occ.genus ?? '—';
     const vern = occ.vernacularName?.trim() ?? '—';
     const iucn = occ.iucnRedListCategory?.trim() ?? '—';
-    const year = occ.year ?? (occ.eventDate ? new Date(occ.eventDate).getFullYear() : undefined);
+    const year = occurrenceYear(occ);
     const country = occ.countryCode?.trim();
     const lat = occ.decimalLatitude;
     const lon = occ.decimalLongitude;
@@ -82,7 +87,10 @@ function buildSpeciesSummary(occurrences: GBIFOccurrence[]): SpeciesRow[] {
     if (existing) {
       existing.count += 1;
       if (iucn !== '—' && existing.iucn === '—') existing.iucn = iucn;
-      if (year != null && Number.isFinite(year)) existing.years.push(year);
+      if (year != null) {
+        existing.minYear = existing.minYear == null ? year : Math.min(existing.minYear, year);
+        existing.maxYear = existing.maxYear == null ? year : Math.max(existing.maxYear, year);
+      }
       if (country) existing.countries.add(country);
       if (basis) existing.basisOfRecord.add(basis.replace(/_/g, ' '));
       if (existing.exampleLat == null && lat != null && lon != null && Number.isFinite(lat) && Number.isFinite(lon)) {
@@ -95,7 +103,8 @@ function buildSpeciesSummary(occurrences: GBIFOccurrence[]): SpeciesRow[] {
         vernacularName: vern,
         count: 1,
         iucn,
-        years: year != null && Number.isFinite(year) ? [year] : [],
+        minYear: year,
+        maxYear: year,
         countries: country ? new Set([country]) : new Set(),
         exampleLat: lat != null && Number.isFinite(lat) ? lat : undefined,
         exampleLon: lon != null && Number.isFinite(lon) ? lon : undefined,
@@ -107,8 +116,7 @@ function buildSpeciesSummary(occurrences: GBIFOccurrence[]): SpeciesRow[] {
     }
   }
   return Array.from(byKey.values()).map((s) => {
-    const minY = s.years.length ? Math.min(...s.years) : null;
-    const maxY = s.years.length ? Math.max(...s.years) : null;
+    const { minYear: minY, maxYear: maxY } = s;
     const yearRange =
       minY != null && maxY != null
         ? minY === maxY
@@ -313,7 +321,7 @@ export function generateOccurrencePdf({
       s.taxonomy,
       s.basisOfRecord,
     ]),
-    margin: { left: MARGIN, right: MARGIN },
+    margin: { left: MARGIN, right: MARGIN, top: TABLE_TOP_MARGIN_MM, bottom: TABLE_BOTTOM_MARGIN_MM },
     headStyles: { fillColor: [...RGB_GBIF_GREEN], fontSize: 7, textColor: [255, 255, 255] },
     bodyStyles: { fontSize: 7 },
     columnStyles: {
