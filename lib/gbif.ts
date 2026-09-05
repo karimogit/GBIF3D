@@ -145,7 +145,7 @@ export async function searchOccurrences(
           signal: options.signal,
         }
       );
-      setCache(key, data, OCCURRENCE_CACHE_TTL_MS);
+      setCache(key, data, OCCURRENCE_CACHE_TTL_MS, data.results?.length ?? 1);
       return data;
     } catch (err) {
       if (options.signal?.aborted || axios.isCancel(err)) throw err;
@@ -195,6 +195,12 @@ export async function searchOccurrencesChunked(
   if (maxTotal <= OCCURRENCE_CHUNK_SIZE) {
     return searchOccurrences({ ...filters, limit: maxTotal, offset: 0 }, options);
   }
+  // The aggregate is cached under its own key so a repeated large query is a single hit even
+  // after the per-chunk entries have been evicted.
+  const aggregateKey = cacheKey('occ-chunked', { ...filters, offset: undefined, limit: maxTotal });
+  const cachedAggregate = getCached<GBIFOccurrenceSearchResponse>(aggregateKey);
+  if (cachedAggregate) return cachedAggregate;
+
   const allResults: GBIFOccurrence[] = [];
   let totalCount = 0;
   let endOfRecords = false;
@@ -203,20 +209,22 @@ export async function searchOccurrencesChunked(
     const limit = Math.min(OCCURRENCE_CHUNK_SIZE, maxTotal - allResults.length);
     if (options.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
     const res = await searchOccurrences({ ...filters, limit, offset }, options);
-    allResults.push(...res.results);
+    for (const r of res.results) allResults.push(r);
     totalCount = res.count;
     endOfRecords = res.endOfRecords;
     if (res.results.length < limit || endOfRecords) break;
     offset += limit;
     if (offset < maxTotal) await delay(CHUNK_DELAY_MS, options.signal);
   }
-  return {
+  const aggregate: GBIFOccurrenceSearchResponse = {
     offset: 0,
     limit: allResults.length,
     endOfRecords,
     count: totalCount,
     results: allResults,
   };
+  setCache(aggregateKey, aggregate, OCCURRENCE_CACHE_TTL_MS, allResults.length);
+  return aggregate;
 }
 
 export async function suggestSpecies(

@@ -1,4 +1,4 @@
-import { getCached, setCache, cacheKey, clearCache } from '@/lib/cache';
+import { getCached, setCache, cacheKey, clearCache, cacheStats, MAX_CACHE_ENTRIES, MAX_CACHE_WEIGHT } from '@/lib/cache';
 
 describe('cache', () => {
   beforeEach(() => {
@@ -21,12 +21,27 @@ describe('cache', () => {
       expect(getCached('k')).toBeNull();
     });
 
-    it('evicts oldest entries when the cache grows too large', () => {
-      for (let i = 0; i < 205; i++) {
+    it('evicts least recently used entries when the cache grows too large', () => {
+      for (let i = 0; i < MAX_CACHE_ENTRIES; i++) {
         setCache(`k${i}`, i);
       }
-      expect(getCached('k0')).toBeNull();
-      expect(getCached<number>('k204')).toBe(204);
+      getCached('k0'); // touch: k0 becomes most recently used
+      setCache('extra', 'x');
+      expect(getCached<number>('k0')).toBe(0);
+      expect(getCached('k1')).toBeNull();
+      expect(getCached<string>('extra')).toBe('x');
+    });
+
+    it('bounds the cache by weight so one large download cannot flush everything', () => {
+      setCache('small', 'keep-me');
+      getCached('small');
+      for (let i = 0; i < 10; i++) {
+        setCache(`chunk${i}`, i, undefined, MAX_CACHE_WEIGHT / 4);
+      }
+      expect(cacheStats().weight).toBeLessThanOrEqual(MAX_CACHE_WEIGHT);
+      expect(getCached('small')).toBeNull();
+      expect(getCached<number>('chunk9')).toBe(9);
+      expect(getCached('chunk0')).toBeNull();
     });
   });
 
