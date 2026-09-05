@@ -25,7 +25,7 @@ import {
   prepareCanvasForExport,
 } from './export-utils';
 import type { DrawnRegion, LonLat } from '@/lib/geometry';
-import { boundsFromCoords } from '@/lib/geometry';
+import { boundsFromCoords, boundsLonSpan } from '@/lib/geometry';
 import {
   restoreCameraState,
   saveCameraState,
@@ -774,8 +774,8 @@ export function DrawnRegionOverlay({
 /** Remove consecutive vertices that are within a small fraction of the polygon's extent of each other. */
 function dedupeConsecutiveVertices(vertices: LonLat[]): LonLat[] {
   if (vertices.length < 2) return vertices;
-  const { west, south, east, north } = boundsFromCoords(vertices);
-  const tolerance = Math.max(1e-6, Math.max(east - west, north - south) * 1e-3);
+  const bounds = boundsFromCoords(vertices);
+  const tolerance = Math.max(1e-6, Math.max(boundsLonSpan(bounds), bounds.north - bounds.south) * 1e-3);
   const out: LonLat[] = [vertices[0]];
   for (let i = 1; i < vertices.length; i++) {
     const [px, py] = out[out.length - 1];

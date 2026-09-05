@@ -23,6 +23,7 @@ import {
 } from '@/lib/favorites';
 import type { Bounds, DrawnRegion, LonLat } from '@/lib/geometry';
 import { boundsToWktPolygon, coordsToWktPolygon, padBounds } from '@/lib/geometry';
+import { DEFAULT_OCCURRENCE_LIMIT } from '@/lib/gbif';
 import { generateOccurrencePdf } from '@/lib/pdf-export';
 import { parseOccurrencesFile } from '@/lib/import-occurrences';
 import { getDisplayedOccurrences } from '@/lib/displayed-occurrences';
@@ -38,8 +39,14 @@ import {
   addSavedOccurrence,
   removeSavedOccurrence,
 } from '@/lib/saved-occurrences';
-import { SAVE_OCCURRENCE_EVENT } from '@/components/GlobeScene';
-import type { ExportRegionDetail } from '@/components/globe/constants';
+import {
+  EXPORT_IMAGE_EVENT,
+  EXPORT_PDF_CANVAS_READY_EVENT,
+  EXPORT_PDF_EVENT,
+  FINISH_DRAW_EVENT,
+  SAVE_OCCURRENCE_EVENT,
+  type ExportRegionDetail,
+} from '@/components/globe/constants';
 
 const REGION_ID_DRAWN = 'drawn';
 const REGION_ID_PLACE = 'place';
@@ -85,6 +92,17 @@ function getSelectedRegionBounds(
   return fav?.bounds ?? null;
 }
 
+/** Polygon outline of the active region: the drawn shape, or a favorite that was saved from a drawn shape. */
+function getSelectedRegionPolygon(
+  selectedRegionId: string,
+  favorites: FavoriteRegion[],
+  drawnPolygon: LonLat[] | null
+): LonLat[] | null {
+  if (!selectedRegionId) return null;
+  if (selectedRegionId === REGION_ID_DRAWN) return drawnPolygon;
+  return favorites.find((f) => f.id === selectedRegionId)?.polygon ?? null;
+}
+
 function getRegionDisplayName(
   selectedRegionId: string,
   favorites: FavoriteRegion[],
@@ -102,7 +120,7 @@ function getRegionDisplayName(
 
 export default function Home() {
   const [filters, setFilters] = useState<OccurrenceFilters>({
-    limit: 1000,
+    limit: DEFAULT_OCCURRENCE_LIMIT,
   });
   const [occurrences, setOccurrences] = useState<GBIFOccurrence[]>([]);
   const [selectedRegionId, setSelectedRegionId] = useState('');
@@ -164,6 +182,8 @@ export default function Home() {
     placeSearchResult
   );
 
+  const selectedRegionPolygon = getSelectedRegionPolygon(selectedRegionId, favorites, drawnPolygon);
+
   const displayedOccurrences = useMemo(
     () =>
       getDisplayedOccurrences(
@@ -172,9 +192,9 @@ export default function Home() {
         selectedRegionBounds,
         selectedYear,
         selectedMonth,
-        selectedRegionId === REGION_ID_DRAWN ? drawnPolygon : null
+        selectedRegionPolygon
       ),
-    [occurrences, importedOccurrences, selectedRegionBounds, selectedYear, selectedMonth, selectedRegionId, drawnPolygon]
+    [occurrences, importedOccurrences, selectedRegionBounds, selectedYear, selectedMonth, selectedRegionPolygon]
   );
 
   const regionDisplayName = getRegionDisplayName(selectedRegionId, favorites, placeSearchResult);
@@ -224,37 +244,37 @@ export default function Home() {
     return () => window.removeEventListener(SAVE_OCCURRENCE_EVENT, handler);
   }, []);
 
-  const hasDrawnRegion = drawnBounds != null;
+  // Only regions with a custom outline offer a "region only" image crop; the drawn shape must be the active region.
+  const exportableRegionOutline = useMemo(
+    () =>
+      selectedRegionBounds && selectedRegionPolygon && selectedRegionPolygon.length >= 3
+        ? { bounds: selectedRegionBounds, polygon: selectedRegionPolygon }
+        : null,
+    [selectedRegionBounds, selectedRegionPolygon]
+  );
 
   const buildExportDetail = useCallback(
     (scope: 'full' | 'region'): ExportRegionDetail => ({
       scope,
-      ...(scope === 'region' && drawnBounds
-        ? {
-            bounds: drawnBounds,
-            ...(drawnPolygon ? { polygon: drawnPolygon } : {}),
-          }
-        : {}),
+      ...(scope === 'region' && exportableRegionOutline ? exportableRegionOutline : {}),
     }),
-    [drawnBounds, drawnPolygon]
+    [exportableRegionOutline]
   );
 
   const runImageExport = useCallback(
     (scope: 'full' | 'region') => {
-      window.dispatchEvent(
-        new CustomEvent('gbif-globe-export-image', { detail: buildExportDetail(scope) })
-      );
+      window.dispatchEvent(new CustomEvent(EXPORT_IMAGE_EVENT, { detail: buildExportDetail(scope) }));
     },
     [buildExportDetail]
   );
 
   const handleExportImage = useCallback(() => {
-    if (hasDrawnRegion) {
+    if (exportableRegionOutline) {
       setExportScopePrompt('image');
       return;
     }
     runImageExport('full');
-  }, [hasDrawnRegion, runImageExport]);
+  }, [exportableRegionOutline, runImageExport]);
 
   const handleExportScopeChoice = useCallback(
     (scope: 'full' | 'region') => {
@@ -276,42 +296,39 @@ export default function Home() {
   const handleExportGeoJSON = useCallback(
     (opts: ExportDataOptions) => {
       const data = opts.scope === 'visible' ? displayedOccurrences : allOccurrences;
-      const includeRegion = opts.includePolygon && selectedRegionBounds;
-      const regionBounds = includeRegion ? selectedRegionBounds : null;
+      const includeRegion = opts.includePolygon && selectedRegionBounds != null;
       const geojson = occurrencesToGeoJSON(
         data,
-        regionBounds,
+        includeRegion ? selectedRegionBounds : null,
         regionDisplayName || undefined,
-        includeRegion && drawnPolygon ? drawnPolygon : undefined
+        includeRegion && selectedRegionPolygon ? selectedRegionPolygon : undefined
       );
       const blob = new Blob([geojson], { type: 'application/geo+json' });
       downloadBlob(blob, 'gbif-occurrences.geojson');
     },
-    [allOccurrences, displayedOccurrences, selectedRegionBounds, regionDisplayName, drawnPolygon]
+    [allOccurrences, displayedOccurrences, selectedRegionBounds, regionDisplayName, selectedRegionPolygon]
   );
 
   const handleExportCSV = useCallback(
     (opts: ExportDataOptions) => {
       const data = opts.scope === 'visible' ? displayedOccurrences : allOccurrences;
-      const includeRegion = opts.includePolygon && selectedRegionBounds;
-      const regionBounds = includeRegion ? selectedRegionBounds : null;
+      const includeRegion = opts.includePolygon && selectedRegionBounds != null;
       const csv = occurrencesToCSV(
         data,
-        regionBounds,
+        includeRegion ? selectedRegionBounds : null,
         regionDisplayName || undefined,
-        includeRegion ? regionPolygonWkt(selectedRegionBounds, drawnPolygon) : undefined
+        includeRegion ? regionPolygonWkt(selectedRegionBounds, selectedRegionPolygon) : undefined
       );
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
       downloadBlob(blob, 'gbif-occurrences.csv');
     },
-    [allOccurrences, displayedOccurrences, selectedRegionBounds, regionDisplayName, drawnPolygon, regionPolygonWkt]
+    [allOccurrences, displayedOccurrences, selectedRegionBounds, regionDisplayName, selectedRegionPolygon, regionPolygonWkt]
   );
 
   const handleExportPDF = useCallback(
     (opts: ExportDataOptions) => {
       const data = opts.scope === 'visible' ? displayedOccurrences : allOccurrences;
-      const includeRegion = opts.includePolygon && selectedRegionBounds;
-      const regionBounds = includeRegion ? selectedRegionBounds : null;
+      const includeRegion = opts.includePolygon && selectedRegionBounds != null;
       const mapBounds =
         selectedRegionBounds != null
           ? padBounds(selectedRegionBounds)
@@ -321,7 +338,7 @@ export default function Home() {
         filters,
         regionName: regionDisplayName || undefined,
         regionPolygonWkt: includeRegion
-          ? regionPolygonWkt(selectedRegionBounds, drawnPolygon)
+          ? regionPolygonWkt(selectedRegionBounds, selectedRegionPolygon)
           : undefined,
         repoUrl: process.env.NEXT_PUBLIC_GITHUB_REPO_URL,
       };
@@ -329,15 +346,15 @@ export default function Home() {
       const onCanvasReady = (e: Event) => {
         if (generated) return;
         generated = true;
-        window.removeEventListener('gbif-globe-export-pdf-canvas-ready', onCanvasReady);
+        window.removeEventListener(EXPORT_PDF_CANVAS_READY_EVENT, onCanvasReady);
         const detail = (e as CustomEvent<{ imageDataUrl: string | null }>).detail;
         generateOccurrencePdf({ ...pdfOpts, mapImageDataUrl: detail?.imageDataUrl ?? undefined });
       };
-      window.addEventListener('gbif-globe-export-pdf-canvas-ready', onCanvasReady);
+      window.addEventListener(EXPORT_PDF_CANVAS_READY_EVENT, onCanvasReady);
       window.dispatchEvent(
-        new CustomEvent('gbif-globe-export-pdf', {
+        new CustomEvent<ExportRegionDetail>(EXPORT_PDF_EVENT, {
           detail: {
-            scope: 'full' as const,
+            scope: 'full',
             frameBounds: mapBounds ?? undefined,
           },
         })
@@ -345,7 +362,7 @@ export default function Home() {
       setTimeout(() => {
         if (generated) return;
         generated = true;
-        window.removeEventListener('gbif-globe-export-pdf-canvas-ready', onCanvasReady);
+        window.removeEventListener(EXPORT_PDF_CANVAS_READY_EVENT, onCanvasReady);
         generateOccurrencePdf(pdfOpts);
       }, 4000);
     },
@@ -355,29 +372,27 @@ export default function Home() {
       filters,
       selectedRegionBounds,
       regionDisplayName,
-      drawnPolygon,
+      selectedRegionPolygon,
       regionPolygonWkt,
     ]
   );
 
-  // When a predefined country region is selected (2-letter id), pass ISO country code to restrict API
+  // Place-search results carry an ISO country code that lets the API restrict by country too
   const selectedCountryCode =
     selectedRegionId === REGION_ID_PLACE && placeSearchResult?.countryCode
       ? placeSearchResult.countryCode
-      : selectedRegionId && /^[a-z]{2}$/.test(selectedRegionId)
-        ? selectedRegionId
-        : null;
+      : null;
 
   const handleSaveDrawnRegion = useCallback(() => {
     if (!drawnBounds) return;
     const name = window.prompt('Name this region');
     if (!name?.trim()) return;
-    const added = addFavorite(name.trim(), drawnBounds);
+    const added = addFavorite(name.trim(), drawnBounds, drawnPolygon);
     setFavorites(getFavorites());
     setSelectedRegionId(added.id);
     setDrawnBounds(null);
     setDrawnPolygon(null);
-  }, [drawnBounds]);
+  }, [drawnBounds, drawnPolygon]);
 
   const handleRemoveFavorite = useCallback((id: string) => {
     removeFavorite(id);
@@ -393,7 +408,7 @@ export default function Home() {
   }, []);
 
   const handleFinishDrawRegion = useCallback(() => {
-    window.dispatchEvent(new CustomEvent('gbif-globe-finish-draw'));
+    window.dispatchEvent(new CustomEvent(FINISH_DRAW_EVENT));
   }, []);
 
   const handleCancelDrawRegion = useCallback(() => {
@@ -409,9 +424,16 @@ export default function Home() {
   const handleImportFile = useCallback(async (file: File) => {
     try {
       const parsed = await parseOccurrencesFile(file);
+      if (parsed.length === 0) {
+        window.alert(
+          `No occurrences with coordinates found in "${file.name}". Use a GBIF-style CSV/TSV, JSON, or Darwin Core Archive with decimalLatitude and decimalLongitude columns.`
+        );
+        return;
+      }
       setImportedOccurrences(parsed);
-    } catch {
-      window.alert('Could not parse file. Use GBIF-style CSV or JSON with decimalLatitude, decimalLongitude.');
+    } catch (err) {
+      const reason = err instanceof Error && err.message ? ` (${err.message})` : '';
+      window.alert(`Could not read "${file.name}"${reason}.`);
     }
   }, []);
 
@@ -473,8 +495,8 @@ export default function Home() {
             flyToBounds={selectedRegionBounds ?? undefined}
             drawRegionMode={drawRegionMode}
             onDrawnRegion={handleDrawnRegion}
-            drawnBounds={drawnBounds}
-            drawnPolygon={selectedRegionId === REGION_ID_DRAWN ? drawnPolygon : null}
+            drawnBounds={selectedRegionId === REGION_ID_DRAWN ? drawnBounds : selectedRegionPolygon ? selectedRegionBounds : null}
+            drawnPolygon={selectedRegionPolygon}
             sceneMode={sceneMode}
             baseMap={baseMap}
             photorealistic3D={photorealistic3D}

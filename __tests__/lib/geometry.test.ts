@@ -1,4 +1,22 @@
-import { boundsToWktPolygon, rectangleToBounds, geoJsonBboxToBounds, coordsToWktPolygon, pointInPolygon, boundsFromCoords } from '@/lib/geometry';
+import {
+  boundsToWktPolygon,
+  rectangleToBounds,
+  geoJsonBboxToBounds,
+  coordsToWktPolygon,
+  pointInPolygon,
+  pointInBounds,
+  boundsFromCoords,
+  padBounds,
+  splitPolygonAtAntimeridian,
+} from '@/lib/geometry';
+
+/** Shoelace signed area of a closed "lon lat, lon lat" WKT ring; positive = counter-clockwise. */
+function wktRingSignedArea(ring: string): number {
+  const pts = ring.split(',').map((p) => p.trim().split(' ').map(Number));
+  let area = 0;
+  for (let i = 0; i < pts.length - 1; i++) area += pts[i][0] * pts[i + 1][1] - pts[i + 1][0] * pts[i][1];
+  return area / 2;
+}
 
 describe('geometry', () => {
   describe('boundsToWktPolygon', () => {
@@ -12,7 +30,17 @@ describe('geometry', () => {
       expect(wkt).toMatch(/^POLYGON\(\(/);
       expect(wkt).toContain('10 58');
       expect(wkt).toContain('20 62');
-      expect(wkt).toContain('10 58'); // closed
+      expect(wkt.startsWith('POLYGON((10 58') && wkt.endsWith('10 58))')).toBe(true); // closed
+      expect(wktRingSignedArea(wkt.slice('POLYGON(('.length, -2))).toBeGreaterThan(0);
+    });
+
+    it('splits antimeridian-spanning bounds into a MULTIPOLYGON', () => {
+      const wkt = boundsToWktPolygon({ west: 170, south: -50, east: -170, north: -30 });
+      expect(wkt).toMatch(/^MULTIPOLYGON\(/);
+      expect(wkt).toContain('170 -50');
+      expect(wkt).toContain('180 -50');
+      expect(wkt).toContain('-180 -50');
+      expect(wkt).toContain('-170 -30');
     });
 
     it('uses longitude-latitude order', () => {
@@ -67,6 +95,54 @@ describe('geometry', () => {
       expect(wkt).toContain('10 58');
       expect(wkt).toContain('20 62');
     });
+
+    it('reverses clockwise input', () => {
+      const wkt = coordsToWktPolygon([
+        [10, 58],
+        [10, 62],
+        [20, 62],
+        [20, 58],
+      ]);
+      expect(wktRingSignedArea(wkt.slice('POLYGON(('.length, -2))).toBeGreaterThan(0);
+    });
+
+    it('splits polygons crossing the antimeridian into a MULTIPOLYGON within [-180, 180]', () => {
+      const wkt = coordsToWktPolygon([
+        [170, -40],
+        [-170, -40],
+        [-170, -30],
+        [170, -30],
+      ]);
+      expect(wkt).toMatch(/^MULTIPOLYGON\(/);
+      const lons = [...wkt.matchAll(/(-?\d+(?:\.\d+)?) -?\d+/g)].map((m) => Number(m[1]));
+      expect(lons.every((l) => l >= -180 && l <= 180)).toBe(true);
+      expect(lons).toContain(180);
+      expect(lons).toContain(-180);
+    });
+  });
+
+  describe('splitPolygonAtAntimeridian', () => {
+    it('returns the input ring unchanged when it does not cross', () => {
+      const rings = splitPolygonAtAntimeridian([
+        [0, 0],
+        [10, 0],
+        [10, 10],
+      ]);
+      expect(rings).toHaveLength(1);
+      expect(rings[0]).toHaveLength(3);
+    });
+
+    it('yields two rings with correct latitude at the cut for a crossing triangle', () => {
+      const rings = splitPolygonAtAntimeridian([
+        [170, 0],
+        [-170, 0],
+        [-170, 10],
+      ]);
+      expect(rings).toHaveLength(2);
+      const cutLats = rings.flatMap((r) => r.filter(([lon]) => Math.abs(lon) === 180).map(([, lat]) => lat));
+      // Hypotenuse from (170,0) to (-170,10) crosses 180 at lat 5.
+      expect(cutLats).toEqual(expect.arrayContaining([0, 5]));
+    });
   });
 
   describe('pointInPolygon', () => {
@@ -84,6 +160,29 @@ describe('geometry', () => {
     it('returns false for points outside', () => {
       expect(pointInPolygon(15, 5, square)).toBe(false);
     });
+
+    it('handles polygons that cross the antimeridian', () => {
+      const fiji: [number, number][] = [
+        [175, -20],
+        [-175, -20],
+        [-175, -15],
+        [175, -15],
+      ];
+      expect(pointInPolygon(179, -17, fiji)).toBe(true);
+      expect(pointInPolygon(-179, -17, fiji)).toBe(true);
+      expect(pointInPolygon(0, -17, fiji)).toBe(false);
+      expect(pointInPolygon(170, -17, fiji)).toBe(false);
+    });
+  });
+
+  describe('pointInBounds', () => {
+    it('handles bounds that span the antimeridian', () => {
+      const b = { west: 170, south: -50, east: -170, north: -30 };
+      expect(pointInBounds(179, -40, b)).toBe(true);
+      expect(pointInBounds(-179, -40, b)).toBe(true);
+      expect(pointInBounds(0, -40, b)).toBe(false);
+      expect(pointInBounds(179, 0, b)).toBe(false);
+    });
   });
 
   describe('boundsFromCoords', () => {
@@ -94,6 +193,33 @@ describe('geometry', () => {
         [15, 60],
       ]);
       expect(b).toEqual({ west: 10, south: 58, east: 20, north: 62 });
+    });
+
+    it('returns west > east for antimeridian-crossing vertices', () => {
+      const b = boundsFromCoords([
+        [170, -40],
+        [-170, -40],
+        [-175, -30],
+      ]);
+      expect(b).toEqual({ west: 170, south: -40, east: -170, north: -30 });
+    });
+
+    it('handles many vertices without exceeding argument limits', () => {
+      const coords: [number, number][] = Array.from({ length: 200_000 }, (_, i) => [(i % 360) - 180, (i % 180) - 90]);
+      expect(() => boundsFromCoords(coords)).not.toThrow();
+    });
+  });
+
+  describe('padBounds', () => {
+    it('clamps latitude to the poles and longitude to the globe', () => {
+      const b = padBounds({ west: -179, south: -89, east: 179, north: 89 });
+      expect(b).toEqual({ west: -180, south: -90, east: 180, north: 90 });
+    });
+
+    it('wraps longitude padding across the antimeridian', () => {
+      const b = padBounds({ west: 170, south: 0, east: 179, north: 10 }, 0.5, 0.01);
+      expect(b.west).toBeCloseTo(165.5);
+      expect(b.east).toBeCloseTo(-176.5);
     });
   });
 });
