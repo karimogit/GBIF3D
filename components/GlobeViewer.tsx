@@ -367,6 +367,27 @@ export default function GlobeViewer({
           </div>
         </>
       )}
+      {!loading && !hasTaxonFilter && !drawRegionMode && displayedOccurrences.length === 0 && !error && (
+        <div
+          role="status"
+          style={{
+            position: 'absolute',
+            bottom: 16,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            padding: '8px 16px',
+            background: 'rgba(0, 0, 0, 0.7)',
+            color: '#fff',
+            borderRadius: 8,
+            maxWidth: '90%',
+            fontSize: 14,
+            zIndex: 999,
+            textAlign: 'center',
+          }}
+        >
+          Open <strong>Filters</strong> and pick a species or taxonomic group to load occurrences for this region.
+        </div>
+      )}
       {!loading && hasTaxonFilter && displayedOccurrences.length === 0 && !error && (
         <div
           role="status"
