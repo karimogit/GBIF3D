@@ -34,13 +34,6 @@ function speciesKey(occ: GBIFOccurrence): string {
   return String(name).trim() || 'Unknown';
 }
 
-function speciesDisplayName(occ: GBIFOccurrence): string {
-  const sci = occ.scientificName ?? occ.species ?? occ.genus ?? '—';
-  const vern = occ.vernacularName?.trim();
-  if (vern) return `${vern} (${sci})`;
-  return sci;
-}
-
 interface SpeciesRow {
   scientificName: string;
   vernacularName: string;

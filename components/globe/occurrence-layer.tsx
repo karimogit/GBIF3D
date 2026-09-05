@@ -25,7 +25,6 @@ export function OccurrencePointsPrimitive({
   occurrences,
   sceneMode,
   pointsHidden,
-  savedOccurrenceKeys,
   selectedOccurrenceKey,
   onPickedKey,
 }: {
@@ -33,7 +32,6 @@ export function OccurrencePointsPrimitive({
   sceneMode: SceneModeType;
   /** True while the camera is tilted so far that dots would smear across the horizon. */
   pointsHidden: boolean;
-  savedOccurrenceKeys?: Set<number>;
   selectedOccurrenceKey?: number | null;
   onPickedKey: (key: number) => void;
 }) {

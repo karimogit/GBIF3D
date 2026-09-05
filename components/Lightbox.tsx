@@ -200,6 +200,8 @@ export default function Lightbox() {
           </button>
         </>
       )}
+      {/* Photos come from arbitrary GBIF media hosts; next/image would need every host allow-listed. */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={currentUrl}
         alt="Occurrence photo"

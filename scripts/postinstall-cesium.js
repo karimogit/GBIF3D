@@ -24,13 +24,21 @@ if (isCI) {
   fs.cpSync(src, dest, { recursive: true });
   console.log('postinstall-cesium: copied Cesium to public/cesium (CI)');
 } else {
+  const target = path.resolve(src);
   try {
     if (fs.existsSync(dest)) fs.rmSync(dest, { recursive: true });
-    const target = path.resolve(src);
-    fs.symlinkSync(target, dest, 'dir');
+    // Directory symlinks need elevated privileges on Windows; junctions do not.
+    fs.symlinkSync(target, dest, process.platform === 'win32' ? 'junction' : 'dir');
     console.log('postinstall-cesium: symlinked public/cesium');
   } catch (err) {
-    console.error('postinstall-cesium: symlink failed', err);
-    process.exit(1);
+    console.warn('postinstall-cesium: symlink failed, copying instead', err);
+    try {
+      if (fs.existsSync(dest)) fs.rmSync(dest, { recursive: true });
+      fs.cpSync(src, dest, { recursive: true });
+      console.log('postinstall-cesium: copied Cesium to public/cesium');
+    } catch (copyErr) {
+      console.error('postinstall-cesium: copy failed', copyErr);
+      process.exit(1);
+    }
   }
 }

@@ -4,7 +4,6 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import TextField from '@mui/material/TextField';
 import Autocomplete from '@mui/material/Autocomplete';
 import CircularProgress from '@mui/material/CircularProgress';
-import type { GBIFSpeciesSuggestion, GBIFSpeciesSearchResult } from '@/types/gbif';
 import { suggestSpecies, searchSpeciesByVernacular } from '@/lib/gbif';
 
 const DEBOUNCE_MS = 300;

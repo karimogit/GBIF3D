@@ -95,21 +95,27 @@ export default function GlobeViewer({
     setViewBounds(b);
   }, []);
 
+  // Latest filters are read at fetch time; the fetch effect below decides *when* to refetch via filterFetchKey,
+  // so UI-only filter fields (e.g. selectedSpeciesOptions) don't trigger requests.
+  const filtersRef = useRef(filters);
+  filtersRef.current = filters;
+
   const fetchOccurrences = useCallback(
     async (bounds: Bounds, signal: AbortSignal, generation: number) => {
       setLoading(true);
       setError(null);
       try {
+        const currentFilters = filtersRef.current;
         const geometry =
           drawnPolygon && drawnPolygon.length >= 3
             ? coordsToWktPolygon(drawnPolygon)
             : boundsToWktPolygon(bounds);
-        const country = selectedCountryCode?.trim().toUpperCase() ?? filters.country;
+        const country = selectedCountryCode?.trim().toUpperCase() ?? currentFilters.country;
         const res = await searchOccurrencesChunked({
-          ...filters,
+          ...currentFilters,
           geometry,
           country: country || undefined,
-          limit: filters.limit ?? DEFAULT_OCCURRENCE_LIMIT,
+          limit: currentFilters.limit ?? DEFAULT_OCCURRENCE_LIMIT,
         }, { signal });
         if (signal.aborted || generation !== fetchGenerationRef.current) return;
         setOccurrences(res.results);
@@ -131,24 +137,7 @@ export default function GlobeViewer({
         }
       }
     },
-    // Refetch when these filters change; add new filter keys here and in lib/gbif searchOccurrences params
-    [
-      selectedCountryCode,
-      filters.geometry,
-      filters.taxonKey,
-      filters.taxonKeys,
-      filters.year,
-      filters.eventDate,
-      filters.iucnRedListCategory,
-      filters.basisOfRecord,
-      filters.continent,
-      filters.country,
-      filters.datasetKey,
-      filters.institutionCode,
-      filters.limit,
-      filters.offset,
-      drawnPolygon,
-    ]
+    [selectedCountryCode, drawnPolygon]
   );
 
   const hasTaxonFilter =

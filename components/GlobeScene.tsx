@@ -6,15 +6,7 @@ import * as Cesium from 'cesium';
 import type { GBIFOccurrence } from '@/types/gbif';
 import type { Bounds, DrawnRegion, LonLat } from '@/lib/geometry';
 import { CESIUM_ION_TOKEN } from '@/lib/ion';
-import {
-  MAX_OCCURRENCES_FOR_ENTITIES,
-  SAVE_OCCURRENCE_EVENT,
-  VIEWER_CONTEXT_OPTIONS,
-} from './globe/constants';
-import {
-  EXPORT_PDF_CANVAS_READY_EVENT,
-  EXPORT_PDF_EVENT,
-} from './globe/export-utils';
+import { MAX_OCCURRENCES_FOR_ENTITIES, VIEWER_CONTEXT_OPTIONS } from './globe/constants';
 import {
   type BaseMapType,
   type SceneModeType,
@@ -131,6 +123,14 @@ export default function GlobeScene({
     return getDefaultImageryProvider();
   }, [isClient]);
 
+  // Cesium >= 1.104 replaced the Viewer `imageryProvider` option with `baseLayer`. Passing the
+  // old option is silently ignored, which made the Viewer boot with Ion world imagery (a failing
+  // network request without a token) before BaseMapSync swapped it out.
+  const baseLayer = useMemo(
+    () => (baseImageryProvider ? new Cesium.ImageryLayer(baseImageryProvider) : undefined),
+    [baseImageryProvider],
+  );
+
   useEffect(() => {
     let cancelled = false;
     if (!ionEnabled) {
@@ -151,7 +151,7 @@ export default function GlobeScene({
     };
   }, [ionEnabled]);
 
-  if (!isClient || !baseImageryProvider) return null;
+  if (!isClient || !baseImageryProvider || !baseLayer) return null;
 
   return (
     <Viewer
@@ -168,7 +168,7 @@ export default function GlobeScene({
       scene3DOnly={false}
       requestRenderMode={false}
       terrainProvider={terrain ?? undefined}
-      imageryProvider={baseImageryProvider}
+      baseLayer={baseLayer}
       contextOptions={VIEWER_CONTEXT_OPTIONS}
     >
       <CameraTiltConstraints sceneMode={sceneMode} />
@@ -207,7 +207,6 @@ export default function GlobeScene({
             occurrences={occurrences}
             sceneMode={sceneMode}
             pointsHidden={pointsHidden}
-            savedOccurrenceKeys={savedOccurrenceKeys}
             selectedOccurrenceKey={displayedOccurrenceKey ?? undefined}
             onPickedKey={handlePickedKey}
           />
