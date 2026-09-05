@@ -30,7 +30,6 @@ import MenuIcon from '@mui/icons-material/Menu';
 import Check from '@mui/icons-material/Check';
 import BookmarkAdd from '@mui/icons-material/BookmarkAdd';
 import Bookmark from '@mui/icons-material/Bookmark';
-import BookmarkBorder from '@mui/icons-material/BookmarkBorder';
 import DeleteOutline from '@mui/icons-material/DeleteOutline';
 import IconButton from '@mui/material/IconButton';
 import CircularProgress from '@mui/material/CircularProgress';
@@ -42,6 +41,7 @@ import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
 import DialogActions from '@mui/material/DialogActions';
 import { REGIONS } from '@/lib/regions';
+import { ION_TOKEN_CONFIGURED } from '@/lib/ion';
 import type { Bounds } from '@/lib/geometry';
 import FilterForm from './FilterForm';
 import ImportSummaryContent from './map-top-bar/ImportSummaryContent';
@@ -125,7 +125,8 @@ export default function MapTopBar({
   const [aboutMenuAnchor, setAboutMenuAnchor] = useState<null | HTMLElement>(null);
   const [savedMenuAnchor, setSavedMenuAnchor] = useState<null | HTMLElement>(null);
   const [moreMenuAnchor, setMoreMenuAnchor] = useState<null | HTMLElement>(null);
-  const placeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Out-of-order responses must not overwrite results for the latest query.
+  const placeRequestSeqRef = useRef(0);
   const moreButtonAnchorRef = useRef<HTMLElement | null>(null);
 
   const openExportDialog = useCallback((format: ExportDataFormat) => {
@@ -133,6 +134,55 @@ export default function MapTopBar({
     setMoreMenuAnchor(null);
     setExportDialogFormat(format);
   }, []);
+
+  const hasExportableData = occurrenceCount > 0 || visibleOccurrenceCount > 0;
+  const hasExportActions = Boolean(onExportImage || onExportGeoJSON || onExportCSV || onExportPDF);
+
+  /** Same export entries for the desktop Export menu and the mobile overflow menu. */
+  const renderExportMenuItems = (keyPrefix: string, closeMenu: () => void, withHints: boolean) =>
+    [
+      onExportImage && (
+        <MenuItem
+          key={`${keyPrefix}-img`}
+          onClick={() => {
+            onExportImage();
+            closeMenu();
+          }}
+        >
+          <ListItemIcon>
+            <ImageOutlined fontSize="small" />
+          </ListItemIcon>
+          <ListItemText primary="Export as image" />
+        </MenuItem>
+      ),
+      onExportGeoJSON && (
+        <MenuItem key={`${keyPrefix}-geojson`} onClick={() => openExportDialog('geojson')} disabled={!hasExportableData}>
+          <ListItemIcon>
+            <MapOutlined fontSize="small" />
+          </ListItemIcon>
+          <ListItemText primary="Export as GeoJSON" secondary={withHints && !hasExportableData ? 'No data' : undefined} />
+        </MenuItem>
+      ),
+      onExportCSV && (
+        <MenuItem key={`${keyPrefix}-csv`} onClick={() => openExportDialog('csv')} disabled={!hasExportableData}>
+          <ListItemIcon>
+            <TableChartOutlined fontSize="small" />
+          </ListItemIcon>
+          <ListItemText primary="Export as CSV" secondary={withHints && !hasExportableData ? 'No data' : undefined} />
+        </MenuItem>
+      ),
+      onExportPDF && (
+        <MenuItem key={`${keyPrefix}-pdf`} onClick={() => openExportDialog('pdf')} disabled={!hasExportableData}>
+          <ListItemIcon>
+            <PictureAsPdfOutlined fontSize="small" />
+          </ListItemIcon>
+          <ListItemText
+            primary="Export as PDF"
+            secondary={withHints ? (!hasExportableData ? 'No data' : 'Species summary & filter info') : undefined}
+          />
+        </MenuItem>
+      ),
+    ].filter(Boolean);
 
   const handleExportConfirm = useCallback(
     (opts: ExportDataOptions) => {
@@ -144,20 +194,16 @@ export default function MapTopBar({
     [exportDialogFormat, onExportGeoJSON, onExportCSV, onExportPDF]
   );
 
-  const hasExportableData = occurrenceCount > 0 || visibleOccurrenceCount > 0;
-
   const fetchPlaces = useCallback(async (q: string) => {
-    if (!q || q.length < 2) {
-      setPlaceResults([]);
-      return;
-    }
+    const seq = ++placeRequestSeqRef.current;
     setPlaceLoading(true);
     try {
       const res = await fetch(`/api/places/search?q=${encodeURIComponent(q)}`);
       const data = (await res.json()) as {
-        results: Array<{ display_name: string; place_id: number; bounds: Bounds; country_code?: string }>;
+        results?: Array<{ display_name: string; place_id: number; bounds: Bounds; country_code?: string }>;
       };
-      const list = (data.results ?? []).map((r) => ({
+      if (seq !== placeRequestSeqRef.current) return;
+      const list: RegionOption[] = (data.results ?? []).map((r) => ({
         id: `place-${r.place_id}`,
         label: r.display_name,
         group: 'Places',
@@ -166,27 +212,22 @@ export default function MapTopBar({
       }));
       setPlaceResults(list);
     } catch {
-      setPlaceResults([]);
+      if (seq === placeRequestSeqRef.current) setPlaceResults([]);
     } finally {
-      setPlaceLoading(false);
+      if (seq === placeRequestSeqRef.current) setPlaceLoading(false);
     }
   }, []);
 
   useEffect(() => {
     const trimmed = placeQuery.trim();
     if (trimmed.length < 2) {
+      placeRequestSeqRef.current += 1;
       setPlaceResults([]);
       setPlaceLoading(false);
       return;
     }
-    if (placeTimeoutRef.current) clearTimeout(placeTimeoutRef.current);
-    placeTimeoutRef.current = setTimeout(() => {
-      fetchPlaces(trimmed);
-      placeTimeoutRef.current = null;
-    }, PLACES_DEBOUNCE_MS);
-    return () => {
-      if (placeTimeoutRef.current) clearTimeout(placeTimeoutRef.current);
-    };
+    const timeout = setTimeout(() => fetchPlaces(trimmed), PLACES_DEBOUNCE_MS);
+    return () => clearTimeout(timeout);
   }, [placeQuery, fetchPlaces]);
 
   const staticOptions = useMemo(() => {
@@ -571,39 +612,7 @@ export default function MapTopBar({
             <ListItemText primary={`Saved occurrences (${savedOccurrences.length})`} />
           </MenuItem>
         )}
-        {(onExportImage || onExportGeoJSON || onExportCSV || onExportPDF) &&
-          [
-            onExportImage && (
-              <MenuItem
-                key="more-export-img"
-                onClick={() => {
-                  onExportImage();
-                  setMoreMenuAnchor(null);
-                }}
-              >
-                <ListItemIcon><ImageOutlined fontSize="small" /></ListItemIcon>
-                <ListItemText primary="Export as image" />
-              </MenuItem>
-            ),
-            onExportGeoJSON && (
-              <MenuItem key="more-export-geojson" onClick={() => openExportDialog('geojson')} disabled={!hasExportableData}>
-                <ListItemIcon><MapOutlined fontSize="small" /></ListItemIcon>
-                <ListItemText primary="Export as GeoJSON" />
-              </MenuItem>
-            ),
-            onExportCSV && (
-              <MenuItem key="more-export-csv" onClick={() => openExportDialog('csv')} disabled={!hasExportableData}>
-                <ListItemIcon><TableChartOutlined fontSize="small" /></ListItemIcon>
-                <ListItemText primary="Export as CSV" />
-              </MenuItem>
-            ),
-            onExportPDF && (
-              <MenuItem key="more-export-pdf" onClick={() => openExportDialog('pdf')} disabled={!hasExportableData}>
-                <ListItemIcon><PictureAsPdfOutlined fontSize="small" /></ListItemIcon>
-                <ListItemText primary="Export as PDF" />
-              </MenuItem>
-            ),
-          ].filter(Boolean)}
+        {hasExportActions && renderExportMenuItems('more-export', () => setMoreMenuAnchor(null), false)}
         {onSceneModeChange && (
           <MenuItem
             onClick={() => {
@@ -740,7 +749,7 @@ export default function MapTopBar({
           <input
             type="file"
             ref={importInputRef}
-            accept=".csv,.json,.txt,.zip,text/csv,application/json,application/zip"
+            accept=".csv,.tsv,.json,.txt,.zip,text/csv,text/tab-separated-values,application/json,application/zip"
             style={{ display: 'none' }}
             onChange={(e) => {
               const file = e.target.files?.[0];
@@ -763,7 +772,7 @@ export default function MapTopBar({
                 setImportDialogOpen(true);
               }
             }}
-            aria-label="Import GBIF dataset (CSV or JSON)"
+            aria-label="Import GBIF dataset (CSV, TSV, JSON or Darwin Core Archive)"
             aria-haspopup={importedOccurrenceCount > 0 ? 'dialog' : undefined}
             aria-expanded={importedOccurrenceCount > 0 ? Boolean(importSummaryAnchor) : undefined}
             sx={{ minWidth: 0, display: { xs: 'none', md: 'inline-flex' } }}
@@ -802,7 +811,8 @@ export default function MapTopBar({
             <DialogTitle>Import GBIF-style data</DialogTitle>
             <DialogContent dividers>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-                Import a GBIF-style occurrence dataset as CSV or JSON. Files must include at least{' '}
+                Import a GBIF-style occurrence dataset as CSV/TSV, JSON, or a GBIF download ZIP (simple CSV or Darwin
+                Core Archive). Files must include at least{' '}
                 <code style={{ marginLeft: 2, marginRight: 2 }}>decimalLatitude</code>
                 {' and '}
                 <code style={{ marginLeft: 2, marginRight: 2 }}>decimalLongitude</code>
@@ -845,12 +855,14 @@ export default function MapTopBar({
           <Button
             variant="outlined"
             size="small"
-            startIcon={savedOccurrences.length > 0 ? <Bookmark /> : <BookmarkBorder />}
+            startIcon={<Bookmark />}
             onClick={(e) => setSavedOccurrencesAnchor(e.currentTarget)}
-            aria-label={savedOccurrences.length > 0 ? `Saved occurrences (${savedOccurrences.length})` : 'Saved occurrences'}
+            aria-label={`Saved occurrences (${savedOccurrences.length})`}
+            aria-haspopup="true"
+            aria-expanded={Boolean(savedOccurrencesAnchor)}
             sx={{ minWidth: 0, display: { xs: 'none', md: 'inline-flex' } }}
           >
-            Saved{savedOccurrences.length > 0 ? ` (${savedOccurrences.length})` : ''}
+            Saved ({savedOccurrences.length})
           </Button>
           <Menu
             anchorEl={savedOccurrencesAnchor}
@@ -860,41 +872,37 @@ export default function MapTopBar({
             transformOrigin={{ vertical: 'top', horizontal: 'left' }}
             slotProps={{ paper: { sx: { minWidth: 280, maxWidth: 'min(400px, calc(100vw - 24px))' } } }}
           >
-            {savedOccurrences.length === 0 ? (
-              <MenuItem disabled>No saved occurrences</MenuItem>
-            ) : (
-              savedOccurrences.map((occ) => {
-                const name = occ.vernacularName?.trim() || occ.scientificName || `Occurrence ${occ.key}`;
-                return (
-                  <MenuItem
-                    key={occ.key}
-                    onClick={() => {
-                      setSavedOccurrencesAnchor(null);
-                      onSelectOccurrence?.(occ.key);
+            {savedOccurrences.map((occ) => {
+              const name = occ.vernacularName?.trim() || occ.scientificName || `Occurrence ${occ.gbifKey ?? occ.key}`;
+              return (
+                <MenuItem
+                  key={occ.key}
+                  onClick={() => {
+                    setSavedOccurrencesAnchor(null);
+                    onSelectOccurrence?.(occ.key);
+                  }}
+                  sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}
+                >
+                  <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</span>
+                  <IconButton
+                    size="small"
+                    aria-label={`Remove ${name} from saved`}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      onRemoveSavedOccurrence?.(occ.key);
                     }}
-                    sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}
                   >
-                    <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</span>
-                    <IconButton
-                      size="small"
-                      aria-label={`Remove ${name} from saved`}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        onRemoveSavedOccurrence?.(occ.key);
-                      }}
-                    >
-                      <DeleteOutline fontSize="small" />
-                    </IconButton>
-                  </MenuItem>
-                );
-              })
-            )}
+                    <DeleteOutline fontSize="small" />
+                  </IconButton>
+                </MenuItem>
+              );
+            })}
           </Menu>
         </>
       )}
 
-      {(onExportImage || onExportGeoJSON || onExportCSV || onExportPDF) && (
+      {hasExportActions && (
         <>
           <Button
             variant="outlined"
@@ -917,61 +925,7 @@ export default function MapTopBar({
             transformOrigin={{ vertical: 'top', horizontal: 'right' }}
             slotProps={{ paper: { sx: { mt: 1, maxWidth: 'calc(100vw - 24px)' } } }}
           >
-            {[
-              onExportImage && (
-                <MenuItem
-                  key="export-img"
-                  onClick={() => {
-                    onExportImage();
-                    setExportMenuAnchor(null);
-                  }}
-                >
-                  <ListItemIcon>
-                    <ImageOutlined fontSize="small" />
-                  </ListItemIcon>
-                  <ListItemText primary="Export as image" />
-                </MenuItem>
-              ),
-              onExportGeoJSON && (
-                <MenuItem
-                  key="export-geojson"
-                  onClick={() => openExportDialog('geojson')}
-                  disabled={!hasExportableData}
-                >
-                  <ListItemIcon>
-                    <MapOutlined fontSize="small" />
-                  </ListItemIcon>
-                  <ListItemText primary="Export as GeoJSON" secondary={!hasExportableData ? 'No data' : undefined} />
-                </MenuItem>
-              ),
-              onExportCSV && (
-                <MenuItem
-                  key="export-csv"
-                  onClick={() => openExportDialog('csv')}
-                  disabled={!hasExportableData}
-                >
-                  <ListItemIcon>
-                    <TableChartOutlined fontSize="small" />
-                  </ListItemIcon>
-                  <ListItemText primary="Export as CSV" secondary={!hasExportableData ? 'No data' : undefined} />
-                </MenuItem>
-              ),
-              onExportPDF && (
-                <MenuItem
-                  key="export-pdf"
-                  onClick={() => openExportDialog('pdf')}
-                  disabled={!hasExportableData}
-                >
-                  <ListItemIcon>
-                    <PictureAsPdfOutlined fontSize="small" />
-                  </ListItemIcon>
-                  <ListItemText
-                    primary="Export as PDF"
-                    secondary={!hasExportableData ? 'No data' : 'Species summary & filter info'}
-                  />
-                </MenuItem>
-              ),
-            ].filter(Boolean)}
+            {renderExportMenuItems('export', () => setExportMenuAnchor(null), true)}
           </Menu>
         </>
       )}
@@ -1035,6 +989,7 @@ export default function MapTopBar({
                 ? [
                     <MenuItem
                       key="photorealistic3d"
+                      disabled={!ION_TOKEN_CONFIGURED}
                       onClick={() => {
                         onPhotorealistic3DChange(!photorealistic3D);
                       }}
@@ -1047,7 +1002,7 @@ export default function MapTopBar({
                       {!photorealistic3D && <ListItemIcon sx={{ minWidth: 32 }} />}
                       <ListItemText
                         primary="Photorealistic 3D"
-                        secondary="3D buildings overlay"
+                        secondary={ION_TOKEN_CONFIGURED ? '3D buildings overlay' : 'Requires a Cesium Ion token'}
                       />
                     </MenuItem>,
                     <Divider key="photorealistic-divider" sx={{ my: 1 }} />,
@@ -1057,14 +1012,22 @@ export default function MapTopBar({
                 ? [
                     <ListSubheader key="base-subheader" sx={{ lineHeight: 2 }}>Base map</ListSubheader>,
                     ...[
-                      { id: 'bing' as const, primary: 'Bing Aerial', secondary: 'Satellite imagery (Cesium Ion)' },
+                      {
+                        id: 'bing' as const,
+                        primary: 'Bing Aerial',
+                        secondary: ION_TOKEN_CONFIGURED
+                          ? 'Satellite imagery (Cesium Ion)'
+                          : 'Requires a Cesium Ion token',
+                        disabled: !ION_TOKEN_CONFIGURED,
+                      },
                       { id: 'osm' as const, primary: 'OpenStreetMap', secondary: 'Street map' },
                       { id: 'opentopomap' as const, primary: 'OpenTopoMap', secondary: 'Terrain and contours' },
                       { id: 'positron' as const, primary: 'CartoDB Positron', secondary: 'Light, minimal style' },
                       { id: 'dark-matter' as const, primary: 'CartoDB Dark Matter', secondary: 'Dark style' },
-                    ].map(({ id, primary, secondary }) => (
+                    ].map(({ id, primary, secondary, disabled }) => (
                       <MenuItem
                         key={id}
+                        disabled={disabled}
                         onClick={() => {
                           onBaseMapChange(id);
                           setViewMenuAnchor(null);
@@ -1083,62 +1046,62 @@ export default function MapTopBar({
                 : []),
             ].filter(Boolean)}
           </Menu>
-          <Box
-            aria-hidden="true"
-            sx={{
-              mx: 1,
-              width: '1px',
-              height: 20,
-              alignSelf: 'center',
-              backgroundColor: '#ffffff',
-              opacity: 0.9,
-              display: { xs: 'none', md: 'block' },
-            }}
-          />
-          <Button
-            variant="outlined"
-            size="small"
-            startIcon={<InfoOutlined />}
-            endIcon={<ArrowDropDown sx={{ display: { xs: 'none', md: 'block' } }} />}
-            onClick={(e) => setAboutMenuAnchor(e.currentTarget)}
-            aria-label="About"
-            aria-haspopup="true"
-            aria-expanded={Boolean(aboutMenuAnchor)}
-            sx={{ minWidth: 0, display: { xs: 'none', md: 'inline-flex' }, '& .MuiButton-startIcon': { mr: { xs: 0, md: 0.5 } } }}
-          >
-            <Box component="span" sx={{ display: { xs: 'none', md: 'inline' } }}>About</Box>
-          </Button>
-          <IconButton
-            size="small"
-            aria-label="Help: how this tool works"
-            onClick={() => setHelpOpen(true)}
-            sx={{
-              color: 'rgba(255,255,255,0.9)',
-              p: 0.5,
-              display: { xs: 'none', md: 'inline-flex' },
-              '&:hover': { backgroundColor: 'rgba(255,255,255,0.08)' },
-            }}
-          >
-            <HelpOutline fontSize="small" />
-          </IconButton>
-          <IconButton
-            component="a"
-            href={githubUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            size="small"
-            aria-label="View on GitHub"
-            sx={{
-              color: 'rgba(255,255,255,0.9)',
-              p: 0.5,
-              display: { xs: 'none', md: 'inline-flex' },
-              '&:hover': { backgroundColor: 'rgba(255,255,255,0.08)' },
-            }}
-          >
-            <GitHub fontSize="small" />
-          </IconButton>
         </>
       )}
+      <Box
+        aria-hidden="true"
+        sx={{
+          mx: 1,
+          width: '1px',
+          height: 20,
+          alignSelf: 'center',
+          backgroundColor: '#ffffff',
+          opacity: 0.9,
+          display: { xs: 'none', md: 'block' },
+        }}
+      />
+      <Button
+        variant="outlined"
+        size="small"
+        startIcon={<InfoOutlined />}
+        endIcon={<ArrowDropDown />}
+        onClick={(e) => setAboutMenuAnchor(e.currentTarget)}
+        aria-label="About"
+        aria-haspopup="true"
+        aria-expanded={Boolean(aboutMenuAnchor)}
+        sx={{ minWidth: 0, display: { xs: 'none', md: 'inline-flex' } }}
+      >
+        About
+      </Button>
+      <IconButton
+        size="small"
+        aria-label="Help: how this tool works"
+        onClick={() => setHelpOpen(true)}
+        sx={{
+          color: 'rgba(255,255,255,0.9)',
+          p: 0.5,
+          display: { xs: 'none', md: 'inline-flex' },
+          '&:hover': { backgroundColor: 'rgba(255,255,255,0.08)' },
+        }}
+      >
+        <HelpOutline fontSize="small" />
+      </IconButton>
+      <IconButton
+        component="a"
+        href={githubUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        size="small"
+        aria-label="View on GitHub"
+        sx={{
+          color: 'rgba(255,255,255,0.9)',
+          p: 0.5,
+          display: { xs: 'none', md: 'inline-flex' },
+          '&:hover': { backgroundColor: 'rgba(255,255,255,0.08)' },
+        }}
+      >
+        <GitHub fontSize="small" />
+      </IconButton>
       </Box>
 
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>

@@ -1,8 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback, useRef } from 'react';
-
-const LIGHTBOX_EVENT = 'gbif-globe-lightbox';
+import { LIGHTBOX_EVENT } from './globe/constants';
 
 /** Only allow https URLs (e.g. GBIF image cache) to avoid javascript: or data: in img src. */
 function isAllowedImageUrl(url: unknown): url is string {

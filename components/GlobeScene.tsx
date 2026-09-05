@@ -5,6 +5,7 @@ import { Viewer } from 'resium';
 import * as Cesium from 'cesium';
 import type { GBIFOccurrence } from '@/types/gbif';
 import type { Bounds, DrawnRegion, LonLat } from '@/lib/geometry';
+import { CESIUM_ION_TOKEN } from '@/lib/ion';
 import {
   MAX_OCCURRENCES_FOR_ENTITIES,
   SAVE_OCCURRENCE_EVENT,
@@ -117,13 +118,11 @@ export default function GlobeScene({
   }, []);
 
   useEffect(() => {
-    const token = process.env.NEXT_PUBLIC_CESIUM_ION_TOKEN;
-    const trimmed = token?.trim();
-    if (!trimmed || typeof Cesium === 'undefined' || !Cesium.Ion) {
+    if (CESIUM_ION_TOKEN == null || typeof Cesium === 'undefined' || !Cesium.Ion) {
       setIonEnabled(false);
       return;
     }
-    Cesium.Ion.defaultAccessToken = trimmed;
+    Cesium.Ion.defaultAccessToken = CESIUM_ION_TOKEN;
     setIonEnabled(true);
   }, []);
 

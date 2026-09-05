@@ -24,6 +24,7 @@ import {
 import type { Bounds, DrawnRegion, LonLat } from '@/lib/geometry';
 import { boundsToWktPolygon, coordsToWktPolygon, padBounds } from '@/lib/geometry';
 import { DEFAULT_OCCURRENCE_LIMIT } from '@/lib/gbif';
+import { ION_TOKEN_CONFIGURED } from '@/lib/ion';
 import { generateOccurrencePdf } from '@/lib/pdf-export';
 import { parseOccurrencesFile } from '@/lib/import-occurrences';
 import { getDisplayedOccurrences } from '@/lib/displayed-occurrences';
@@ -54,8 +55,12 @@ const REGION_ID_PLACE = 'place';
 const VIEW_STORAGE_KEY = 'gbif-globe-view';
 const VALID_SCENE_MODES = ['3D', '2D'] as const;
 const VALID_BASE_MAPS = ['bing', 'osm', 'positron', 'dark-matter', 'opentopomap'] as const;
+type BaseMapId = (typeof VALID_BASE_MAPS)[number];
 
-function loadViewFromStorage(): { sceneMode: '3D' | '2D'; baseMap: typeof VALID_BASE_MAPS[number] } | null {
+/** Bing imagery needs a Cesium Ion token; without one, default to a free basemap so the menu matches what's shown. */
+const DEFAULT_BASE_MAP: BaseMapId = ION_TOKEN_CONFIGURED ? 'bing' : 'osm';
+
+function loadViewFromStorage(): { sceneMode: '3D' | '2D'; baseMap: BaseMapId } | null {
   if (typeof window === 'undefined') return null;
   try {
     const raw = localStorage.getItem(VIEW_STORAGE_KEY);
@@ -64,11 +69,12 @@ function loadViewFromStorage(): { sceneMode: '3D' | '2D'; baseMap: typeof VALID_
     // Backward compatibility: previously stored "Columbus" should now behave like 2D.
     const storedScene = p.sceneMode === 'Columbus' ? '2D' : p.sceneMode;
     const sceneMode = VALID_SCENE_MODES.includes(storedScene as (typeof VALID_SCENE_MODES)[number]) ? storedScene : null;
-    const baseMap = VALID_BASE_MAPS.includes(p.baseMap as (typeof VALID_BASE_MAPS)[number]) ? p.baseMap : null;
+    let baseMap = VALID_BASE_MAPS.includes(p.baseMap as BaseMapId) ? (p.baseMap as BaseMapId) : null;
+    if (baseMap === 'bing' && !ION_TOKEN_CONFIGURED) baseMap = 'osm';
     if (sceneMode != null || baseMap != null) {
       return {
         sceneMode: (sceneMode ?? '3D') as '3D' | '2D',
-        baseMap: (baseMap ?? 'bing') as (typeof VALID_BASE_MAPS)[number],
+        baseMap: baseMap ?? DEFAULT_BASE_MAP,
       };
     }
   } catch {
@@ -135,7 +141,7 @@ export default function Home() {
   } | null>(null);
   const [drawRegionMode, setDrawRegionMode] = useState(false);
   const [sceneMode, setSceneMode] = useState<'3D' | '2D'>('3D');
-  const [baseMap, setBaseMap] = useState<'bing' | 'osm' | 'positron' | 'dark-matter' | 'opentopomap'>('bing');
+  const [baseMap, setBaseMap] = useState<BaseMapId>(DEFAULT_BASE_MAP);
   const [photorealistic3D, setPhotorealistic3D] = useState(false);
   const [selectedYear, setSelectedYear] = useState<number | null>(null);
   const [selectedMonth, setSelectedMonth] = useState<number | null>(null);

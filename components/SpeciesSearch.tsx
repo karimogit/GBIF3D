@@ -42,11 +42,14 @@ export default function SpeciesSearch({
   const [options, setOptions] = useState<SpeciesOption[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Responses can arrive out of order; only the latest request may update the options.
+  const requestSeqRef = useRef(0);
 
   const fetchSuggestions = useCallback(async (q: string) => {
+    const seq = ++requestSeqRef.current;
     if (!q || q.length < 2) {
       setOptions([]);
+      setLoading(false);
       return;
     }
     setLoading(true);
@@ -56,6 +59,7 @@ export default function SpeciesSearch({
         suggestSpecies(q, 25),
         searchSpeciesByVernacular(q, 25),
       ]);
+      if (seq !== requestSeqRef.current) return;
 
       const byKey = new Map<number, SpeciesOption>();
 
@@ -84,27 +88,25 @@ export default function SpeciesSearch({
 
       setOptions(Array.from(byKey.values()).slice(0, 40));
     } catch (err) {
+      if (seq !== requestSeqRef.current) return;
       setError(err instanceof Error ? err.message : 'Search failed');
       setOptions([]);
     } finally {
-      setLoading(false);
+      if (seq === requestSeqRef.current) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    if (!inputValue.trim()) {
+    const q = inputValue.trim();
+    if (!q) {
+      requestSeqRef.current += 1;
       setOptions([]);
       setError(null);
+      setLoading(false);
       return;
     }
-    timeoutRef.current = setTimeout(() => {
-      fetchSuggestions(inputValue.trim());
-      timeoutRef.current = null;
-    }, DEBOUNCE_MS);
-    return () => {
-      if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    };
+    const timeout = setTimeout(() => fetchSuggestions(q), DEBOUNCE_MS);
+    return () => clearTimeout(timeout);
   }, [inputValue, fetchSuggestions]);
 
   return (
