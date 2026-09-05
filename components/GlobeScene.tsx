@@ -32,7 +32,6 @@ import {
   DrawRegionHandler,
   DrawnRegionOverlay,
   EnsureBaseImagery,
-  EnvironmentalOverlaySync,
   ExportImageHandler,
   ExportPdfCanvasHandler,
   FlyToBounds,
@@ -57,7 +56,6 @@ interface GlobeSceneProps {
   drawnPolygon?: LonLat[] | null;
   sceneMode?: SceneModeType;
   baseMap?: BaseMapType;
-  environmentalLayer?: 'none' | 'landcover';
   photorealistic3D?: boolean;
   loading?: boolean;
   error?: string | null;
@@ -77,7 +75,6 @@ export default function GlobeScene({
   drawnPolygon,
   sceneMode = '3D',
   baseMap = 'osm',
-  environmentalLayer = 'none',
   photorealistic3D = false,
   savedOccurrenceKeys,
   selectedOccurrenceKey,
@@ -86,10 +83,11 @@ export default function GlobeScene({
 }: GlobeSceneProps) {
   const [isClient, setIsClient] = useState(false);
   const [ionEnabled, setIonEnabled] = useState(false);
-  const [cameraTilt, setCameraTilt] = useState(0);
+  const [pointsHidden, setPointsHidden] = useState(false);
   const [terrain, setTerrain] = useState<Cesium.TerrainProvider | null>(null);
   const [imageUrlsByKey, setImageUrlsByKey] = useState<Record<number, string[]>>({});
   const [pickedOccurrenceKey, setPickedOccurrenceKey] = useState<number | null>(null);
+  const [pickRequestId, setPickRequestId] = useState(0);
 
   const usePrimitiveMode = occurrences.length > MAX_OCCURRENCES_FOR_ENTITIES;
   const displayedOccurrenceKey = selectedOccurrenceKey ?? pickedOccurrenceKey;
@@ -97,6 +95,7 @@ export default function GlobeScene({
   useEffect(() => {
     if (selectedOccurrenceKey != null) {
       setPickedOccurrenceKey(selectedOccurrenceKey);
+      setPickRequestId((id) => id + 1);
     }
   }, [selectedOccurrenceKey, selectedOccurrenceRequestId]);
 
@@ -106,6 +105,11 @@ export default function GlobeScene({
 
   const handlePickedKey = useCallback((key: number) => {
     setPickedOccurrenceKey(key);
+    setPickRequestId((id) => id + 1);
+  }, []);
+
+  const handleDeselected = useCallback(() => {
+    setPickedOccurrenceKey(null);
   }, []);
 
   useEffect(() => {
@@ -169,13 +173,15 @@ export default function GlobeScene({
       contextOptions={VIEWER_CONTEXT_OPTIONS}
     >
       <CameraTiltConstraints sceneMode={sceneMode} />
-      <CameraTiltReporter onTiltChange={setCameraTilt} />
+      <CameraTiltReporter onPointsHiddenChange={setPointsHidden} />
       <SceneModeSync sceneMode={sceneMode} />
       <EnsureBaseImagery provider={baseImageryProvider} />
       <BaseMapSync baseMap={baseMap} ionEnabled={ionEnabled} />
-      <EnvironmentalOverlaySync layer={environmentalLayer} />
       <Photorealistic3DSync enabled={photorealistic3D && ionEnabled} />
-      <OccurrenceImageLoader onImageLoaded={handleOccurrenceImageLoaded} />
+      <OccurrenceImageLoader
+        occurrenceKey={usePrimitiveMode ? displayedOccurrenceKey : null}
+        onImageLoaded={handleOccurrenceImageLoaded}
+      />
       <ExportImageHandler />
       <ExportPdfCanvasHandler />
       <InfoBoxLinkFix />
@@ -201,24 +207,25 @@ export default function GlobeScene({
           <OccurrencePointsPrimitive
             occurrences={occurrences}
             sceneMode={sceneMode}
-            cameraTilt={cameraTilt}
-            imageUrlsByKey={imageUrlsByKey}
+            pointsHidden={pointsHidden}
             savedOccurrenceKeys={savedOccurrenceKeys}
             selectedOccurrenceKey={displayedOccurrenceKey ?? undefined}
             onPickedKey={handlePickedKey}
           />
           <SelectedOccurrenceInfoSync
             displayedKey={displayedOccurrenceKey}
+            selectionRequestId={pickRequestId}
             occurrences={occurrences}
             imageUrlsByKey={imageUrlsByKey}
             savedOccurrenceKeys={savedOccurrenceKeys}
+            onDeselected={handleDeselected}
           />
         </>
       ) : (
         <OccurrenceEntities
           occurrences={occurrences}
           sceneMode={sceneMode}
-          cameraTilt={cameraTilt}
+          pointsHidden={pointsHidden}
           imageUrlsByKey={imageUrlsByKey}
           savedOccurrenceKeys={savedOccurrenceKeys}
           selectedOccurrenceKey={selectedOccurrenceKey}

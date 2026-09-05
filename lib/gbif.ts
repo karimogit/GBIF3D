@@ -20,6 +20,10 @@ const OCCURRENCE_PAGE_MAX = 300;
 const OCCURRENCE_LIMIT = OCCURRENCE_PAGE_MAX;
 /** Max total results we allow (chunked fetching). GBIF search API can be paged up to 100k total. */
 export const OCCURRENCE_MAX_TOTAL = 100_000;
+/** Smallest "Max results" the UI allows. */
+export const OCCURRENCE_MIN_TOTAL = 100;
+/** Default "Max results" used by the UI when the user hasn't set one. */
+export const DEFAULT_OCCURRENCE_LIMIT = 1000;
 /** Chunk size per API request — must not exceed GBIF's 300 per page. */
 const OCCURRENCE_CHUNK_SIZE = OCCURRENCE_PAGE_MAX;
 /** Delay between chunk requests (ms) to reduce rate-limit (429) risk. */

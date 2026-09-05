@@ -11,6 +11,7 @@ const IUCN_COLORS: Record<string, string> = {
   NT: '#FBC02D',
   LC: '#2E7D32',
   DD: '#757575',
+  NE: '#BDBDBD',
   NA: '#BDBDBD',
 };
 
@@ -23,7 +24,8 @@ const IUCN_LABELS: Record<string, string> = {
   NT: 'Near Threatened',
   LC: 'Least Concern',
   DD: 'Data Deficient',
-  NA: 'Not Assessed',
+  NE: 'Not Evaluated',
+  NA: 'Not Applicable',
 };
 
 let occurrencePointScaleByDistance: Cesium.NearFarScalar | undefined;
@@ -54,10 +56,17 @@ function formatCoord(value: number, type: 'lat' | 'lon'): string {
   return `${deg}°${min.toFixed(2)}′${dir}`;
 }
 
-function escapeHtml(s: string): string {
-  const div = document.createElement('div');
-  div.textContent = s;
-  return div.innerHTML;
+const HTML_ESCAPES: Record<string, string> = {
+  '&': '&amp;',
+  '<': '&lt;',
+  '>': '&gt;',
+  '"': '&quot;',
+  "'": '&#39;',
+};
+
+/** Escape for both text content and double-quoted attribute values. */
+export function escapeHtml(s: string): string {
+  return s.replace(/[&<>"']/g, (c) => HTML_ESCAPES[c]);
 }
 
 export function colorForOccurrence(occ: GBIFOccurrence): Cesium.Color {
@@ -81,7 +90,8 @@ export function occurrenceToDescription(
       : sci || vern || 'Unknown species';
   const date = occ.eventDate || (occ.year ? String(occ.year) : '—');
   const loc = occ.locality || occ.countryCode || '—';
-  const gbifUrl = occ.key > 0 ? `https://www.gbif.org/occurrence/${occ.key}` : null;
+  const gbifKey = occ.key > 0 ? occ.key : occ.gbifKey;
+  const gbifUrl = gbifKey != null && gbifKey > 0 ? `https://www.gbif.org/occurrence/${gbifKey}` : null;
   const validUrls = (imageUrls ?? []).filter((u) => typeof u === 'string' && /^https:\/\//.test(u)).slice(0, 4);
   const fullUrls = validUrls.map(toFullSizeUrl);
   const photoBox =
