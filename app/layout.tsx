@@ -37,11 +37,10 @@ export default function RootLayout({
         />
       </head>
       <body>
-        {/* Cesium base URL and pre-built bundle — must run before app so window.Cesium is set. Using plain script avoids Next.js preload so the "not used" warning goes away. */}
+        {/* Cesium is bundled from the npm package; this only tells it where to find Workers/Assets (public/cesium). */}
         <script
           dangerouslySetInnerHTML={{ __html: "window.CESIUM_BASE_URL='/cesium';" }}
         />
-        <script src="/cesium/Cesium.js" />
         <a href="#main-content" className="skip-link">
           Skip to main content
         </a>
