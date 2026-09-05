@@ -10,6 +10,7 @@ import Typography from '@mui/material/Typography';
 import GlobeViewer from '@/components/GlobeViewerDynamic';
 import MapTopBar from '@/components/MapTopBar';
 import OccurrenceTimeline from '@/components/OccurrenceTimeline';
+import IucnLegend from '@/components/IucnLegend';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import Lightbox from '@/components/Lightbox';
 import type { OccurrenceFilters } from '@/types/gbif';
@@ -515,13 +516,32 @@ export default function Home() {
             onSelectedOccurrenceHandled={handleSelectedOccurrenceHandled}
           />
         </ErrorBoundary>
-        <OccurrenceTimeline
-          occurrences={allOccurrences}
-          selectedYear={selectedYear}
-          selectedMonth={selectedMonth}
-          onYearChange={setSelectedYear}
-          onMonthChange={setSelectedMonth}
-        />
+        {/* Bottom overlays stack vertically so the legend never covers the timeline. */}
+        <div
+          style={{
+            position: 'absolute',
+            left: 'max(24px, env(safe-area-inset-left))',
+            right: 'max(24px, env(safe-area-inset-right))',
+            bottom: 'max(24px, env(safe-area-inset-bottom))',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 8,
+            zIndex: 900,
+            pointerEvents: 'none',
+          }}
+        >
+          <div style={{ alignSelf: 'flex-start' }}>
+            <IucnLegend />
+          </div>
+          <OccurrenceTimeline
+            occurrences={allOccurrences}
+            selectedYear={selectedYear}
+            selectedMonth={selectedMonth}
+            onYearChange={setSelectedYear}
+            onMonthChange={setSelectedMonth}
+          />
+        </div>
         <MapTopBar
           selectedRegionId={selectedRegionId}
           onRegionChange={(id) => {
