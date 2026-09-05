@@ -23,7 +23,7 @@ export function getDisplayedOccurrences(
           return pointInBounds(lon, lat, selectedRegionBounds);
         })
       : occurrences;
-  let combined = [...apiInRegion, ...(importedOccurrences ?? [])];
+  const combined = [...apiInRegion, ...(importedOccurrences ?? [])];
   if (timeFilterYear == null) return combined;
   return combined.filter((o) => {
     const year = occurrenceYear(o);

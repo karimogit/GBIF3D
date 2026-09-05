@@ -3,11 +3,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Tooltip from '@mui/material/Tooltip';
 import GlobeScene from './GlobeScene';
-import { searchOccurrencesChunked, OCCURRENCE_MAX_TOTAL } from '@/lib/gbif';
+import { searchOccurrencesChunked, DEFAULT_OCCURRENCE_LIMIT, GBIFApiError } from '@/lib/gbif';
 import { boundsToWktPolygon, coordsToWktPolygon } from '@/lib/geometry';
 import type { Bounds, DrawnRegion, LonLat } from '@/lib/geometry';
 import type { GBIFOccurrence, OccurrenceFilters } from '@/types/gbif';
-import { GBIFApiError } from '@/lib/gbif';
 import { getDisplayedOccurrences } from '@/lib/displayed-occurrences';
 
 const DEFAULT_BOUNDS: Bounds = {
@@ -30,21 +29,17 @@ interface GlobeViewerProps {
   selectedCountryCode?: string | null;
   /** When set, fly camera to these bounds (e.g. after picking a region). Omit or pass null to skip flying (e.g. when "Current view" is selected). */
   flyToBounds?: Bounds | null;
-  /** Called when the camera view bounds change (e.g. for "Save current view") */
-  onViewBoundsChange?: (bounds: Bounds) => void;
   /** When true, click on the globe to draw a polygon region */
   drawRegionMode?: boolean;
   onDrawnRegion?: (region: DrawnRegion) => void;
-  /** Drawn region bounding box to display on the globe */
+  /** Region outline to display on the globe (drawn region or a saved polygon favorite) */
   drawnBounds?: Bounds | null;
-  /** Polygon vertices when the user drew a custom shape */
+  /** Polygon vertices for the active region when it is a custom shape; used for fetch geometry and display filtering */
   drawnPolygon?: LonLat[] | null;
   /** Scene mode: 3D globe or 2D map (from top bar View menu) */
   sceneMode?: '3D' | '2D';
   /** Base map / imagery (from View menu) */
   baseMap?: 'bing' | 'osm' | 'positron' | 'dark-matter' | 'opentopomap';
-  /** Environmental overlay (Tools: land cover) */
-  environmentalLayer?: 'none' | 'landcover';
   /** Google Photorealistic 3D Tiles overlay (View menu) */
   photorealistic3D?: boolean;
   /** When set, show only occurrences from this year (from timeline). */
@@ -69,14 +64,12 @@ export default function GlobeViewer({
   selectedRegionBounds = null,
   selectedCountryCode = null,
   flyToBounds: flyToBoundsProp = undefined,
-  onViewBoundsChange,
   drawRegionMode = false,
   onDrawnRegion,
   drawnBounds = null,
   drawnPolygon = null,
   sceneMode = '3D',
   baseMap = 'bing',
-  environmentalLayer = 'none',
   photorealistic3D = false,
   timeFilterYear = null,
   timeFilterMonth = null,
@@ -98,29 +91,31 @@ export default function GlobeViewer({
   const onOccurrencesChangeRef = useRef(onOccurrencesChange);
   onOccurrencesChangeRef.current = onOccurrencesChange;
 
-  const handleBoundsChange = useCallback(
-    (b: Bounds) => {
-      setViewBounds(b);
-      onViewBoundsChange?.(b);
-    },
-    [onViewBoundsChange]
-  );
+  const handleBoundsChange = useCallback((b: Bounds) => {
+    setViewBounds(b);
+  }, []);
+
+  // Latest filters are read at fetch time; the fetch effect below decides *when* to refetch via filterFetchKey,
+  // so UI-only filter fields (e.g. selectedSpeciesOptions) don't trigger requests.
+  const filtersRef = useRef(filters);
+  filtersRef.current = filters;
 
   const fetchOccurrences = useCallback(
     async (bounds: Bounds, signal: AbortSignal, generation: number) => {
       setLoading(true);
       setError(null);
       try {
+        const currentFilters = filtersRef.current;
         const geometry =
           drawnPolygon && drawnPolygon.length >= 3
             ? coordsToWktPolygon(drawnPolygon)
             : boundsToWktPolygon(bounds);
-        const country = selectedCountryCode?.trim().toUpperCase() ?? filters.country;
+        const country = selectedCountryCode?.trim().toUpperCase() ?? currentFilters.country;
         const res = await searchOccurrencesChunked({
-          ...filters,
+          ...currentFilters,
           geometry,
           country: country || undefined,
-          limit: filters.limit ?? 1000,
+          limit: currentFilters.limit ?? DEFAULT_OCCURRENCE_LIMIT,
         }, { signal });
         if (signal.aborted || generation !== fetchGenerationRef.current) return;
         setOccurrences(res.results);
@@ -142,24 +137,7 @@ export default function GlobeViewer({
         }
       }
     },
-    // Refetch when these filters change; add new filter keys here and in lib/gbif searchOccurrences params
-    [
-      selectedCountryCode,
-      filters.geometry,
-      filters.taxonKey,
-      filters.taxonKeys,
-      filters.year,
-      filters.eventDate,
-      filters.iucnRedListCategory,
-      filters.basisOfRecord,
-      filters.continent,
-      filters.country,
-      filters.datasetKey,
-      filters.institutionCode,
-      filters.limit,
-      filters.offset,
-      drawnPolygon,
-    ]
+    [selectedCountryCode, drawnPolygon]
   );
 
   const hasTaxonFilter =
@@ -273,7 +251,6 @@ export default function GlobeViewer({
         drawnPolygon={drawnPolygon}
         sceneMode={sceneMode}
         baseMap={baseMap === 'bing' ? 'bing-aerial' : baseMap}
-        environmentalLayer={environmentalLayer}
         photorealistic3D={photorealistic3D}
         loading={loading}
         error={error}
@@ -289,7 +266,7 @@ export default function GlobeViewer({
           { label: 'NT', color: '#FBC02D', title: 'Near Threatened' },
           { label: 'LC', color: '#2E7D32', title: 'Least Concern' },
           { label: 'DD', color: '#757575', title: 'Data Deficient' },
-          { label: 'NA', color: '#BDBDBD', title: 'Not Assessed' },
+          { label: 'NE', color: '#BDBDBD', title: 'Not Evaluated / Not Applicable' },
         ];
         return (
           <div
@@ -386,7 +363,7 @@ export default function GlobeViewer({
               zIndex: 999,
             }}
           >
-            {`Loading occurrences from GBIF… (up to ${(filters.limit ?? OCCURRENCE_MAX_TOTAL).toLocaleString()} records)`}
+            {`Loading occurrences from GBIF… (up to ${(filters.limit ?? DEFAULT_OCCURRENCE_LIMIT).toLocaleString()} records)`}
           </div>
         </>
       )}

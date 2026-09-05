@@ -5,15 +5,8 @@ import { Viewer } from 'resium';
 import * as Cesium from 'cesium';
 import type { GBIFOccurrence } from '@/types/gbif';
 import type { Bounds, DrawnRegion, LonLat } from '@/lib/geometry';
-import {
-  MAX_OCCURRENCES_FOR_ENTITIES,
-  SAVE_OCCURRENCE_EVENT,
-  VIEWER_CONTEXT_OPTIONS,
-} from './globe/constants';
-import {
-  EXPORT_PDF_CANVAS_READY_EVENT,
-  EXPORT_PDF_EVENT,
-} from './globe/export-utils';
+import { CESIUM_ION_TOKEN } from '@/lib/ion';
+import { MAX_OCCURRENCES_FOR_ENTITIES, VIEWER_CONTEXT_OPTIONS } from './globe/constants';
 import {
   type BaseMapType,
   type SceneModeType,
@@ -32,7 +25,6 @@ import {
   DrawRegionHandler,
   DrawnRegionOverlay,
   EnsureBaseImagery,
-  EnvironmentalOverlaySync,
   ExportImageHandler,
   ExportPdfCanvasHandler,
   FlyToBounds,
@@ -57,7 +49,6 @@ interface GlobeSceneProps {
   drawnPolygon?: LonLat[] | null;
   sceneMode?: SceneModeType;
   baseMap?: BaseMapType;
-  environmentalLayer?: 'none' | 'landcover';
   photorealistic3D?: boolean;
   loading?: boolean;
   error?: string | null;
@@ -77,7 +68,6 @@ export default function GlobeScene({
   drawnPolygon,
   sceneMode = '3D',
   baseMap = 'osm',
-  environmentalLayer = 'none',
   photorealistic3D = false,
   savedOccurrenceKeys,
   selectedOccurrenceKey,
@@ -86,10 +76,11 @@ export default function GlobeScene({
 }: GlobeSceneProps) {
   const [isClient, setIsClient] = useState(false);
   const [ionEnabled, setIonEnabled] = useState(false);
-  const [cameraTilt, setCameraTilt] = useState(0);
+  const [pointsHidden, setPointsHidden] = useState(false);
   const [terrain, setTerrain] = useState<Cesium.TerrainProvider | null>(null);
   const [imageUrlsByKey, setImageUrlsByKey] = useState<Record<number, string[]>>({});
   const [pickedOccurrenceKey, setPickedOccurrenceKey] = useState<number | null>(null);
+  const [pickRequestId, setPickRequestId] = useState(0);
 
   const usePrimitiveMode = occurrences.length > MAX_OCCURRENCES_FOR_ENTITIES;
   const displayedOccurrenceKey = selectedOccurrenceKey ?? pickedOccurrenceKey;
@@ -97,6 +88,7 @@ export default function GlobeScene({
   useEffect(() => {
     if (selectedOccurrenceKey != null) {
       setPickedOccurrenceKey(selectedOccurrenceKey);
+      setPickRequestId((id) => id + 1);
     }
   }, [selectedOccurrenceKey, selectedOccurrenceRequestId]);
 
@@ -106,6 +98,11 @@ export default function GlobeScene({
 
   const handlePickedKey = useCallback((key: number) => {
     setPickedOccurrenceKey(key);
+    setPickRequestId((id) => id + 1);
+  }, []);
+
+  const handleDeselected = useCallback(() => {
+    setPickedOccurrenceKey(null);
   }, []);
 
   useEffect(() => {
@@ -113,13 +110,11 @@ export default function GlobeScene({
   }, []);
 
   useEffect(() => {
-    const token = process.env.NEXT_PUBLIC_CESIUM_ION_TOKEN;
-    const trimmed = token?.trim();
-    if (!trimmed || typeof Cesium === 'undefined' || !Cesium.Ion) {
+    if (CESIUM_ION_TOKEN == null || typeof Cesium === 'undefined' || !Cesium.Ion) {
       setIonEnabled(false);
       return;
     }
-    Cesium.Ion.defaultAccessToken = trimmed;
+    Cesium.Ion.defaultAccessToken = CESIUM_ION_TOKEN;
     setIonEnabled(true);
   }, []);
 
@@ -127,6 +122,14 @@ export default function GlobeScene({
     if (!isClient) return undefined;
     return getDefaultImageryProvider();
   }, [isClient]);
+
+  // Cesium >= 1.104 replaced the Viewer `imageryProvider` option with `baseLayer`. Passing the
+  // old option is silently ignored, which made the Viewer boot with Ion world imagery (a failing
+  // network request without a token) before BaseMapSync swapped it out.
+  const baseLayer = useMemo(
+    () => (baseImageryProvider ? new Cesium.ImageryLayer(baseImageryProvider) : undefined),
+    [baseImageryProvider],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -148,7 +151,7 @@ export default function GlobeScene({
     };
   }, [ionEnabled]);
 
-  if (!isClient || !baseImageryProvider) return null;
+  if (!isClient || !baseImageryProvider || !baseLayer) return null;
 
   return (
     <Viewer
@@ -165,17 +168,19 @@ export default function GlobeScene({
       scene3DOnly={false}
       requestRenderMode={false}
       terrainProvider={terrain ?? undefined}
-      imageryProvider={baseImageryProvider}
+      baseLayer={baseLayer}
       contextOptions={VIEWER_CONTEXT_OPTIONS}
     >
       <CameraTiltConstraints sceneMode={sceneMode} />
-      <CameraTiltReporter onTiltChange={setCameraTilt} />
+      <CameraTiltReporter onPointsHiddenChange={setPointsHidden} />
       <SceneModeSync sceneMode={sceneMode} />
       <EnsureBaseImagery provider={baseImageryProvider} />
       <BaseMapSync baseMap={baseMap} ionEnabled={ionEnabled} />
-      <EnvironmentalOverlaySync layer={environmentalLayer} />
       <Photorealistic3DSync enabled={photorealistic3D && ionEnabled} />
-      <OccurrenceImageLoader onImageLoaded={handleOccurrenceImageLoaded} />
+      <OccurrenceImageLoader
+        occurrenceKey={usePrimitiveMode ? displayedOccurrenceKey : null}
+        onImageLoaded={handleOccurrenceImageLoaded}
+      />
       <ExportImageHandler />
       <ExportPdfCanvasHandler />
       <InfoBoxLinkFix />
@@ -201,24 +206,24 @@ export default function GlobeScene({
           <OccurrencePointsPrimitive
             occurrences={occurrences}
             sceneMode={sceneMode}
-            cameraTilt={cameraTilt}
-            imageUrlsByKey={imageUrlsByKey}
-            savedOccurrenceKeys={savedOccurrenceKeys}
+            pointsHidden={pointsHidden}
             selectedOccurrenceKey={displayedOccurrenceKey ?? undefined}
             onPickedKey={handlePickedKey}
           />
           <SelectedOccurrenceInfoSync
             displayedKey={displayedOccurrenceKey}
+            selectionRequestId={pickRequestId}
             occurrences={occurrences}
             imageUrlsByKey={imageUrlsByKey}
             savedOccurrenceKeys={savedOccurrenceKeys}
+            onDeselected={handleDeselected}
           />
         </>
       ) : (
         <OccurrenceEntities
           occurrences={occurrences}
           sceneMode={sceneMode}
-          cameraTilt={cameraTilt}
+          pointsHidden={pointsHidden}
           imageUrlsByKey={imageUrlsByKey}
           savedOccurrenceKeys={savedOccurrenceKeys}
           selectedOccurrenceKey={selectedOccurrenceKey}

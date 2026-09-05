@@ -20,7 +20,7 @@ describe('GBIF API', () => {
     clearCache();
     mockGet.mockReset();
     jest.restoreAllMocks();
-    delete (global as typeof globalThis & { fetch?: unknown }).fetch;
+    Reflect.deleteProperty(globalThis, 'fetch');
   });
 
   describe('searchOccurrences', () => {

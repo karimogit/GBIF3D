@@ -1,4 +1,5 @@
 /** Shared Cesium globe event names and rendering thresholds. */
+import type { ContextOptions } from 'cesium';
 
 export const SAVE_OCCURRENCE_EVENT = 'gbif-globe-save-occurrence';
 export const EXPORT_IMAGE_EVENT = 'gbif-globe-export-image';
@@ -28,7 +29,11 @@ export const MAX_OCCURRENCES_FOR_ENTITIES = 6000;
 /** How often we report camera bounds while the user is interacting (ms). */
 export const BOUNDS_REPORT_THROTTLE_MS = 400;
 
-/** Stable context options so Resium does not recreate the Viewer on every render. */
-export const VIEWER_CONTEXT_OPTIONS: { preserveDrawingBuffer: boolean } = {
-  preserveDrawingBuffer: true,
+/**
+ * Stable context options so Resium does not recreate the Viewer on every render.
+ * `preserveDrawingBuffer` must live under `webgl` (WebGLContextAttributes) or Cesium
+ * silently ignores it and `canvas.toDataURL()` exports can come back blank.
+ */
+export const VIEWER_CONTEXT_OPTIONS: ContextOptions = {
+  webgl: { preserveDrawingBuffer: true },
 };

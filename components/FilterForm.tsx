@@ -14,21 +14,42 @@ import ExpandMore from '@mui/icons-material/ExpandMore';
 import ExpandLess from '@mui/icons-material/ExpandLess';
 import SpeciesSearch, { type SpeciesOption } from './SpeciesSearch';
 import type { OccurrenceFilters, SelectedSpeciesOption } from '@/types/gbif';
-import { TAXON_CLASS_KEYS, OCCURRENCE_MAX_TOTAL } from '@/lib/gbif';
+import {
+  TAXON_CLASS_KEYS,
+  OCCURRENCE_MAX_TOTAL,
+  OCCURRENCE_MIN_TOTAL,
+  DEFAULT_OCCURRENCE_LIMIT,
+} from '@/lib/gbif';
 
 /** Stable empty array so Autocomplete value reference doesn't change every render (fixes "can't type" in species field). */
 const EMPTY_SPECIES_OPTIONS: SpeciesOption[] = [];
 
 const IUCN_ANY = 'any';
+/** GBIF `iucnRedListCategory` values. */
 const IUCN_OPTIONS = [
   { value: IUCN_ANY, label: 'Any' },
+  { value: 'EX', label: 'Extinct' },
+  { value: 'EW', label: 'Extinct in the Wild' },
   { value: 'CR', label: 'Critically Endangered' },
   { value: 'EN', label: 'Endangered' },
   { value: 'VU', label: 'Vulnerable' },
   { value: 'NT', label: 'Near Threatened' },
   { value: 'LC', label: 'Least Concern' },
   { value: 'DD', label: 'Data Deficient' },
+  { value: 'NE', label: 'Not Evaluated' },
 ];
+
+function clampLimit(raw: string | number): number {
+  const n = Math.floor(Number(raw));
+  if (!Number.isFinite(n)) return DEFAULT_OCCURRENCE_LIMIT;
+  return Math.min(OCCURRENCE_MAX_TOTAL, Math.max(OCCURRENCE_MIN_TOTAL, n));
+}
+
+function todayIsoDate(): string {
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
 
 const BASIS_ANY = '';
 const BASIS_OPTIONS = [
@@ -85,8 +106,20 @@ export default function FilterForm({
     setDateTo(to);
   }, [filters.eventDate]);
 
+  // Keep the raw text while typing; clamp only on blur so "1" doesn't jump to "100" mid-entry.
+  const [limitText, setLimitText] = useState(String(filters.limit ?? DEFAULT_OCCURRENCE_LIMIT));
+  useEffect(() => {
+    setLimitText(String(filters.limit ?? DEFAULT_OCCURRENCE_LIMIT));
+  }, [filters.limit]);
+
   const updateFilter = (key: keyof OccurrenceFilters, value: unknown) => {
     onFiltersChange({ ...filters, [key]: value });
+  };
+
+  const commitLimit = () => {
+    const next = clampLimit(limitText);
+    setLimitText(String(next));
+    if (next !== filters.limit) updateFilter('limit', next);
   };
 
   const handleSpeciesChange = (options: SpeciesOption[] | SpeciesOption | null) => {
@@ -112,20 +145,17 @@ export default function FilterForm({
       updateFilter('eventDate', undefined);
       return;
     }
-    // Ensure start <= end (GBIF returns 400 for invalid range)
-    const [start, end] = from <= to ? [from, to] : [to, from];
+    // Ensure start <= end and neither is in the future (GBIF returns 400 for both)
+    const today = todayIsoDate();
+    let [start, end] = from <= to ? [from, to] : [to, from];
+    if (end > today) end = today;
+    if (start > today) start = today;
     if (start !== dateFrom.trim() || end !== dateTo.trim()) {
       setDateFrom(start);
       setDateTo(end);
     }
-    // Warn if end date is in the future (GBIF rejects future dates)
-    const today = new Date().toISOString().split('T')[0];
-    if (end > today) {
-      // Still set the filter so user can see their input, but API will skip it
-      updateFilter('eventDate', `${start}/${end}`);
-    } else {
-      updateFilter('eventDate', `${start}/${end}`);
-    }
+    const next = `${start}/${end}`;
+    if (next !== filters.eventDate) updateFilter('eventDate', next);
   };
 
   const handleTaxonClass = (classKey: string) => {
@@ -233,13 +263,15 @@ export default function FilterForm({
         label="Max results"
         type="number"
         size="small"
-        value={filters.limit ?? 10000}
-        onChange={(e) =>
-          updateFilter('limit', Math.min(OCCURRENCE_MAX_TOTAL, Math.max(100, Number(e.target.value) || 10000)))
-        }
+        value={limitText}
+        onChange={(e) => setLimitText(e.target.value)}
+        onBlur={commitLimit}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') commitLimit();
+        }}
         sx={{ mt: 2 }}
-        inputProps={{ min: 100, max: OCCURRENCE_MAX_TOTAL, step: 1000 }}
-        helperText={`100–${(OCCURRENCE_MAX_TOTAL / 1000).toFixed(0)}k; fetched in chunks of 300 (GBIF API limit).`}
+        inputProps={{ min: OCCURRENCE_MIN_TOTAL, max: OCCURRENCE_MAX_TOTAL, step: 100 }}
+        helperText={`${OCCURRENCE_MIN_TOTAL}–${(OCCURRENCE_MAX_TOTAL / 1000).toFixed(0)}k; fetched in chunks of 300 (GBIF API limit).`}
       />
       <Box sx={{ mt: 2 }}>
         <Button

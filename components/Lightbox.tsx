@@ -1,8 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback, useRef } from 'react';
-
-const LIGHTBOX_EVENT = 'gbif-globe-lightbox';
+import { LIGHTBOX_EVENT } from './globe/constants';
 
 /** Only allow https URLs (e.g. GBIF image cache) to avoid javascript: or data: in img src. */
 function isAllowedImageUrl(url: unknown): url is string {
@@ -201,6 +200,8 @@ export default function Lightbox() {
           </button>
         </>
       )}
+      {/* Photos come from arbitrary GBIF media hosts; next/image would need every host allow-listed. */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={currentUrl}
         alt="Occurrence photo"

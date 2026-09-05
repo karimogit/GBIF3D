@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useCesium } from 'resium';
 import * as Cesium from 'cesium';
 import type { GBIFOccurrence } from '@/types/gbif';
@@ -25,7 +25,7 @@ import {
   prepareCanvasForExport,
 } from './export-utils';
 import type { DrawnRegion, LonLat } from '@/lib/geometry';
-import { boundsFromCoords } from '@/lib/geometry';
+import { boundsFromCoords, boundsLonSpan } from '@/lib/geometry';
 import {
   restoreCameraState,
   saveCameraState,
@@ -58,88 +58,108 @@ export function CameraTiltConstraints({ sceneMode }: { sceneMode: SceneModeType 
   return null;
 }
 
-/** Reports the camera tilt angle (pitch) so we can hide dots when viewing from an angle. */
-export function CameraTiltReporter({ onTiltChange }: { onTiltChange: (tiltRadians: number) => void }) {
-  const cesium = useCesium();
-  useEffect(() => {
-    const v = cesium?.viewer;
-    if (!v?.camera) return;
-    
-    let rafId: number | null = null;
-    let cancelled = false;
-    
-    const updateTilt = () => {
-      if (cancelled || !v?.camera) return;
-      try {
-        // Camera pitch: 0 = looking straight down, PI/2 = looking horizontally
-        const pitch = v.camera.pitch;
-        onTiltChange(pitch);
-      } catch {
-        // ignore
-      }
-      rafId = requestAnimationFrame(updateTilt);
-    };
-    
-    rafId = requestAnimationFrame(updateTilt);
-    
-    return () => {
-      cancelled = true;
-      if (rafId != null) cancelAnimationFrame(rafId);
-    };
-  }, [cesium?.viewer, onTiltChange]);
-  return null;
-}
+/** Camera pitch (radians) above which dots are hidden: 0 = straight down, -PI/2 = horizon-level. */
+const POINTS_HIDDEN_PITCH_THRESHOLD = -0.5;
 
-/** When user selects an occurrence entity, fetches its images from our API and notifies parent. */
-export function OccurrenceImageLoader({
-  onImageLoaded,
+/**
+ * Reports whether the camera is tilted past the threshold where dots should be hidden.
+ * Only fires when the boolean flips, so camera movement doesn't re-render the scene every frame.
+ */
+export function CameraTiltReporter({
+  onPointsHiddenChange,
 }: {
-  onImageLoaded: (occurrenceKey: number, urls: string[]) => void;
+  onPointsHiddenChange: (hidden: boolean) => void;
 }) {
   const cesium = useCesium();
   useEffect(() => {
-    let v: (typeof cesium)['viewer'];
-    try {
-      v = cesium?.viewer;
-      if (v?.selectedEntityChanged == null) return;
-    } catch {
-      return;
-    }
-    const viewer = v;
-    let cancelled = false;
-    let activeController: AbortController | null = null;
-    let requestSeq = 0;
-    const remove = viewer.selectedEntityChanged.addEventListener((entity: Cesium.Entity | undefined) => {
-      if (cancelled) return;
-      activeController?.abort();
-      const key = entity?.id != null ? Number(entity.id) : NaN;
-      if (!Number.isInteger(key) || key < 1) {
-        return;
-      }
-      const controller = new AbortController();
-      activeController = controller;
-      const seq = ++requestSeq;
-      fetch(`/api/occurrence/${key}/image`, { signal: controller.signal })
-        .then((res) => res.json())
-        .then((data: { urls?: string[] }) => {
-          if (!cancelled && !controller.signal.aborted && seq === requestSeq && Array.isArray(data?.urls)) {
-            onImageLoaded(key, data.urls);
-          }
-        })
-        .catch(() => {
-          if (!cancelled && !controller.signal.aborted && seq === requestSeq) onImageLoaded(key, []);
-        });
-    });
-    return () => {
-      cancelled = true;
-      activeController?.abort();
+    const viewer = cesium?.viewer;
+    if (!viewer?.camera) return;
+
+    let lastHidden: boolean | null = null;
+    const update = () => {
       try {
-        if (typeof remove === 'function') remove();
+        const hidden = viewer.camera.pitch > POINTS_HIDDEN_PITCH_THRESHOLD;
+        if (hidden !== lastHidden) {
+          lastHidden = hidden;
+          onPointsHiddenChange(hidden);
+        }
+      } catch {
+        // viewer may be destroyed
+      }
+    };
+    update();
+    viewer.camera.changed.addEventListener(update);
+    return () => {
+      try {
+        viewer.camera.changed.removeEventListener(update);
       } catch {
         // ignore
       }
     };
-  }, [cesium?.viewer, onImageLoaded]);
+  }, [cesium?.viewer, onPointsHiddenChange]);
+  return null;
+}
+
+/**
+ * Fetches occurrence images from our API when an occurrence is selected.
+ * Entity mode: listens to Cesium's selection. Primitive mode: driven by `occurrenceKey`, since the
+ * selected entity is the shared info entity and carries no key.
+ */
+export function OccurrenceImageLoader({
+  occurrenceKey,
+  onImageLoaded,
+}: {
+  occurrenceKey?: number | null;
+  onImageLoaded: (occurrenceKey: number, urls: string[]) => void;
+}) {
+  const cesium = useCesium();
+  const fetchedKeysRef = useRef(new Set<number>());
+  const activeControllerRef = useRef<AbortController | null>(null);
+  const requestSeqRef = useRef(0);
+
+  const load = useCallback(
+    (key: number) => {
+      if (!Number.isInteger(key) || key < 1 || fetchedKeysRef.current.has(key)) return;
+      activeControllerRef.current?.abort();
+      const controller = new AbortController();
+      activeControllerRef.current = controller;
+      const seq = ++requestSeqRef.current;
+      fetch(`/api/occurrence/${key}/image`, { signal: controller.signal })
+        .then((res) => res.json())
+        .then((data: { urls?: string[] }) => {
+          if (controller.signal.aborted || seq !== requestSeqRef.current) return;
+          fetchedKeysRef.current.add(key);
+          onImageLoaded(key, Array.isArray(data?.urls) ? data.urls : []);
+        })
+        .catch(() => {
+          if (!controller.signal.aborted && seq === requestSeqRef.current) onImageLoaded(key, []);
+        });
+    },
+    [onImageLoaded]
+  );
+
+  useEffect(() => {
+    if (occurrenceKey != null) load(occurrenceKey);
+  }, [occurrenceKey, load]);
+
+  useEffect(() => {
+    const viewer = cesium?.viewer;
+    if (viewer?.selectedEntityChanged == null) return;
+    const remove = viewer.selectedEntityChanged.addEventListener((entity: Cesium.Entity | undefined) => {
+      if (entity == null || entity.id === SELECTED_INFO_ENTITY_ID) return;
+      load(Number(entity.id));
+    });
+    return () => {
+      try {
+        remove();
+      } catch {
+        // ignore
+      }
+    };
+  }, [cesium?.viewer, load]);
+
+  useEffect(() => () => activeControllerRef.current?.abort(), []);
+
   return null;
 }
 
@@ -304,14 +324,10 @@ export function InfoBoxLinkFix() {
 
 export function CameraBoundsReporter({ onBoundsChange }: { onBoundsChange: (b: Bounds) => void }) {
   const cesium = useCesium();
+  const viewer = cesium?.viewer;
   useEffect(() => {
-    let v: typeof cesium.viewer;
-    try {
-      v = cesium?.viewer;
-      if (v == null || !v.scene?.canvas || !v.camera) return;
-    } catch {
-      return;
-    }
+    const v = viewer;
+    if (v == null || !v.scene?.canvas || !v.camera) return;
     let lastReport = 0;
     let throttleTimer: ReturnType<typeof setTimeout> | null = null;
     const reportBounds = () => {
@@ -367,33 +383,23 @@ export function CameraBoundsReporter({ onBoundsChange }: { onBoundsChange: (b: B
         // viewer may already be destroyed
       }
     };
-  }, [cesium?.viewer, onBoundsChange]);
+  }, [viewer, onBoundsChange]);
   return null;
 }
 
 export function FlyToBounds({ bounds }: { bounds: Bounds }) {
   const cesium = useCesium();
+  const viewer = cesium?.viewer;
+  const { west, south, east, north } = bounds;
   useEffect(() => {
-    if (!bounds) return;
-    let viewer: typeof cesium.viewer;
-    try {
-      viewer = cesium?.viewer;
-      if (viewer == null || !viewer.scene?.canvas || !viewer.camera) return;
-    } catch {
-      return;
-    }
-    const { west, south, east, north } = bounds;
+    if (viewer == null || !viewer.scene?.canvas || !viewer.camera) return;
     const rectangle = Cesium.Rectangle.fromDegrees(west, south, east, north);
     try {
-      viewer.camera.flyTo({
-        destination: rectangle,
-        duration: 1.2,
-        complete: () => {},
-      });
+      viewer.camera.flyTo({ destination: rectangle, duration: 1.2 });
     } catch {
       // viewer may be destroyed
     }
-  }, [cesium?.viewer, bounds.west, bounds.south, bounds.east, bounds.north]);
+  }, [viewer, west, south, east, north]);
   return null;
 }
 
@@ -412,15 +418,10 @@ export function SelectOccurrence({
   onHandled?: () => void;
 }) {
   const cesium = useCesium();
+  const viewer = cesium?.viewer;
   useEffect(() => {
     if (occurrenceKey == null) return;
-    let viewer: typeof cesium.viewer;
-    try {
-      viewer = cesium?.viewer;
-      if (viewer == null || !viewer.entities || !viewer.camera) return;
-    } catch {
-      return;
-    }
+    if (viewer == null || !viewer.entities || !viewer.camera) return;
     const occ = occurrences.find((o) => o.key === occurrenceKey);
     if (!occ || occ.decimalLatitude == null || occ.decimalLongitude == null) {
       onHandled?.();
@@ -511,7 +512,7 @@ export function SelectOccurrence({
       cancelled = true;
       if (timeoutId != null) clearTimeout(timeoutId);
     };
-  }, [cesium?.viewer, occurrenceKey, requestId, occurrences, usePrimitiveMode, onHandled]);
+  }, [viewer, occurrenceKey, requestId, occurrences, usePrimitiveMode, onHandled]);
   return null;
 }
 
@@ -570,23 +571,20 @@ export function BaseMapSync({ baseMap, ionEnabled }: { baseMap: BaseMapType; ion
         .then((provider) => {
           if (cancelled) return;
           try {
-            layers.addImageryProvider(provider, 0);
+            const ionLayer = layers.addImageryProvider(provider, 0);
             layers.remove(base, true);
-            // If the provider later fails (e.g. bad token / rate limit), fall back to OSM.
-            const errorEvent = (provider as unknown as { errorEvent?: Cesium.Event }).errorEvent;
-            if (errorEvent && typeof (errorEvent as unknown as { addEventListener?: unknown }).addEventListener === 'function') {
-              const remove = (errorEvent as unknown as { addEventListener: (cb: () => void) => () => void }).addEventListener(() => {
+            // If the provider later fails (e.g. bad token / rate limit), swap in OSM for the Ion layer.
+            const errorEvent = provider.errorEvent;
+            if (errorEvent) {
+              const remove = errorEvent.addEventListener(() => {
                 try {
-                  const fallback = createImageryProvider('osm');
-                  layers.addImageryProvider(fallback, 0);
-                  // remove the failing top layer if it exists at index 1+
-                  const top = layers.get(0);
-                  if (top) layers.remove(top, true);
+                  remove();
                 } catch {
                   // ignore
                 }
                 try {
-                  remove?.();
+                  layers.addImageryProvider(createImageryProvider('osm'), 0);
+                  if (layers.contains(ionLayer)) layers.remove(ionLayer, true);
                 } catch {
                   // ignore
                 }
@@ -699,35 +697,6 @@ export function Photorealistic3DSync({ enabled }: { enabled: boolean }) {
   return null;
 }
 
-/** Optional environmental overlay (e.g. land cover / relief) as second imagery layer. */
-export function EnvironmentalOverlaySync({ layer }: { layer: 'none' | 'landcover' }) {
-  const cesium = useCesium();
-  useEffect(() => {
-    const viewer = cesium?.viewer;
-    if (viewer?.scene?.imageryLayers == null) return;
-    if (layer === 'none') {
-      // Remove overlay if present (index 1)
-      while (viewer.scene.imageryLayers.length > 1) {
-        viewer.scene.imageryLayers.remove(viewer.scene.imageryLayers.get(1));
-      }
-      return;
-    }
-    // Land cover / relief: OpenTopoMap as semi-transparent overlay (hotspots / terrain context)
-    const provider = new Cesium.UrlTemplateImageryProvider({
-      url: 'https://a.tile.opentopomap.org/{z}/{x}/{y}.png',
-      credit: 'Map tiles: © OpenTopoMap (CC-BY-SA)',
-    });
-    const existing = viewer.scene.imageryLayers.get(1);
-    if (existing) viewer.scene.imageryLayers.remove(existing, true);
-    const newLayer = viewer.scene.imageryLayers.addImageryProvider(provider, 1);
-    newLayer.alpha = 0.45;
-    return () => {
-      viewer.scene.imageryLayers.remove(newLayer, true);
-    };
-  }, [cesium?.viewer, layer]);
-  return null;
-}
-
 /** Renders the drawn region as a polygon or rectangle entity. */
 export function DrawnRegionOverlay({
   bounds,
@@ -737,15 +706,10 @@ export function DrawnRegionOverlay({
   polygon?: LonLat[];
 }) {
   const cesium = useCesium();
+  const viewer = cesium?.viewer;
+  const { west, south, east, north } = bounds;
   useEffect(() => {
-    let v: (typeof cesium)['viewer'];
-    try {
-      v = cesium?.viewer;
-      if (v == null || !v.entities) return;
-    } catch {
-      return;
-    }
-    const viewer = v;
+    if (viewer == null || !viewer.entities) return;
     const outlineColor = Cesium.Color.fromCssColorString('#78b578');
     const fillColor = Cesium.Color.fromCssColorString('#78b578').withAlpha(0.12);
 
@@ -765,7 +729,6 @@ export function DrawnRegionOverlay({
         },
       });
     } else {
-      const { west, south, east, north } = bounds;
       entity = viewer.entities.add({
         rectangle: {
           coordinates: Cesium.Rectangle.fromDegrees(west, south, east, north),
@@ -779,8 +742,25 @@ export function DrawnRegionOverlay({
     return () => {
       viewer.entities.remove(entity);
     };
-  }, [cesium?.viewer, bounds.west, bounds.south, bounds.east, bounds.north, polygon]);
+  }, [viewer, west, south, east, north, polygon]);
   return null;
+}
+
+/** Remove consecutive vertices that are within a small fraction of the polygon's extent of each other. */
+function dedupeConsecutiveVertices(vertices: LonLat[]): LonLat[] {
+  if (vertices.length < 2) return vertices;
+  const bounds = boundsFromCoords(vertices);
+  const tolerance = Math.max(1e-6, Math.max(boundsLonSpan(bounds), bounds.north - bounds.south) * 1e-3);
+  const out: LonLat[] = [vertices[0]];
+  for (let i = 1; i < vertices.length; i++) {
+    const [px, py] = out[out.length - 1];
+    const [x, y] = vertices[i];
+    if (Math.abs(x - px) > tolerance || Math.abs(y - py) > tolerance) out.push(vertices[i]);
+  }
+  const [fx, fy] = out[0];
+  const [lx, ly] = out[out.length - 1];
+  if (out.length > 1 && Math.abs(fx - lx) <= tolerance && Math.abs(fy - ly) <= tolerance) out.pop();
+  return out;
 }
 
 /** Multi-click polygon drawing on the globe; double-click or finish event completes the shape. */
@@ -792,93 +772,39 @@ export function DrawRegionHandler({
   onDrawnRegion: (region: DrawnRegion) => void;
 }) {
   const cesium = useCesium();
+  const viewer = cesium?.viewer;
   const verticesRef = useRef<LonLat[]>([]);
   const previewEntitiesRef = useRef<Cesium.Entity[]>([]);
-
-  const clearPreview = (viewer: Cesium.Viewer) => {
-    for (const entity of previewEntitiesRef.current) {
-      viewer.entities.remove(entity);
-    }
-    previewEntitiesRef.current = [];
-  };
-
-  const updatePreview = (viewer: Cesium.Viewer, vertices: LonLat[]) => {
-    clearPreview(viewer);
-    if (vertices.length === 0) return;
-
-    const pointColor = Cesium.Color.fromCssColorString('#78b578');
-    for (const [lon, lat] of vertices) {
-      const point = viewer.entities.add({
-        position: Cesium.Cartesian3.fromDegrees(lon, lat),
-        point: {
-          pixelSize: 8,
-          color: pointColor,
-          outlineColor: Cesium.Color.WHITE,
-          outlineWidth: 1,
-          disableDepthTestDistance: Number.POSITIVE_INFINITY,
-        },
-      });
-      previewEntitiesRef.current.push(point);
-    }
-
-    if (vertices.length >= 2) {
-      const positions = vertices.map(([lon, lat]) =>
-        Cesium.Cartesian3.fromDegrees(lon, lat)
-      );
-      const line = viewer.entities.add({
-        polyline: {
-          positions,
-          width: 2,
-          material: pointColor,
-          clampToGround: true,
-        },
-      });
-      previewEntitiesRef.current.push(line);
-    }
-
-    if (vertices.length >= 3) {
-      const closed = [...vertices, vertices[0]];
-      const positions = closed.map(([lon, lat]) =>
-        Cesium.Cartesian3.fromDegrees(lon, lat)
-      );
-      const poly = viewer.entities.add({
-        polygon: {
-          hierarchy: new Cesium.PolygonHierarchy(positions),
-          material: Cesium.Color.fromCssColorString('#78b578').withAlpha(0.15),
-          outline: true,
-          outlineColor: pointColor,
-          outlineWidth: 2,
-          height: 0,
-        },
-      });
-      previewEntitiesRef.current.push(poly);
-    }
-  };
-
-  const finishPolygon = (viewer: Cesium.Viewer) => {
-    const vertices = verticesRef.current;
-    if (vertices.length < 3) return;
-    clearPreview(viewer);
-    verticesRef.current = [];
-    onDrawnRegion({
-      bounds: boundsFromCoords(vertices),
-      polygon: vertices,
-    });
-  };
 
   useEffect(() => {
     if (!active) {
       verticesRef.current = [];
       return;
     }
-    let v: (typeof cesium)['viewer'];
-    try {
-      v = cesium?.viewer;
-      if (v == null || !v.scene?.canvas || !v.camera) return;
-    } catch {
-      return;
-    }
-    const viewer = v;
+    if (viewer == null || !viewer.scene?.canvas || !viewer.camera) return;
+
+    const clearPreview = () => {
+      for (const entity of previewEntitiesRef.current) viewer.entities.remove(entity);
+      previewEntitiesRef.current = [];
+    };
+
+    const updatePreview = (vertices: LonLat[]) => {
+      clearPreview();
+      previewEntitiesRef.current = addDrawPreviewEntities(viewer, vertices);
+    };
+
+    const finishPolygon = () => {
+      // A double-click also delivers two LEFT_CLICKs at (nearly) the same spot; drop the repeats.
+      const vertices = dedupeConsecutiveVertices(verticesRef.current);
+      if (vertices.length < 3) return;
+      clearPreview();
+      verticesRef.current = [];
+      onDrawnRegion({
+        bounds: boundsFromCoords(vertices),
+        polygon: vertices,
+      });
+    };
+
     const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
 
     const pickLonLat = (position: Cesium.Cartesian2): LonLat | null => {
@@ -901,23 +827,71 @@ export function DrawRegionHandler({
       const coord = pickLonLat(event.position);
       if (!coord) return;
       verticesRef.current = [...verticesRef.current, coord];
-      updatePreview(viewer, verticesRef.current);
+      updatePreview(verticesRef.current);
     }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
 
-    handler.setInputAction(() => {
-      finishPolygon(viewer);
-    }, Cesium.ScreenSpaceEventType.LEFT_DOUBLE_CLICK);
+    handler.setInputAction(finishPolygon, Cesium.ScreenSpaceEventType.LEFT_DOUBLE_CLICK);
 
-    const onFinishEvent = () => finishPolygon(viewer);
-    window.addEventListener(FINISH_DRAW_EVENT, onFinishEvent);
+    window.addEventListener(FINISH_DRAW_EVENT, finishPolygon);
 
     return () => {
       if (!handler.isDestroyed()) handler.destroy();
-      clearPreview(viewer);
+      clearPreview();
       verticesRef.current = [];
-      window.removeEventListener(FINISH_DRAW_EVENT, onFinishEvent);
+      window.removeEventListener(FINISH_DRAW_EVENT, finishPolygon);
     };
-  }, [active, cesium?.viewer, onDrawnRegion]);
+  }, [active, viewer, onDrawnRegion]);
 
   return null;
+}
+
+/** Vertex dots, connecting polyline and (from 3 vertices) a translucent fill for the in-progress polygon. */
+function addDrawPreviewEntities(viewer: Cesium.Viewer, vertices: LonLat[]): Cesium.Entity[] {
+  if (vertices.length === 0) return [];
+  const entities: Cesium.Entity[] = [];
+  const pointColor = Cesium.Color.fromCssColorString('#78b578');
+  for (const [lon, lat] of vertices) {
+    entities.push(
+      viewer.entities.add({
+        position: Cesium.Cartesian3.fromDegrees(lon, lat),
+        point: {
+          pixelSize: 8,
+          color: pointColor,
+          outlineColor: Cesium.Color.WHITE,
+          outlineWidth: 1,
+          disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        },
+      })
+    );
+  }
+
+  if (vertices.length >= 2) {
+    entities.push(
+      viewer.entities.add({
+        polyline: {
+          positions: vertices.map(([lon, lat]) => Cesium.Cartesian3.fromDegrees(lon, lat)),
+          width: 2,
+          material: pointColor,
+          clampToGround: true,
+        },
+      })
+    );
+  }
+
+  if (vertices.length >= 3) {
+    const closed = [...vertices, vertices[0]];
+    entities.push(
+      viewer.entities.add({
+        polygon: {
+          hierarchy: new Cesium.PolygonHierarchy(closed.map(([lon, lat]) => Cesium.Cartesian3.fromDegrees(lon, lat))),
+          material: pointColor.withAlpha(0.15),
+          outline: true,
+          outlineColor: pointColor,
+          outlineWidth: 2,
+          height: 0,
+        },
+      })
+    );
+  }
+  return entities;
 }

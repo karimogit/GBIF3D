@@ -26,10 +26,14 @@ export default function RootLayout({
         <link rel="icon" href="/icon.svg" type="image/svg+xml" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        {/* Root layout of a single-page app: the font applies everywhere, so the pages-router warning doesn't apply. */}
+        {/* eslint-disable-next-line @next/next/no-page-custom-font */}
         <link
           href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&display=swap"
           rel="stylesheet"
         />
+        {/* Cesium widget styles are static assets copied by scripts/postinstall-cesium.js, not a CSS module. */}
+        {/* eslint-disable-next-line @next/next/no-css-tags */}
         <link
           rel="stylesheet"
           href="/cesium/Widgets/widgets.css"
@@ -37,11 +41,10 @@ export default function RootLayout({
         />
       </head>
       <body>
-        {/* Cesium base URL and pre-built bundle — must run before app so window.Cesium is set. Using plain script avoids Next.js preload so the "not used" warning goes away. */}
+        {/* Cesium is bundled from the npm package; this only tells it where to find Workers/Assets (public/cesium). */}
         <script
           dangerouslySetInnerHTML={{ __html: "window.CESIUM_BASE_URL='/cesium';" }}
         />
-        <script src="/cesium/Cesium.js" />
         <a href="#main-content" className="skip-link">
           Skip to main content
         </a>

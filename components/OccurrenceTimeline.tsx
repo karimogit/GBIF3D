@@ -40,6 +40,17 @@ interface OccurrenceTimelineProps {
 
 const TRACK_HEIGHT = 32;
 const SEGMENT_MIN_WIDTH = 56;
+/** Space left for the year bar once the label row and padding are accounted for. */
+const YEAR_BAR_MAX_HEIGHT = TRACK_HEIGHT - 18;
+const YEAR_BAR_MIN_HEIGHT = 4;
+const MONTH_TRACK_HEIGHT = 20;
+const MONTH_BAR_MIN_HEIGHT = 3;
+
+function maxValue(values: Iterable<number>, floor: number): number {
+  let max = floor;
+  for (const v of values) if (v > max) max = v;
+  return max;
+}
 
 export default function OccurrenceTimeline({
   occurrences,
@@ -56,14 +67,14 @@ export default function OccurrenceTimeline({
     const ymMap = yearMonthCounts(occurrences);
     if (countsMap.size === 0) return { years: [] as number[], counts: countsMap, maxCount: 0, yearMonthCountsMap: ymMap };
     const sorted = Array.from(countsMap.keys()).sort((a, b) => a - b);
-    const max = Math.max(...countsMap.values(), 1);
+    const max = maxValue(countsMap.values(), 1);
     return { years: sorted, counts: countsMap, maxCount: max, yearMonthCountsMap: ymMap };
   }, [occurrences]);
 
   const monthMaxCount =
     selectedYear != null
-      ? Math.max(
-          ...Array.from({ length: 12 }, (_, i) => yearMonthCountsMap.get(`${selectedYear}-${i + 1}`) ?? 0),
+      ? maxValue(
+          Array.from({ length: 12 }, (_, i) => yearMonthCountsMap.get(`${selectedYear}-${i + 1}`) ?? 0),
           1
         )
       : 1;
@@ -129,7 +140,7 @@ export default function OccurrenceTimeline({
               const count = counts.get(year) ?? 0;
               const isSelected = selectedYear === year;
               const isHover = hoverYear === year;
-              const barHeight = maxCount > 0 ? Math.max(6, (count / maxCount) * (TRACK_HEIGHT - 8)) : 8;
+              const barHeight = Math.max(YEAR_BAR_MIN_HEIGHT, (count / maxCount) * YEAR_BAR_MAX_HEIGHT);
               return (
                 <button
                   key={year}
@@ -175,8 +186,7 @@ export default function OccurrenceTimeline({
                     <div
                       style={{
                         width: '80%',
-                        minHeight: Math.max(barHeight, 6),
-                        maxHeight: TRACK_HEIGHT - 18,
+                        height: barHeight,
                         borderRadius: 3,
                         background: isSelected ? '#4caf50' : 'rgba(255,255,255,0.6)',
                         flexShrink: 0,
@@ -228,34 +238,41 @@ export default function OccurrenceTimeline({
                   const key = `${selectedYear}-${month}`;
                   const count = yearMonthCountsMap.get(key) ?? 0;
                   const isSelected = selectedMonth === month;
-                  const h = monthMaxCount > 0 ? Math.max(4, (count / monthMaxCount) * 16) : 4;
+                  const barHeight =
+                    count > 0 ? Math.max(MONTH_BAR_MIN_HEIGHT, (count / monthMaxCount) * MONTH_TRACK_HEIGHT) : 0;
                   return (
                     <button
                       key={key}
                       type="button"
                       onClick={() => onMonthChange(isSelected ? null : month)}
                       aria-pressed={isSelected}
+                      aria-label={`${label} ${selectedYear}: ${count} occurrence${count !== 1 ? 's' : ''}`}
                       title={`${label} ${selectedYear}: ${count}`}
                       style={{
                         flex: 1,
                         minWidth: 0,
-                        height: 20,
-                        minHeight: h,
+                        height: MONTH_TRACK_HEIGHT,
                         padding: 0,
                         border: 'none',
                         borderRadius: 1,
                         cursor: 'pointer',
-                        background: isSelected ? 'rgba(76, 175, 80, 0.4)' : 'rgba(255,255,255,0.12)',
+                        background: isSelected ? 'rgba(76, 175, 80, 0.25)' : 'rgba(255,255,255,0.06)',
                         display: 'flex',
-                        alignItems: 'center',
+                        alignItems: 'flex-end',
                         justifyContent: 'center',
-                        fontSize: 8,
-                        fontWeight: 600,
-                        color: '#fff',
                         position: 'relative',
                       }}
                     >
-                      {count > 0 ? count : ''}
+                      <span
+                        aria-hidden
+                        style={{
+                          display: 'block',
+                          width: '70%',
+                          height: barHeight,
+                          borderRadius: 1,
+                          background: isSelected ? '#4caf50' : 'rgba(255,255,255,0.55)',
+                        }}
+                      />
                     </button>
                   );
                 })}

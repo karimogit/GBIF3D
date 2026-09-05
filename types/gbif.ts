@@ -4,7 +4,10 @@
  */
 
 export interface GBIFOccurrence {
+  /** GBIF occurrence key for API records; negative synthetic key for imported records. */
   key: number;
+  /** Original GBIF key of an imported record (when the file provided one). */
+  gbifKey?: number;
   speciesKey?: number;
   genusKey?: number;
   taxonKey?: number;
