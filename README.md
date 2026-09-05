@@ -18,16 +18,17 @@ Built with Next.js, Cesium (Resium), and the GBIF API.
 
 - **3D interactive globe** — Pan, zoom, tilt, and rotate using CesiumJS
 - **Region selection** — In the top bar: choose a predefined region (World, Europe, Sweden, etc.), search places by name (Nominatim), use “Current view” to follow the camera, or pick a saved favorite
-- **Draw region** — Draw a rectangle on the globe (two clicks) to fetch occurrences for that area; save it as a favorite or clear it
-- **Saved favorites** — Save current view bounds or a drawn region as a named favorite (stored in browser); quick access from the Region dropdown
+- **Draw region** — Click points on the globe to outline a polygon (double-click or **Finish** to close it) and fetch occurrences for that area; save it as a favorite or clear it. Regions crossing the antimeridian are handled (sent to GBIF as a `MULTIPOLYGON`)
+- **Saved favorites** — Save current view bounds or a drawn polygon as a named favorite (stored in browser); quick access from the Region dropdown
 - **Real-time GBIF data** — Occurrences fetched by selected region or current view bounds, plus filters
+- **Import your own data** — Load GBIF-style CSV/TSV, JSON, or a Darwin Core Archive (`.zip`) and explore it on the globe alongside live data
 - **Filters** — Species/taxon search (autocomplete), taxonomic group, date range, IUCN Red List status; advanced: Basis of Record, Continent, Country (ISO 2-letter code), Dataset key, Institution code
 - **Visualization** — Points on the globe, color-coded by IUCN threat level; points clamp to terrain when zoomed in
 - **Tooltips** — Click any point for species name, date, location, photo(s), and link to the GBIF record
 - **Terrain** — Cesium World Terrain (optional Ion token); elevation visible when zoomed; occurrence points clamp to the surface
 - **Export** — Save current view as PNG image, visible occurrences as GeoJSON or CSV, or generate a PDF report with map snapshot and species summary
 - **Accessibility** — Skip link, keyboard focus, color-blind friendly palette, aria-labels on controls
-- **Performance** — Caching to reduce API load; configurable result limit (up to 100k, fetched in chunks of 300 per request — GBIF API max)
+- **Performance** — Caching to reduce API load; configurable result limit (100–100,000, default 1,000, fetched in chunks of 300 per request — GBIF API max)
 
 ## Tech stack
 
@@ -44,20 +45,23 @@ All dependencies are open-source (MIT-compatible).
 - **No secrets in code** — The app uses only the public GBIF API; no API keys are required. The optional Cesium Ion token is read from `NEXT_PUBLIC_CESIUM_ION_TOKEN` (e.g. in Vercel env) and never committed.
 - **XSS mitigation** — Text from GBIF (species names, dates, locations) is escaped before being shown in the InfoBox.
 - **Lightbox** — Only `https://` image URLs are accepted for the photo lightbox (no `javascript:` or `data:`).
-- **API routes** — Occurrence image route validates the key; places search proxies to Nominatim with a proper User-Agent.
+- **API routes** — Occurrence image route validates the key; places search proxies to Nominatim with a proper User-Agent (set `NOMINATIM_USER_AGENT`, see [Nominatim usage policy](https://operations.osmfoundation.org/policies/nominatim/)) and is throttled to one upstream request per second.
+- **Imports** — Uploaded files are size-limited (including the uncompressed size of `.zip` entries) and rows with invalid coordinates are rejected. Imported records get synthetic negative keys so they never collide with live GBIF records.
+- **CSV export** — Non-numeric cells starting with `=`, `+`, `-`, `@`, tab or carriage return are prefixed with `'` to prevent spreadsheet formula injection.
 - **Dependencies** — Run `npm audit` and address high/critical findings before deployment.
 
 ## Caching and when data refreshes
 
-Occurrence requests to the GBIF API are **cached in memory** (per geometry + filters + offset) to reduce rate-limit risk:
+Occurrence requests to the GBIF API are **cached in memory** (per geometry + filters + offset, plus the aggregated result of a chunked query) to reduce rate-limit risk:
 
 - **When it’s used:** The same search (same region, filters, and limit) returns cached results if the entry is still valid.
 - **When it refreshes:**
-  - **After 15 minutes:** Each cache entry expires after 15 minutes. The next request for that search then calls the API again.
+  - **After 15 minutes:** Each occurrence cache entry expires after 15 minutes (other endpoints such as species suggest and place search use 5 minutes). The next request for that search then calls the API again.
+  - **When evicted:** The cache is bounded (1,000 entries / 300,000 records); least-recently-used entries are dropped first.
   - **On page reload:** The cache is empty (in-memory only), so the first load after a refresh always hits the API.
 - **Not persisted:** We don’t store the cache in `localStorage` or `sessionStorage` because occurrence responses can be large; keeping them in memory avoids storage limits and keeps the logic simple.
 
-So revisiting the same region with the same filters within 15 minutes does not call the API again until the TTL has passed or you reload the page.
+So revisiting the same region with the same filters within 15 minutes does not call the API again until the TTL has passed, the entry is evicted, or you reload the page.
 
 ## How to Use (Operating Instructions)
 
@@ -72,15 +76,15 @@ So revisiting the same region with the same filters within 15 minutes does not c
 Click **Filters** in the top bar to refine your search:
 - **Species/Taxon** — Search by scientific or common name (e.g., "bee", "Apis", "house cat"); you can add multiple species
 - **Taxonomic group** — Choose a broad category (Mammals, Birds, Plants, etc.)
-- **Date range** — Enter start and end dates (YYYY-MM-DD format)
-- **IUCN Red List** — Filter by threat status (Critically Endangered, Endangered, etc.)
+- **Date range** — Enter start and end dates (YYYY-MM-DD format); dates in the future are clamped to today
+- **IUCN Red List** — Filter by threat status (Critically Endangered, Endangered, Extinct, Not Evaluated, etc.)
 - **Advanced** — Additional options:
   - **Basis of record** — e.g., Human observation, Preserved specimen
   - **Continent** — Filter by continent
   - **Country** — ISO 2-letter code (e.g., US, GB, DE)
   - **Dataset key** — Filter by specific GBIF dataset UUID
   - **Institution code** — e.g., USNM, NHM
-- **Max results** — Set how many occurrences to fetch (100–100,000)
+- **Max results** — Set how many occurrences to fetch (100–100,000; applied when you leave the field or press Enter)
 
 ### Step 3: Explore Occurrences
 - **View points** — Each occurrence appears as a colored dot on the globe (colors indicate IUCN status)
@@ -90,21 +94,29 @@ Click **Filters** in the top bar to refine your search:
 
 ### Step 4: Draw a Custom Region (Optional)
 - Click **Draw region** in the top bar
-- Click two points on the globe to define a rectangle
+- Click points on the globe to outline a polygon; double-click (or click **Finish**) to close it
 - Occurrences will load for that area
 - Save it as a favorite from the Region dropdown for quick access later
 
-### Step 5: Export Data (Optional)
+### Step 5: Import Your Own Data (Optional)
+Click **Import** in the top bar and pick a file:
+- **CSV / TSV** — GBIF occurrence download format (columns such as `decimalLatitude`, `decimalLongitude`, `scientificName`, `eventDate`); headers are matched case-insensitively
+- **JSON** — A GBIF API response (`{ results: [...] }`) or a plain array of occurrences
+- **Darwin Core Archive (.zip)** — The `occurrence.txt` core is read directly from the archive
+
+Imported records are shown on the globe and can be exported like live data. They get negative keys so they never collide with GBIF records.
+
+### Step 6: Export Data (Optional)
 Click **Export** in the top bar to save:
 - **Image** — Current view as PNG
-- **GeoJSON** — Visible occurrences as GeoJSON
-- **CSV** — Visible occurrences as CSV
+- **GeoJSON** — Visible occurrences as GeoJSON (RFC 7946; the selected region is included as a `Polygon`/`MultiPolygon` feature)
+- **CSV** — Visible occurrences as CSV (the selected region is included as `regionName`/`regionWkt` columns)
 - **PDF** — Report with map snapshot, species summary, and filter details
 
-### Step 6: Change View Options
+### Step 7: Change View Options
 Click **View** in the top bar to:
 - Switch between **3D Globe** and **2D Map**
-- Change base map (Bing Aerial, OpenStreetMap, OpenTopoMap, etc.)
+- Change base map (OpenStreetMap, OpenTopoMap, Positron, etc.; Bing Aerial requires a Cesium Ion token)
 - Enable **Photorealistic 3D** (requires Cesium Ion token)
 
 ---
@@ -124,7 +136,17 @@ cd GBIF3D
 npm install
 ```
 
-The `postinstall` script symlinks Cesium assets to `public/cesium`. If you skip it, ensure `public/cesium` contains the Cesium build (e.g. from `node_modules/cesium/Build/Cesium`).
+The `postinstall` script links Cesium assets to `public/cesium` (symlink on macOS/Linux, junction on Windows, copy on CI or if linking fails). If you skip it, ensure `public/cesium` contains the Cesium build (e.g. from `node_modules/cesium/Build/Cesium`).
+
+### Environment variables
+
+All are optional. Put them in `.env.local` for development or in your hosting provider's environment settings.
+
+| Variable | Purpose |
+| --- | --- |
+| `NEXT_PUBLIC_CESIUM_ION_TOKEN` | [Cesium Ion](https://cesium.com/ion/) access token. Enables Cesium World Terrain, Bing base maps and Photorealistic 3D. Without it the app defaults to OpenStreetMap and a flat ellipsoid and disables the Ion-only options in the **View** menu. |
+| `NOMINATIM_USER_AGENT` | Identifies your deployment to OpenStreetMap Nominatim (required by their [usage policy](https://operations.osmfoundation.org/policies/nominatim/)), e.g. `MyApp/1.0 (me@example.org)`. Server-side only. |
+| `NEXT_PUBLIC_GITHUB_REPO_URL` | Overrides the repository link shown in the top bar and About menu. |
 
 ### Run locally
 
@@ -145,6 +167,13 @@ npm start
 
 **Build note:** You may see a warning *"Mismatching @next/swc version, detected: 15.5.7 while Next.js is on 15.5.11"*. This is a known Next.js packaging quirk (15.5.11 ships with 15.5.7 SWC binaries) and can be ignored; the build completes successfully.
 
+### Lint and type-check
+
+```bash
+npm run lint       # ESLint 9 (flat config, next/core-web-vitals + next/typescript)
+npm run typecheck  # tsc --noEmit
+```
+
 ### Deploy on Vercel
 
 1. Push the repo to GitHub.
@@ -164,10 +193,10 @@ The app uses:
 
 - **Occurrence search:** `GET https://api.gbif.org/v1/occurrence/search` with `geometry` (WKT polygon from view bounds), `taxonKey`, `year`, `eventDate`, `iucnRedListCategory`, `basisOfRecord`, `continent`, `country`, `datasetKey`, `institutionCode`, `limit`, etc.
 - **Species suggest:** `GET https://api.gbif.org/v1/species/suggest?q=...` for autocomplete.
-- **Places (Nominatim):** `/api/places/search?q=...` — server proxy to OpenStreetMap Nominatim for place search; returns bounding boxes for the Region dropdown.
+- **Places (Nominatim):** `/api/places/search?q=...` — server proxy to OpenStreetMap Nominatim for place search; returns bounding boxes for the Region dropdown. Throttled to one upstream request per second and cached for 5 minutes.
 - **Occurrence images:** `/api/occurrence/[key]/image` — returns image URLs for an occurrence (from GBIF cache) for the InfoBox photo strip.
 
-GBIF responses are cached in memory for 5 minutes. No API key required for normal use; Cesium Ion token is optional for World Terrain.
+See [Caching and when data refreshes](#caching-and-when-data-refreshes) for cache lifetimes. No API key required for normal use; Cesium Ion token is optional for World Terrain.
 
 ### Map tiles (OpenStreetMap)
 
@@ -177,36 +206,47 @@ The base map uses [OpenStreetMap](https://www.openstreetmap.org/) tiles (`https:
 
 ```
 ├── app/
-│   ├── layout.tsx         # Root layout, Cesium script + CSS, providers
-│   ├── page.tsx           # Main page: GlobeViewer, MapTopBar, export handlers
+│   ├── layout.tsx         # Root layout, Cesium CSS, providers
+│   ├── page.tsx           # Main page: GlobeViewer, MapTopBar, import/export handlers
 │   ├── globals.css        # Global styles, accessibility
 │   ├── providers.tsx      # MUI ThemeProvider
 │   └── api/
-│       ├── places/search/ # Nominatim proxy for place search
+│       ├── places/search/ # Nominatim proxy for place search (throttled, cached)
 │       ├── species/suggest/ # GBIF species suggest proxy (CORS)
 │       ├── species/search/ # GBIF species search proxy (CORS)
 │       └── occurrence/[key]/image/ # Occurrence images (GBIF cache)
 ├── components/
-│   ├── GlobeViewer.tsx    # Fetches occurrences by bounds/filters, renders GlobeScene
+│   ├── GlobeViewer.tsx    # Fetches occurrences by bounds/filters, renders GlobeScene + legend
 │   ├── GlobeViewerDynamic.tsx # Dynamic import (no SSR) for globe
-│   ├── GlobeScene.tsx     # Resium Viewer, terrain, occurrence points, draw region, tooltips
-│   ├── MapTopBar.tsx      # Top bar: Region/place search, Filters popover, Export, View, Saved, About
+│   ├── GlobeScene.tsx     # Resium Viewer wiring (terrain, base layer, handlers)
+│   ├── globe/             # Scene handlers, occurrence layer (entities/primitives), InfoBox HTML, imagery, export helpers
+│   ├── MapTopBar.tsx      # Top bar: Region/place search, Filters, Import, Export, View, Saved, About, Help
+│   ├── map-top-bar/       # Dialogs and menu contents used by MapTopBar
+│   ├── FilterForm.tsx     # Filters popover content
+│   ├── OccurrenceTimeline.tsx # Year/month timeline filter
 │   ├── SpeciesSearch.tsx  # GBIF species suggest autocomplete
 │   ├── ErrorBoundary.tsx  # Error boundary around globe
 │   └── Lightbox.tsx       # Photo lightbox from InfoBox
 ├── lib/
-│   ├── gbif.ts            # GBIF API client (occurrence search, species suggest)
-│   ├── geometry.ts        # Bounds ↔ WKT polygon (GBIF-compliant)
+│   ├── gbif.ts            # GBIF API client (occurrence search, chunked fetching, species suggest)
+│   ├── geometry.ts        # Bounds/polygons ↔ WKT (antimeridian-aware), point-in-polygon
 │   ├── regions.ts         # Predefined regions for Region dropdown
-│   ├── cache.ts           # In-memory cache for API responses
+│   ├── cache.ts           # Bounded LRU in-memory cache for API responses
 │   ├── favorites.ts       # Saved regions (localStorage)
-│   └── cesium-window-shim.cjs # Cesium from script tag → require('cesium')
+│   ├── saved-occurrences.ts # Saved occurrences (localStorage)
+│   ├── displayed-occurrences.ts # Merges live, imported and saved occurrences for display
+│   ├── import-occurrences.ts # CSV/TSV/JSON/DwC-A parsing
+│   ├── export-data.ts     # GeoJSON/CSV export
+│   ├── pdf-export.ts      # PDF report
+│   ├── occurrence-date.ts # Date parsing helpers
+│   └── ion.ts             # Cesium Ion token configuration
 ├── types/
 │   └── gbif.ts            # TypeScript types for GBIF responses
 ├── __tests__/
-│   └── lib/               # Unit tests for gbif, geometry, cache, regions
-├── next.config.js         # Cesium/Resium aliases, CESIUM_BASE_URL
-├── package.json           # postinstall: symlink Cesium Build to public/cesium
+│   └── lib/               # Unit tests for gbif, geometry, cache, regions, import, export
+├── eslint.config.mjs      # ESLint 9 flat config
+├── next.config.js         # Security headers, Resium ESM alias, CESIUM_BASE_URL
+├── package.json           # postinstall: link Cesium Build to public/cesium
 └── README.md
 ```
 
@@ -218,10 +258,11 @@ npm test
 
 Tests include:
 
-- **GBIF API:** Occurrence search with geometry, taxonKey; species suggest; error handling
-- **Geometry:** WKT polygon from bounds (counter-clockwise, lon/lat), rectangle conversion
-
-Sample data used in tests: geometry over Sweden, taxonKey for plants; real API calls (no mocks).
+- **GBIF API:** Occurrence search with geometry, taxonKey; species suggest; error handling (mocked `fetch`)
+- **Geometry:** WKT polygon from bounds and drawn polygons (counter-clockwise, lon/lat), antimeridian handling (`MULTIPOLYGON`), point-in-bounds/polygon, bounds padding
+- **Cache:** TTL expiry, LRU eviction, weight budget
+- **Import:** CSV/TSV/JSON detection, DwC-A entry selection, header matching, date parsing, synthetic keys
+- **Export:** CSV formula-injection guard, region columns, GeoJSON winding and `MultiPolygon` output
 
 ## Accessibility
 
