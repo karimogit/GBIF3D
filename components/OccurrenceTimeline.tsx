@@ -86,17 +86,13 @@ export default function OccurrenceTimeline({
       role="region"
       aria-label="Occurrence timeline (scrollbar)"
       style={{
-        position: 'absolute',
-        left: '50%',
-        transform: 'translateX(-50%)',
-        bottom: 'max(24px, env(safe-area-inset-bottom))',
-        width: 'min(92vw, 720px)',
+        width: 'min(100%, 720px)',
+        boxSizing: 'border-box',
         padding: '8px 12px',
         background: 'rgba(18, 22, 28, 0.94)',
         border: '1px solid rgba(255, 255, 255, 0.12)',
         borderRadius: 8,
         boxShadow: '0 4px 16px rgba(0,0,0,0.35)',
-        zIndex: 900,
         pointerEvents: 'auto',
       }}
     >
