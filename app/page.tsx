@@ -57,8 +57,8 @@ const REGION_ID_PLACE = 'place';
 const VIEW_STORAGE_KEY = 'gbif-globe-view';
 const VALID_SCENE_MODES = ['3D', '2D'] as const;
 
-/** Bing imagery needs a Cesium Ion token; without one, default to Carto Positron (OSMF-friendly). */
-const DEFAULT_BASE_MAP: BaseMapId = ION_TOKEN_CONFIGURED ? 'bing' : 'positron';
+/** Bing imagery needs a Cesium Ion token; without one, default to OpenTopoMap (free, no API key). */
+const DEFAULT_BASE_MAP: BaseMapId = ION_TOKEN_CONFIGURED ? 'bing' : 'opentopomap';
 
 function loadViewFromStorage(): { sceneMode: '3D' | '2D'; baseMap: BaseMapId } | null {
   if (typeof window === 'undefined') return null;
@@ -70,7 +70,7 @@ function loadViewFromStorage(): { sceneMode: '3D' | '2D'; baseMap: BaseMapId } |
     const storedScene = p.sceneMode === 'Columbus' ? '2D' : p.sceneMode;
     const sceneMode = VALID_SCENE_MODES.includes(storedScene as (typeof VALID_SCENE_MODES)[number]) ? storedScene : null;
     let baseMap = VALID_BASE_MAPS.includes(p.baseMap as BaseMapId) ? (p.baseMap as BaseMapId) : null;
-    if (baseMap === 'bing' && !ION_TOKEN_CONFIGURED) baseMap = 'positron';
+    if (baseMap === 'bing' && !ION_TOKEN_CONFIGURED) baseMap = 'opentopomap';
     if (sceneMode != null || baseMap != null) {
       return {
         sceneMode: (sceneMode ?? '3D') as '3D' | '2D',

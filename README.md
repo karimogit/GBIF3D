@@ -117,7 +117,7 @@ Click **Export** in the top bar to save:
 ### Step 7: Change View Options
 Click **View** in the top bar to:
 - Switch between **3D Globe** and **2D Map**
-- Change base map (default **Carto Positron**; also OpenStreetMap, OpenTopoMap, Dark Matter; Bing Aerial requires a Cesium Ion token)
+- Change base map (default **OpenTopoMap**; also OpenStreetMap, Carto Positron/Dark Matter; Bing Aerial requires a Cesium Ion token). Carto styles may show an API-key watermark without a Carto account.
 - Enable **Photorealistic 3D** (requires Cesium Ion token)
 
 ---
@@ -145,7 +145,7 @@ All are optional. Put them in `.env.local` for development or in your hosting pr
 
 | Variable | Purpose |
 | --- | --- |
-| `NEXT_PUBLIC_CESIUM_ION_TOKEN` | [Cesium Ion](https://cesium.com/ion/) access token. Enables Cesium World Terrain, Bing base maps and Photorealistic 3D. Without it the app defaults to **Carto Positron** and a flat ellipsoid and disables the Ion-only options in the **View** menu. |
+| `NEXT_PUBLIC_CESIUM_ION_TOKEN` | [Cesium Ion](https://cesium.com/ion/) access token. Enables Cesium World Terrain, Bing base maps and Photorealistic 3D. Without it the app defaults to **OpenTopoMap** and a flat ellipsoid and disables the Ion-only options in the **View** menu. |
 | `PHOTON_USER_AGENT` | Optional User-Agent for Photon place search. Defaults to `GBIF3D/1.0 (...)`. Photon does **not** require `NOMINATIM_USER_AGENT` (that env var is unused). |
 | `NEXT_PUBLIC_GITHUB_REPO_URL` | Overrides the repository link shown in the top bar and About menu. |
 
@@ -201,7 +201,7 @@ See [Caching and when data refreshes](#caching-and-when-data-refreshes) for cach
 
 ### Map tiles
 
-The **default** base map is [Carto Positron](https://carto.com/basemaps/) (`*.basemaps.cartocdn.com`). OpenStreetMap (`https://tile.openstreetmap.org/`) and other styles are available under **View**. Use of OSM tiles must comply with the [OpenStreetMap Tile Usage Policy](https://operations.osmfoundation.org/policies/tiles/); avoid heavy automated requests and respect the usage guidelines.
+The **default** base map is [OpenTopoMap](https://opentopomap.org/) (`*.tile.opentopomap.org`). Carto Positron/Dark Matter and OpenStreetMap (`https://tile.openstreetmap.org/`) are available under **View**. Carto’s public CDN may watermark tiles without an API key. Use of OSM tiles must comply with the [OpenStreetMap Tile Usage Policy](https://operations.osmfoundation.org/policies/tiles/); avoid heavy automated requests and respect the usage guidelines.
 
 ## Project structure
 
