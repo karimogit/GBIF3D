@@ -1,11 +1,6 @@
 import * as Cesium from 'cesium';
 import type { Bounds, LonLat } from '@/lib/geometry';
-import {
-  EXPORT_IMAGE_EVENT,
-  EXPORT_PDF_CANVAS_READY_EVENT,
-  EXPORT_PDF_EVENT,
-  type ExportRegionDetail,
-} from './constants';
+import { type ExportRegionDetail } from './constants';
 
 export function downloadCanvasAsPng(canvas: HTMLCanvasElement, filename: string) {
   canvas.toBlob(
@@ -16,7 +11,14 @@ export function downloadCanvasAsPng(canvas: HTMLCanvasElement, filename: string)
       a.href = url;
       a.download = filename;
       a.click();
-      setTimeout(() => URL.revokeObjectURL(url), 100);
+      // Defer revoke until after the browser starts the download (Safari aborts if revoked too soon).
+      const revoke = () => URL.revokeObjectURL(url);
+      if (typeof window !== 'undefined') {
+        window.addEventListener('focus', revoke, { once: true });
+        setTimeout(revoke, 60_000);
+      } else {
+        setTimeout(revoke, 0);
+      }
     },
     'image/png'
   );
@@ -24,6 +26,21 @@ export function downloadCanvasAsPng(canvas: HTMLCanvasElement, filename: string)
 
 export function captureCanvasAsDataUrl(canvas: HTMLCanvasElement): string {
   return canvas.toDataURL('image/jpeg', 0.85);
+}
+
+/** Prepare the viewer canvas for export and return a JPEG data URL, or null on failure. */
+export function captureViewerCanvas(
+  viewer: Cesium.Viewer,
+  detail?: ExportRegionDetail
+): string | null {
+  try {
+    const canvas = viewer.scene?.canvas;
+    if (!canvas) return null;
+    const prepared = prepareCanvasForExport(canvas as HTMLCanvasElement, viewer, detail);
+    return captureCanvasAsDataUrl(prepared);
+  } catch {
+    return null;
+  }
 }
 
 function geoToScreen(
@@ -102,5 +119,3 @@ export function prepareCanvasForExport(
   }
   return canvas;
 }
-
-export { EXPORT_IMAGE_EVENT, EXPORT_PDF_EVENT, EXPORT_PDF_CANVAS_READY_EVENT };

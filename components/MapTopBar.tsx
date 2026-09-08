@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, useEffect, useRef, useCallback } from 'react';
+import { useMemo, useState, useEffect, useRef, useCallback, type ReactNode } from 'react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Divider from '@mui/material/Divider';
@@ -51,52 +51,63 @@ import ExportDataDialog from './map-top-bar/ExportDataDialog';
 import type { ExportDataFormat, ExportDataOptions } from '@/lib/export-data';
 import {
   type MapTopBarProps,
+  type MapTopBarFlatProps,
   type RegionOption,
   GITHUB_REPO_DEFAULT,
   PLACES_DEBOUNCE_MS,
+  normalizeMapTopBarProps,
 } from './map-top-bar/types';
 
-export type { MapTopBarProps } from './map-top-bar/types';
+export type { MapTopBarProps, MapTopBarFlatProps } from './map-top-bar/types';
 
-export default function MapTopBar({
-  selectedRegionId,
-  onRegionChange,
-  favorites,
-  drawnBounds,
-  placeSearchResult,
-  onPlaceSelect,
-  filters,
-  onFiltersChange,
-  onStartDrawRegion,
-  drawRegionMode = false,
-  onCancelDrawRegion,
-  onFinishDrawRegion,
-  onSaveDrawnRegion,
-  onClearDrawnRegion,
-  onRemoveFavorite,
-  onExportImage,
-  onExportGeoJSON,
-  onExportCSV,
-  onExportPDF,
-  occurrenceCount = 0,
-  visibleOccurrenceCount = 0,
-  regionBounds = null,
-  regionName,
-  onImportFile,
-  importedOccurrenceCount = 0,
-  importedOccurrences = [],
-  onClearImport,
-  savedOccurrences = [],
-  onSelectOccurrence,
-  onRemoveSavedOccurrence,
-  sceneMode = '3D',
-  onSceneModeChange,
-  baseMap = 'bing',
-  onBaseMapChange,
-  photorealistic3D = false,
-  onPhotorealistic3DChange,
-  githubUrl = GITHUB_REPO_DEFAULT,
-}: MapTopBarProps) {
+export default function MapTopBar(rawProps: MapTopBarProps | MapTopBarFlatProps) {
+  const props = normalizeMapTopBarProps(rawProps);
+  const {
+    selectedRegionId,
+    onRegionChange,
+    favorites,
+    drawnBounds,
+    placeSearchResult,
+    onPlaceSelect,
+    onStartDrawRegion,
+    drawRegionMode = false,
+    onCancelDrawRegion,
+    onFinishDrawRegion,
+    onSaveDrawnRegion,
+    onClearDrawnRegion,
+    onRemoveFavorite,
+    regionBounds = null,
+    regionName,
+  } = props.region;
+  const { filters, onFiltersChange } = props;
+  const {
+    onImportFile,
+    importedOccurrenceCount = 0,
+    importedOccurrences = [],
+    onClearImport,
+  } = props.importState ?? {};
+  const {
+    onExportImage,
+    onExportGeoJSON,
+    onExportCSV,
+    onExportPDF,
+    occurrenceCount = 0,
+    visibleOccurrenceCount = 0,
+  } = props.exportHandlers ?? {};
+  const {
+    savedOccurrences = [],
+    onSelectOccurrence,
+    onRemoveSavedOccurrence,
+  } = props.saved ?? {};
+  const {
+    sceneMode = '3D',
+    onSceneModeChange,
+    baseMap = 'positron',
+    onBaseMapChange,
+    photorealistic3D = false,
+    onPhotorealistic3DChange,
+  } = props.viewOptions ?? {};
+  const githubUrl = props.githubUrl ?? GITHUB_REPO_DEFAULT;
   const [placeQuery, setPlaceQuery] = useState('');
   const [placeResults, setPlaceResults] = useState<RegionOption[]>([]);
   const [placeLoading, setPlaceLoading] = useState(false);
@@ -241,14 +252,22 @@ export default function MapTopBar({
     return list;
   }, [drawnBounds, favorites]);
 
-  const options = useMemo(
-    () => (placeResults.length > 0 ? [...staticOptions, ...placeResults] : staticOptions),
-    [staticOptions, placeResults]
-  );
+  const options = useMemo(() => {
+    // Include the selected place so Autocomplete value is always in `options` (avoids MUI warning).
+    const selectedPlace: RegionOption[] =
+      selectedRegionId === 'place' && placeSearchResult
+        ? [{ id: 'place', label: placeSearchResult.name, group: 'Places' }]
+        : [];
+    const withPlaces =
+      placeResults.length > 0 ? [...staticOptions, ...placeResults] : staticOptions;
+    if (selectedPlace.length === 0) return withPlaces;
+    const withoutDup = withPlaces.filter((o) => o.id !== 'place');
+    return [...selectedPlace, ...withoutDup];
+  }, [staticOptions, placeResults, selectedRegionId, placeSearchResult]);
 
   const value = useMemo(() => {
     if (selectedRegionId === 'place' && placeSearchResult) {
-      return { id: 'place', label: placeSearchResult.name };
+      return options.find((o) => o.id === 'place') ?? { id: 'place', label: placeSearchResult.name };
     }
     return options.find((o) => o.id === selectedRegionId) ?? null;
   }, [selectedRegionId, placeSearchResult, options]);
@@ -269,6 +288,155 @@ export default function MapTopBar({
     },
     [onRegionChange, onPlaceSelect, setPlaceQuery]
   );
+
+  /** Top-level toolbar entries shared by desktop buttons and the mobile overflow menu. */
+  type ToolbarAction = {
+    id: string;
+    label: string;
+    /** Longer label for the mobile overflow menu when it differs from the desktop button. */
+    menuLabel?: string;
+    ariaLabel: string;
+    icon: ReactNode;
+    endIcon?: ReactNode;
+    visible: boolean;
+    desktopVariant: 'button' | 'icon';
+    href?: string;
+    expanded?: boolean;
+    selected?: boolean;
+    onActivate: (anchor: HTMLElement | null) => void;
+  };
+
+  const toolbarActions = useMemo((): ToolbarAction[] => {
+    const filterActive =
+      (filters.taxonKeys?.length ?? 0) > 0 || filters.taxonKey != null;
+    return [
+      {
+        id: 'filters',
+        label: `Filters${filterActive ? ' • active' : ''}`,
+        menuLabel: 'Filters',
+        ariaLabel: 'Filters',
+        icon: <FilterList fontSize="small" />,
+        endIcon: <ArrowDropDown />,
+        visible: true,
+        desktopVariant: 'button',
+        expanded: filterOpen,
+        selected: filterOpen,
+        onActivate: (anchor) => openFilters(anchor),
+      },
+      {
+        id: 'saved-regions',
+        label: 'Saved',
+        menuLabel: 'Saved regions',
+        ariaLabel: 'Saved regions',
+        icon: <Bookmark fontSize="small" />,
+        visible: favorites.length > 0 && Boolean(onRemoveFavorite),
+        desktopVariant: 'button',
+        expanded: Boolean(savedMenuAnchor),
+        onActivate: (anchor) => setSavedMenuAnchor(anchor),
+      },
+      {
+        id: 'import',
+        label: `Import${importedOccurrenceCount > 0 ? ` (${importedOccurrenceCount})` : ''}`,
+        ariaLabel: 'Import GBIF dataset (CSV, TSV, JSON or Darwin Core Archive)',
+        icon: <UploadFile fontSize="small" />,
+        visible: Boolean(onImportFile),
+        desktopVariant: 'button',
+        expanded: importedOccurrenceCount > 0 ? Boolean(importSummaryAnchor) : undefined,
+        onActivate: (anchor) => {
+          if (importedOccurrenceCount > 0) {
+            setImportSummaryAnchor(importSummaryAnchor ? null : anchor);
+          } else {
+            setImportDialogOpen(true);
+          }
+        },
+      },
+      {
+        id: 'saved-occurrences',
+        label: `Saved (${savedOccurrences.length})`,
+        menuLabel: `Saved occurrences (${savedOccurrences.length})`,
+        ariaLabel: `Saved occurrences (${savedOccurrences.length})`,
+        icon: <Bookmark fontSize="small" />,
+        visible: savedOccurrences.length > 0,
+        desktopVariant: 'button',
+        expanded: Boolean(savedOccurrencesAnchor),
+        onActivate: (anchor) => setSavedOccurrencesAnchor(anchor),
+      },
+      {
+        id: 'export',
+        label: 'Export',
+        ariaLabel: 'Export',
+        icon: <Download fontSize="small" />,
+        endIcon: <ArrowDropDown />,
+        visible: hasExportActions,
+        desktopVariant: 'button',
+        expanded: Boolean(exportMenuAnchor),
+        onActivate: (anchor) => setExportMenuAnchor(anchor),
+      },
+      {
+        id: 'view',
+        label: 'View',
+        menuLabel: 'View options',
+        ariaLabel: 'View options',
+        icon: <Public fontSize="small" />,
+        endIcon: <ArrowDropDown />,
+        visible: Boolean(onSceneModeChange),
+        desktopVariant: 'button',
+        expanded: Boolean(viewMenuAnchor),
+        onActivate: (anchor) => setViewMenuAnchor(anchor),
+      },
+      {
+        id: 'about',
+        label: 'About',
+        ariaLabel: 'About',
+        icon: <InfoOutlined fontSize="small" />,
+        endIcon: <ArrowDropDown />,
+        visible: true,
+        desktopVariant: 'button',
+        expanded: Boolean(aboutMenuAnchor),
+        onActivate: (anchor) => setAboutMenuAnchor(anchor),
+      },
+      {
+        id: 'help',
+        label: 'Help',
+        ariaLabel: 'Help: how this tool works',
+        icon: <HelpOutline fontSize="small" />,
+        visible: true,
+        desktopVariant: 'icon',
+        onActivate: () => setHelpOpen(true),
+      },
+      {
+        id: 'github',
+        label: 'View on GitHub',
+        ariaLabel: 'View on GitHub',
+        icon: <GitHub fontSize="small" />,
+        visible: true,
+        desktopVariant: 'icon',
+        href: githubUrl,
+        onActivate: () => undefined,
+      },
+    ];
+  }, [
+    filters.taxonKeys,
+    filters.taxonKey,
+    filterOpen,
+    openFilters,
+    favorites.length,
+    onRemoveFavorite,
+    savedMenuAnchor,
+    onImportFile,
+    importedOccurrenceCount,
+    importSummaryAnchor,
+    savedOccurrences.length,
+    savedOccurrencesAnchor,
+    hasExportActions,
+    exportMenuAnchor,
+    onSceneModeChange,
+    viewMenuAnchor,
+    aboutMenuAnchor,
+    githubUrl,
+  ]);
+
+  const visibleToolbarActions = toolbarActions.filter((a) => a.visible);
 
   return (
     <Box
@@ -526,25 +694,6 @@ export default function MapTopBar({
           minWidth: 0,
         }}
       >
-      <Button
-        variant="outlined"
-        size="small"
-        startIcon={<FilterList />}
-        endIcon={<ArrowDropDown />}
-        onClick={(e) => openFilters(e.currentTarget)}
-        aria-label="Filters"
-        aria-haspopup="true"
-        aria-expanded={filterOpen}
-        sx={{
-          minWidth: 0,
-          display: { xs: 'none', md: 'inline-flex' },
-          bgcolor: filterOpen ? 'action.selected' : undefined,
-          '&:hover': { bgcolor: 'action.hover' },
-        }}
-      >
-        Filters
-        {(filters.taxonKeys?.length ?? 0) > 0 || filters.taxonKey != null ? ' • active' : ''}
-      </Button>
       {/* Mobile hamburger menu (button is in the search row above) */}
       <Menu
         anchorEl={moreMenuAnchor}
@@ -554,41 +703,31 @@ export default function MapTopBar({
         transformOrigin={{ vertical: 'top', horizontal: 'left' }}
         slotProps={{ paper: { sx: { minWidth: 220, maxWidth: 'min(420px, calc(100vw - 24px))', maxHeight: 'min(70vh, 400px)' } } }}
       >
-        {/* Filters entry for mobile */}
-        <MenuItem
-          onClick={() => {
-            setMoreMenuAnchor(null);
-            openFilters();
-          }}
-        >
-          <ListItemIcon><FilterList fontSize="small" /></ListItemIcon>
-          <ListItemText primary="Filters" />
-        </MenuItem>
-        {favorites.length > 0 && onRemoveFavorite && (
-          <MenuItem
-            onClick={() => {
-              setMoreMenuAnchor(null);
-              setSavedMenuAnchor(moreButtonAnchorRef.current);
-            }}
-          >
-            <ListItemIcon><Bookmark fontSize="small" /></ListItemIcon>
-            <ListItemText primary="Saved regions" />
-          </MenuItem>
-        )}
-        {onImportFile && (
-          <MenuItem
-            onClick={() => {
-              setMoreMenuAnchor(null);
-              if (importedOccurrenceCount > 0 && moreButtonAnchorRef.current) {
-                setImportSummaryAnchor(moreButtonAnchorRef.current);
-              } else {
-                setImportDialogOpen(true);
-              }
-            }}
-          >
-            <ListItemIcon><UploadFile fontSize="small" /></ListItemIcon>
-            <ListItemText primary={`Import${importedOccurrenceCount > 0 ? ` (${importedOccurrenceCount})` : ''}`} />
-          </MenuItem>
+        {visibleToolbarActions.map((action) =>
+          action.href ? (
+            <MenuItem
+              key={action.id}
+              component="a"
+              href={action.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={() => setMoreMenuAnchor(null)}
+            >
+              <ListItemIcon>{action.icon}</ListItemIcon>
+              <ListItemText primary={action.menuLabel ?? action.label} />
+            </MenuItem>
+          ) : (
+            <MenuItem
+              key={action.id}
+              onClick={() => {
+                setMoreMenuAnchor(null);
+                action.onActivate(moreButtonAnchorRef.current);
+              }}
+            >
+              <ListItemIcon>{action.icon}</ListItemIcon>
+              <ListItemText primary={action.menuLabel ?? action.label} />
+            </MenuItem>
+          )
         )}
         {importedOccurrenceCount > 0 && onClearImport && (
           <MenuItem
@@ -601,56 +740,114 @@ export default function MapTopBar({
             <ListItemText primary="Clear import" />
           </MenuItem>
         )}
-        {savedOccurrences.length > 0 && (
-          <MenuItem
-            onClick={() => {
-              setMoreMenuAnchor(null);
-              setSavedOccurrencesAnchor(moreButtonAnchorRef.current);
-            }}
-          >
-            <ListItemIcon><Bookmark fontSize="small" /></ListItemIcon>
-            <ListItemText primary={`Saved occurrences (${savedOccurrences.length})`} />
-          </MenuItem>
-        )}
-        {hasExportActions && renderExportMenuItems('more-export', () => setMoreMenuAnchor(null), false)}
-        {onSceneModeChange && (
-          <MenuItem
-            onClick={() => {
-              setMoreMenuAnchor(null);
-              if (moreButtonAnchorRef.current) {
-                setViewMenuAnchor(moreButtonAnchorRef.current);
-              }
-            }}
-          >
-            <ListItemIcon><Public fontSize="small" /></ListItemIcon>
-            <ListItemText primary="View options" />
-          </MenuItem>
-        )}
-        <MenuItem
-          onClick={() => {
-            setMoreMenuAnchor(null);
-            if (moreButtonAnchorRef.current) {
-              setAboutMenuAnchor(moreButtonAnchorRef.current);
-            }
-          }}
-        >
-          <ListItemIcon><InfoOutlined fontSize="small" /></ListItemIcon>
-          <ListItemText primary="About" />
-        </MenuItem>
-        <MenuItem
-          onClick={() => {
-            setMoreMenuAnchor(null);
-            setHelpOpen(true);
-          }}
-        >
-          <ListItemIcon><HelpOutline fontSize="small" /></ListItemIcon>
-          <ListItemText primary="Help" />
-        </MenuItem>
-        <MenuItem component="a" href={githubUrl} target="_blank" rel="noopener noreferrer" onClick={() => setMoreMenuAnchor(null)}>
-          <ListItemIcon><GitHub fontSize="small" /></ListItemIcon>
-          <ListItemText primary="View on GitHub" />
-        </MenuItem>
       </Menu>
+
+      {visibleToolbarActions.map((action) => {
+        const dividerBefore =
+          action.id === 'about' ? (
+            <Box
+              key="about-divider"
+              aria-hidden="true"
+              sx={{
+                mx: 1,
+                width: '1px',
+                height: 20,
+                alignSelf: 'center',
+                backgroundColor: '#ffffff',
+                opacity: 0.9,
+                display: { xs: 'none', md: 'block' },
+              }}
+            />
+          ) : null;
+        if (action.desktopVariant === 'icon') {
+          if (action.href) {
+            return (
+              <span key={action.id} style={{ display: 'contents' }}>
+                {dividerBefore}
+                <IconButton
+                  component="a"
+                  href={action.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  size="small"
+                  aria-label={action.ariaLabel}
+                  sx={{
+                    color: 'rgba(255,255,255,0.9)',
+                    p: 0.5,
+                    display: { xs: 'none', md: 'inline-flex' },
+                    '&:hover': { backgroundColor: 'rgba(255,255,255,0.08)' },
+                  }}
+                >
+                  {action.icon}
+                </IconButton>
+              </span>
+            );
+          }
+          return (
+            <span key={action.id} style={{ display: 'contents' }}>
+              {dividerBefore}
+              <IconButton
+                size="small"
+                aria-label={action.ariaLabel}
+                onClick={() => action.onActivate(null)}
+                sx={{
+                  color: 'rgba(255,255,255,0.9)',
+                  p: 0.5,
+                  display: { xs: 'none', md: 'inline-flex' },
+                  '&:hover': { backgroundColor: 'rgba(255,255,255,0.08)' },
+                }}
+              >
+                {action.icon}
+              </IconButton>
+            </span>
+          );
+        }
+        return (
+          <span key={action.id} style={{ display: 'contents' }}>
+            {dividerBefore}
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={action.icon}
+              endIcon={action.endIcon}
+              onClick={(e) => action.onActivate(e.currentTarget)}
+              aria-label={action.ariaLabel}
+              aria-haspopup={
+                action.endIcon ||
+                action.id === 'saved-regions' ||
+                action.id === 'saved-occurrences' ||
+                action.id === 'import' ||
+                action.id === 'filters'
+                  ? true
+                  : undefined
+              }
+              aria-expanded={action.expanded}
+              sx={{
+                minWidth: 0,
+                display: { xs: 'none', md: 'inline-flex' },
+                bgcolor: action.selected ? 'action.selected' : undefined,
+                '&:hover': { bgcolor: 'action.hover' },
+              }}
+            >
+              {action.label}
+            </Button>
+            {action.id === 'import' && importedOccurrenceCount > 0 && onClearImport && (
+              <Button
+                variant="text"
+                size="small"
+                color="secondary"
+                startIcon={<DeleteOutline />}
+                onClick={onClearImport}
+                aria-label="Clear imported occurrences"
+                sx={{ minWidth: 0, ml: 0.5, flexShrink: 0, display: { xs: 'none', md: 'inline-flex' } }}
+              >
+                Clear
+              </Button>
+            )}
+          </span>
+        );
+      })}
+
       <Dialog
         open={filterOpen && isMobile}
         onClose={closeFilters}
@@ -697,51 +894,38 @@ export default function MapTopBar({
       </Popover>
 
       {favorites.length > 0 && onRemoveFavorite && (
-        <>
-          <Button
-            variant="outlined"
-            size="small"
-            onClick={(e) => setSavedMenuAnchor(e.currentTarget)}
-            aria-label="Saved regions"
-            aria-haspopup="true"
-            aria-expanded={Boolean(savedMenuAnchor)}
-            sx={{ minWidth: 0, display: { xs: 'none', md: 'inline-flex' } }}
-          >
-            Saved
-          </Button>
-          <Menu
-            anchorEl={savedMenuAnchor}
-            open={Boolean(savedMenuAnchor)}
-            onClose={() => setSavedMenuAnchor(null)}
-            anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
-            transformOrigin={{ vertical: 'top', horizontal: 'left' }}
-            slotProps={{ paper: { sx: { maxWidth: 'calc(100vw - 24px)', maxHeight: 'min(70vh, 400px)' } } }}
-          >
-            {favorites.map((fav) => (
-              <MenuItem
-                key={fav.id}
-                onClick={() => {
-                  onRegionChange(fav.id);
+        <Menu
+          anchorEl={savedMenuAnchor}
+          open={Boolean(savedMenuAnchor)}
+          onClose={() => setSavedMenuAnchor(null)}
+          anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+          transformOrigin={{ vertical: 'top', horizontal: 'left' }}
+          slotProps={{ paper: { sx: { maxWidth: 'calc(100vw - 24px)', maxHeight: 'min(70vh, 400px)' } } }}
+        >
+          {favorites.map((fav) => (
+            <MenuItem
+              key={fav.id}
+              onClick={() => {
+                onRegionChange(fav.id);
+                setSavedMenuAnchor(null);
+              }}
+              sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}
+            >
+              <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>{fav.name}</span>
+              <IconButton
+                size="small"
+                aria-label={`Remove ${fav.name}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRemoveFavorite(fav.id);
                   setSavedMenuAnchor(null);
                 }}
-                sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}
               >
-                <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>{fav.name}</span>
-                <IconButton
-                  size="small"
-                  aria-label={`Remove ${fav.name}`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onRemoveFavorite(fav.id);
-                    setSavedMenuAnchor(null);
-                  }}
-                >
-                  <DeleteOutline fontSize="small" />
-                </IconButton>
-              </MenuItem>
-            ))}
-          </Menu>
-        </>
+                <DeleteOutline fontSize="small" />
+              </IconButton>
+            </MenuItem>
+          ))}
+        </Menu>
       )}
 
       {onImportFile && (
@@ -761,24 +945,6 @@ export default function MapTopBar({
               }
             }}
           />
-          <Button
-            variant="outlined"
-            size="small"
-            startIcon={<UploadFile />}
-            onClick={(e) => {
-              if (importedOccurrenceCount > 0) {
-                setImportSummaryAnchor(importSummaryAnchor ? null : e.currentTarget);
-              } else {
-                setImportDialogOpen(true);
-              }
-            }}
-            aria-label="Import GBIF dataset (CSV, TSV, JSON or Darwin Core Archive)"
-            aria-haspopup={importedOccurrenceCount > 0 ? 'dialog' : undefined}
-            aria-expanded={importedOccurrenceCount > 0 ? Boolean(importSummaryAnchor) : undefined}
-            sx={{ minWidth: 0, display: { xs: 'none', md: 'inline-flex' } }}
-          >
-            Import{importedOccurrenceCount > 0 ? ` (${importedOccurrenceCount})` : ''}
-          </Button>
           {importedOccurrenceCount > 0 && (
             <Popover
               open={Boolean(importSummaryAnchor)}
@@ -834,126 +1000,70 @@ export default function MapTopBar({
               </Button>
             </DialogActions>
           </Dialog>
-          {importedOccurrenceCount > 0 && onClearImport && (
-            <Button
-              variant="text"
-              size="small"
-              color="secondary"
-              startIcon={<DeleteOutline />}
-              onClick={onClearImport}
-              aria-label="Clear imported occurrences"
-              sx={{ minWidth: 0, ml: 0.5, flexShrink: 0, display: { xs: 'none', md: 'inline-flex' } }}
-            >
-              Clear
-            </Button>
-          )}
         </>
       )}
 
       {savedOccurrences.length > 0 && (
-        <>
-          <Button
-            variant="outlined"
-            size="small"
-            startIcon={<Bookmark />}
-            onClick={(e) => setSavedOccurrencesAnchor(e.currentTarget)}
-            aria-label={`Saved occurrences (${savedOccurrences.length})`}
-            aria-haspopup="true"
-            aria-expanded={Boolean(savedOccurrencesAnchor)}
-            sx={{ minWidth: 0, display: { xs: 'none', md: 'inline-flex' } }}
-          >
-            Saved ({savedOccurrences.length})
-          </Button>
-          <Menu
-            anchorEl={savedOccurrencesAnchor}
-            open={Boolean(savedOccurrencesAnchor)}
-            onClose={() => setSavedOccurrencesAnchor(null)}
-            anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
-            transformOrigin={{ vertical: 'top', horizontal: 'left' }}
-            slotProps={{ paper: { sx: { minWidth: 280, maxWidth: 'min(400px, calc(100vw - 24px))' } } }}
-          >
-            {savedOccurrences.map((occ) => {
-              const name = occ.vernacularName?.trim() || occ.scientificName || `Occurrence ${occ.gbifKey ?? occ.key}`;
-              return (
-                <MenuItem
-                  key={occ.key}
-                  onClick={() => {
-                    setSavedOccurrencesAnchor(null);
-                    onSelectOccurrence?.(occ.key);
+        <Menu
+          anchorEl={savedOccurrencesAnchor}
+          open={Boolean(savedOccurrencesAnchor)}
+          onClose={() => setSavedOccurrencesAnchor(null)}
+          anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+          transformOrigin={{ vertical: 'top', horizontal: 'left' }}
+          slotProps={{ paper: { sx: { minWidth: 280, maxWidth: 'min(400px, calc(100vw - 24px))' } } }}
+        >
+          {savedOccurrences.map((occ) => {
+            const name = occ.vernacularName?.trim() || occ.scientificName || `Occurrence ${occ.gbifKey ?? occ.key}`;
+            return (
+              <MenuItem
+                key={occ.key}
+                onClick={() => {
+                  setSavedOccurrencesAnchor(null);
+                  onSelectOccurrence?.(occ.key);
+                }}
+                sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}
+              >
+                <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</span>
+                <IconButton
+                  size="small"
+                  aria-label={`Remove ${name} from saved`}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onRemoveSavedOccurrence?.(occ.key);
                   }}
-                  sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}
                 >
-                  <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</span>
-                  <IconButton
-                    size="small"
-                    aria-label={`Remove ${name} from saved`}
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      onRemoveSavedOccurrence?.(occ.key);
-                    }}
-                  >
-                    <DeleteOutline fontSize="small" />
-                  </IconButton>
-                </MenuItem>
-              );
-            })}
-          </Menu>
-        </>
+                  <DeleteOutline fontSize="small" />
+                </IconButton>
+              </MenuItem>
+            );
+          })}
+        </Menu>
       )}
 
       {hasExportActions && (
-        <>
-          <Button
-            variant="outlined"
-            size="small"
-            startIcon={<Download />}
-            endIcon={<ArrowDropDown />}
-            onClick={(e) => setExportMenuAnchor(e.currentTarget)}
-            aria-label="Export"
-            aria-haspopup="true"
-            aria-expanded={Boolean(exportMenuAnchor)}
-            sx={{ minWidth: 0, display: { xs: 'none', md: 'inline-flex' } }}
-          >
-            Export
-          </Button>
-          <Menu
-            anchorEl={exportMenuAnchor}
-            open={Boolean(exportMenuAnchor)}
-            onClose={() => setExportMenuAnchor(null)}
-            anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-            transformOrigin={{ vertical: 'top', horizontal: 'right' }}
-            slotProps={{ paper: { sx: { mt: 1, maxWidth: 'calc(100vw - 24px)' } } }}
-          >
-            {renderExportMenuItems('export', () => setExportMenuAnchor(null), true)}
-          </Menu>
-        </>
+        <Menu
+          anchorEl={exportMenuAnchor}
+          open={Boolean(exportMenuAnchor)}
+          onClose={() => setExportMenuAnchor(null)}
+          anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+          transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+          slotProps={{ paper: { sx: { mt: 1, maxWidth: 'calc(100vw - 24px)' } } }}
+        >
+          {renderExportMenuItems('export', () => setExportMenuAnchor(null), true)}
+        </Menu>
       )}
 
       {onSceneModeChange && (
-        <>
-          <Button
-            variant="outlined"
-            size="small"
-            startIcon={<Public />}
-            endIcon={<ArrowDropDown />}
-            onClick={(e) => setViewMenuAnchor(e.currentTarget)}
-            aria-label="View options"
-            aria-haspopup="true"
-            aria-expanded={Boolean(viewMenuAnchor)}
-            sx={{ minWidth: 0, display: { xs: 'none', md: 'inline-flex' } }}
-          >
-            View
-          </Button>
-          <Menu
-            anchorEl={viewMenuAnchor}
-            open={Boolean(viewMenuAnchor)}
-            onClose={() => setViewMenuAnchor(null)}
-            anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
-            transformOrigin={{ vertical: 'top', horizontal: 'left' }}
-            slotProps={{ paper: { sx: { mt: 1, minWidth: 260, maxWidth: 'calc(100vw - 24px)' } } }}
-          >
-            {[
+        <Menu
+          anchorEl={viewMenuAnchor}
+          open={Boolean(viewMenuAnchor)}
+          onClose={() => setViewMenuAnchor(null)}
+          anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+          transformOrigin={{ vertical: 'top', horizontal: 'left' }}
+          slotProps={{ paper: { sx: { mt: 1, minWidth: 260, maxWidth: 'calc(100vw - 24px)' } } }}
+        >
+          {[
               <ListSubheader key="view-type" sx={{ lineHeight: 2 }}>View type</ListSubheader>,
               <MenuItem
                 key="3d"
@@ -1045,63 +1155,8 @@ export default function MapTopBar({
                   ]
                 : []),
             ].filter(Boolean)}
-          </Menu>
-        </>
+        </Menu>
       )}
-      <Box
-        aria-hidden="true"
-        sx={{
-          mx: 1,
-          width: '1px',
-          height: 20,
-          alignSelf: 'center',
-          backgroundColor: '#ffffff',
-          opacity: 0.9,
-          display: { xs: 'none', md: 'block' },
-        }}
-      />
-      <Button
-        variant="outlined"
-        size="small"
-        startIcon={<InfoOutlined />}
-        endIcon={<ArrowDropDown />}
-        onClick={(e) => setAboutMenuAnchor(e.currentTarget)}
-        aria-label="About"
-        aria-haspopup="true"
-        aria-expanded={Boolean(aboutMenuAnchor)}
-        sx={{ minWidth: 0, display: { xs: 'none', md: 'inline-flex' } }}
-      >
-        About
-      </Button>
-      <IconButton
-        size="small"
-        aria-label="Help: how this tool works"
-        onClick={() => setHelpOpen(true)}
-        sx={{
-          color: 'rgba(255,255,255,0.9)',
-          p: 0.5,
-          display: { xs: 'none', md: 'inline-flex' },
-          '&:hover': { backgroundColor: 'rgba(255,255,255,0.08)' },
-        }}
-      >
-        <HelpOutline fontSize="small" />
-      </IconButton>
-      <IconButton
-        component="a"
-        href={githubUrl}
-        target="_blank"
-        rel="noopener noreferrer"
-        size="small"
-        aria-label="View on GitHub"
-        sx={{
-          color: 'rgba(255,255,255,0.9)',
-          p: 0.5,
-          display: { xs: 'none', md: 'inline-flex' },
-          '&:hover': { backgroundColor: 'rgba(255,255,255,0.08)' },
-        }}
-      >
-        <GitHub fontSize="small" />
-      </IconButton>
       </Box>
 
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>

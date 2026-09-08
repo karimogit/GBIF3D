@@ -48,15 +48,69 @@ export function setTopDownExportView(viewer: Cesium.Viewer, bounds: Bounds): voi
 /** Wait until the scene has rendered after a camera move. */
 export function waitForSceneRender(viewer: Cesium.Viewer, frameCount = 2): Promise<void> {
   return new Promise((resolve) => {
-    viewer.scene.requestRender();
     let frames = 0;
+    let cleaned = false;
+    const cleanup = () => {
+      if (cleaned) return;
+      cleaned = true;
+      try {
+        viewer.scene.postRender.removeEventListener(onPostRender);
+      } catch {
+        // viewer may be destroyed
+      }
+    };
     const onPostRender = () => {
       frames += 1;
       if (frames >= frameCount) {
-        viewer.scene.postRender.removeEventListener(onPostRender);
+        cleanup();
         resolve();
       }
     };
-    viewer.scene.postRender.addEventListener(onPostRender);
+    try {
+      viewer.scene.postRender.addEventListener(onPostRender);
+      viewer.scene.requestRender();
+    } catch {
+      cleanup();
+      resolve();
+    }
+  });
+}
+
+/**
+ * Wait until globe tiles have finished loading (or timeout), then wait for a couple of
+ * postRender frames so the scene is ready for capture.
+ */
+export function waitForTilesLoaded(viewer: Cesium.Viewer, timeoutMs = 15000): Promise<void> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeoutId);
+      try {
+        viewer.scene.globe.tileLoadProgressEvent.removeEventListener(onProgress);
+      } catch {
+        // viewer may be destroyed
+      }
+      void waitForSceneRender(viewer).then(resolve);
+    };
+
+    const onProgress = (remaining: number) => {
+      if (remaining === 0) finish();
+    };
+
+    const timeoutId = setTimeout(finish, timeoutMs);
+
+    try {
+      viewer.scene.globe.tileLoadProgressEvent.addEventListener(onProgress);
+      // Already idle (no outstanding tile requests).
+      if (viewer.scene.globe.tilesLoaded) {
+        finish();
+      } else {
+        viewer.scene.requestRender();
+      }
+    } catch {
+      finish();
+    }
   });
 }

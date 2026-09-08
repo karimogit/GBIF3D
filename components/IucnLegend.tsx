@@ -1,18 +1,7 @@
 'use client';
 
 import Tooltip from '@mui/material/Tooltip';
-
-const IUCN_LEGEND_ITEMS = [
-  { label: 'EX', color: '#000000', title: 'Extinct' },
-  { label: 'EW', color: '#8B0000', title: 'Extinct in the Wild' },
-  { label: 'CR', color: '#FF0000', title: 'Critically Endangered' },
-  { label: 'EN', color: '#FF9800', title: 'Endangered' },
-  { label: 'VU', color: '#F9A825', title: 'Vulnerable' },
-  { label: 'NT', color: '#FBC02D', title: 'Near Threatened' },
-  { label: 'LC', color: '#2E7D32', title: 'Least Concern' },
-  { label: 'DD', color: '#757575', title: 'Data Deficient' },
-  { label: 'NE', color: '#BDBDBD', title: 'Not Evaluated / Not Applicable' },
-];
+import { IUCN_LEGEND_ITEMS } from '@/lib/iucn';
 
 /** Compact colour key for the IUCN categories used to tint occurrence points. */
 export default function IucnLegend() {
@@ -34,7 +23,16 @@ export default function IucnLegend() {
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
         {IUCN_LEGEND_ITEMS.map((item) => (
           <Tooltip key={item.label} title={item.title} placement="top" arrow enterDelay={300}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'default' }}>
+            <span
+              tabIndex={0}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+                cursor: 'default',
+                outline: 'none',
+              }}
+            >
               <span
                 style={{
                   width: 8,
@@ -45,7 +43,7 @@ export default function IucnLegend() {
                 }}
               />
               <span>{item.label}</span>
-            </div>
+            </span>
           </Tooltip>
         ))}
       </div>

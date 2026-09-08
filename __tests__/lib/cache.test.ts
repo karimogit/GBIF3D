@@ -57,5 +57,52 @@ describe('cache', () => {
       const k2 = cacheKey('suggest', { a: 1 });
       expect(k1).not.toBe(k2);
     });
+
+    it('preserves nested object properties (bounds) in the key', () => {
+      const key = cacheKey('occ', {
+        bounds: { west: 10, south: 58, east: 20, north: 62 },
+      });
+      expect(key).toContain('"west":10');
+      expect(key).toContain('"south":58');
+      expect(key).toContain('"east":20');
+      expect(key).toContain('"north":62');
+    });
+
+    it('includes nested selectedSpeciesOptions label/key', () => {
+      const key = cacheKey('occ', {
+        selectedSpeciesOptions: [{ label: 'Pinus sylvestris', key: 5284861 }],
+      });
+      expect(key).toContain('"label":"Pinus sylvestris"');
+      expect(key).toContain('"key":5284861');
+    });
+
+    it('different nested values produce different keys', () => {
+      const a = cacheKey('occ', { bounds: { west: 10, south: 58, east: 20, north: 62 } });
+      const b = cacheKey('occ', { bounds: { west: 11, south: 58, east: 20, north: 62 } });
+      expect(a).not.toBe(b);
+    });
+
+    it('same nested values with different key order produce the same key', () => {
+      const a = cacheKey('occ', { bounds: { west: 10, south: 58, east: 20, north: 62 } });
+      const b = cacheKey('occ', { bounds: { north: 62, east: 20, south: 58, west: 10 } });
+      expect(a).toBe(b);
+    });
+  });
+
+  describe('getCached expiry isolation', () => {
+    it('expired entry returns null while unexpired sibling remains', () => {
+      jest.useFakeTimers();
+      try {
+        const now = Date.now();
+        jest.setSystemTime(now);
+        setCache('short', 'gone-soon', 1000);
+        setCache('long', 'still-here', 60_000);
+        jest.setSystemTime(now + 2000);
+        expect(getCached('short')).toBeNull();
+        expect(getCached<string>('long')).toBe('still-here');
+      } finally {
+        jest.useRealTimers();
+      }
+    });
   });
 });

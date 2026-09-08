@@ -57,7 +57,10 @@ export function getFavorites(): FavoriteRegion[] {
 
 export function addFavorite(name: string, bounds: Bounds, polygon?: LonLat[] | null): FavoriteRegion {
   const list = load();
-  const id = `fav-${Date.now()}`;
+  const id =
+    typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? `fav-${crypto.randomUUID()}`
+      : `fav-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
   const item: FavoriteRegion = {
     id,
     name,

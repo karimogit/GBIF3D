@@ -5,7 +5,8 @@ import CssBaseline from '@mui/material/CssBaseline';
 
 const theme = createTheme({
   typography: {
-    fontFamily: "Roboto, 'Helvetica Neue', Helvetica, Arial, sans-serif",
+    // Prefer next/font Roboto on body; fall back for any portal/SSR edge cases.
+    fontFamily: "var(--font-roboto), Roboto, 'Helvetica Neue', Helvetica, Arial, sans-serif",
   },
   palette: {
     mode: 'light',
@@ -27,6 +28,8 @@ const theme = createTheme({
 });
 
 export function Providers({ children }: { children: React.ReactNode }) {
+  // Skipped AppRouterCacheProvider (@mui/material-nextjs): MUI 5 package pulls in
+  // @emotion/cache/@emotion/server peers; keep providers lean without that dep.
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />

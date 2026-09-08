@@ -12,12 +12,27 @@ function isAllowedUrlList(urls: unknown): urls is string[] {
   return Array.isArray(urls) && urls.every(isAllowedImageUrl);
 }
 
+function getFocusableElements(container: HTMLElement): HTMLElement[] {
+  const nodes = container.querySelectorAll<HTMLElement>(
+    'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+  );
+  const fromQuery = Array.from(nodes).filter((el) => {
+    if (el === container) return false;
+    if (el.getAttribute('aria-hidden') === 'true') return false;
+    const style = window.getComputedStyle(el);
+    return style.display !== 'none' && style.visibility !== 'hidden';
+  });
+  // Include the dialog container so Tab cycles close / prev / next / container.
+  return [container, ...fromQuery];
+}
+
 export default function Lightbox() {
   const [urls, setUrls] = useState<string[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const isOpen = urls.length > 0;
   const currentUrl = urls[currentIndex] ?? null;
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -51,20 +66,25 @@ export default function Lightbox() {
   }, [urls.length]);
 
   useEffect(() => {
-    if (isOpen && containerRef.current) {
-      // Move focus into the lightbox so keyboard arrows work even if focus was inside the Cesium infoBox iframe.
-      // Use setTimeout to ensure focus happens after any iframe focus is cleared
-      const timeoutId = setTimeout(() => {
-        containerRef.current?.focus();
-      }, 0);
-      return () => clearTimeout(timeoutId);
+    if (!isOpen) {
+      previouslyFocusedRef.current?.focus?.();
+      previouslyFocusedRef.current = null;
+      return;
     }
+    previouslyFocusedRef.current = document.activeElement as HTMLElement | null;
+    // Move focus into the lightbox so keyboard arrows work even if focus was inside the Cesium infoBox iframe.
+    const timeoutId = setTimeout(() => {
+      const root = containerRef.current;
+      if (!root) return;
+      const focusables = getFocusableElements(root);
+      (focusables[0] ?? root).focus();
+    }, 0);
+    return () => clearTimeout(timeoutId);
   }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen) return;
     const onKey = (e: KeyboardEvent) => {
-      // Only handle keys if lightbox is open and not typing in an input
       const target = e.target as HTMLElement;
       if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
         return;
@@ -81,9 +101,28 @@ export default function Lightbox() {
         e.preventDefault();
         e.stopPropagation();
         goNext();
+      } else if (e.key === 'Tab') {
+        const root = containerRef.current;
+        if (!root) return;
+        const focusables = getFocusableElements(root);
+        if (focusables.length === 0) {
+          e.preventDefault();
+          root.focus();
+          return;
+        }
+        const current = document.activeElement as HTMLElement | null;
+        const idx = current ? focusables.indexOf(current) : -1;
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.shiftKey) {
+          const prev = idx <= 0 ? focusables[focusables.length - 1] : focusables[idx - 1];
+          prev.focus();
+        } else {
+          const next = idx < 0 || idx >= focusables.length - 1 ? focusables[0] : focusables[idx + 1];
+          next.focus();
+        }
       }
     };
-    // Use capture phase to catch events before they're handled elsewhere
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
   }, [isOpen, close, goPrev, goNext]);
@@ -218,7 +257,6 @@ export default function Lightbox() {
         }}
         onClick={(e) => e.stopPropagation()}
         onKeyDown={(e) => {
-          // Ensure keyboard events on image also work
           if (e.key === 'ArrowLeft') {
             e.preventDefault();
             e.stopPropagation();

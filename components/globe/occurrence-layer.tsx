@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef } from 'react';
-import { Entity, PointGraphics, useCesium } from 'resium';
+import { useCesium } from 'resium';
 import * as Cesium from 'cesium';
 import type { GBIFOccurrence } from '@/types/gbif';
 import { SELECTED_INFO_ENTITY_ID } from './constants';
@@ -37,6 +37,8 @@ export function OccurrencePointsPrimitive({
 }) {
   const cesium = useCesium();
   const collectionRef = useRef<Cesium.PointPrimitiveCollection | null>(null);
+  const pointsByKeyRef = useRef<Map<number, Cesium.PointPrimitive>>(new Map());
+  const selectedKeyRef = useRef<number | null | undefined>(selectedOccurrenceKey);
   const handlerRef = useRef<Cesium.ScreenSpaceEventHandler | null>(null);
 
   const withCoords = useMemo(() => occurrences.filter(hasCoords), [occurrences]);
@@ -48,37 +50,72 @@ export function OccurrencePointsPrimitive({
     const collection = new Cesium.PointPrimitiveCollection();
     viewer.scene.primitives.add(collection);
     collectionRef.current = collection;
+    const pointsByKey = pointsByKeyRef.current;
 
     return () => {
       if (collectionRef.current) {
         viewer.scene.primitives.remove(collectionRef.current);
         collectionRef.current = null;
       }
+      pointsByKey.clear();
     };
   }, [cesium?.viewer]);
 
+  // Rebuild points only when the occurrence set or scene mode changes (not selection/hide).
   useEffect(() => {
     const collection = collectionRef.current;
     if (!collection) return;
 
     collection.removeAll();
+    pointsByKeyRef.current.clear();
     const height = sceneMode === '2D' ? 0 : 1;
-    const alpha = pointsHidden ? 0 : 1;
+    const selectedKey = selectedKeyRef.current;
 
     for (const occ of withCoords) {
-      const isSelected = selectedOccurrenceKey != null && occ.key === selectedOccurrenceKey;
+      const isSelected = selectedKey != null && occ.key === selectedKey;
       const point = collection.add({
         position: Cesium.Cartesian3.fromDegrees(occ.decimalLongitude!, occ.decimalLatitude!, height),
-        color: colorForOccurrence(occ).withAlpha(alpha),
+        color: colorForOccurrence(occ),
         pixelSize: isSelected ? 18 : 11,
-        outlineColor: Cesium.Color.WHITE.withAlpha(alpha),
+        outlineColor: Cesium.Color.WHITE,
         outlineWidth: isSelected ? 3 : 2,
         id: occ.key,
       });
       point.scaleByDistance = getOccurrencePointScaleByDistance();
       point.disableDepthTestDistance = sceneMode === '2D' ? Number.POSITIVE_INFINITY : 0;
+      pointsByKeyRef.current.set(occ.key, point);
     }
-  }, [withCoords, sceneMode, pointsHidden, selectedOccurrenceKey]);
+
+    collection.show = !pointsHidden;
+    // pointsHidden applied for initial show; selection/hide updates use dedicated effects
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- rebuild only on data/mode/viewer
+  }, [cesium?.viewer, withCoords, sceneMode]);
+
+  useEffect(() => {
+    const collection = collectionRef.current;
+    if (!collection) return;
+    collection.show = !pointsHidden;
+  }, [pointsHidden]);
+
+  useEffect(() => {
+    const points = pointsByKeyRef.current;
+    const prev = selectedKeyRef.current;
+    if (prev != null && prev !== selectedOccurrenceKey) {
+      const prevPoint = points.get(prev);
+      if (prevPoint) {
+        prevPoint.pixelSize = 11;
+        prevPoint.outlineWidth = 2;
+      }
+    }
+    if (selectedOccurrenceKey != null) {
+      const nextPoint = points.get(selectedOccurrenceKey);
+      if (nextPoint) {
+        nextPoint.pixelSize = 18;
+        nextPoint.outlineWidth = 3;
+      }
+    }
+    selectedKeyRef.current = selectedOccurrenceKey;
+  }, [selectedOccurrenceKey]);
 
   useEffect(() => {
     const viewer = cesium?.viewer;
@@ -199,58 +236,4 @@ export function SelectedOccurrenceInfoSync({
   }, [cesium?.viewer, displayedKey, selectionRequestId]);
 
   return null;
-}
-
-export function OccurrenceEntities({
-  occurrences,
-  sceneMode,
-  pointsHidden,
-  imageUrlsByKey,
-  savedOccurrenceKeys,
-  selectedOccurrenceKey,
-}: {
-  occurrences: GBIFOccurrence[];
-  sceneMode: SceneModeType;
-  pointsHidden: boolean;
-  imageUrlsByKey: Record<number, string[]>;
-  savedOccurrenceKeys?: Set<number>;
-  selectedOccurrenceKey?: number | null;
-}) {
-  const withCoords = useMemo(() => occurrences.filter(hasCoords), [occurrences]);
-
-  // Building thousands of HTML descriptions is the expensive part; only redo it when inputs change.
-  const entities = useMemo(
-    () =>
-      withCoords.map((occ) => {
-        const isSelected = selectedOccurrenceKey != null && occ.key === selectedOccurrenceKey;
-        return (
-          <Entity
-            key={occ.key}
-            id={String(occ.key)}
-            position={Cesium.Cartesian3.fromDegrees(
-              occ.decimalLongitude!,
-              occ.decimalLatitude!,
-              sceneMode === '2D' ? 0 : 1
-            )}
-            description={occurrenceToDescription(occ, imageUrlsByKey[occ.key], savedOccurrenceKeys)}
-            name={occ.scientificName || occ.vernacularName || `Occurrence ${occ.key}`}
-          >
-            <PointGraphics
-              pixelSize={isSelected ? 18 : 11}
-              scaleByDistance={getOccurrencePointScaleByDistance()}
-              color={colorForOccurrence(occ).withAlpha(pointsHidden ? 0 : 1)}
-              outlineColor={Cesium.Color.WHITE.withAlpha(pointsHidden ? 0 : isSelected ? 1 : 0.8)}
-              outlineWidth={isSelected ? 3 : 2}
-              disableDepthTestDistance={sceneMode === '2D' ? Number.POSITIVE_INFINITY : undefined}
-              heightReference={
-                sceneMode === '2D' ? Cesium.HeightReference.NONE : Cesium.HeightReference.RELATIVE_TO_GROUND
-              }
-            />
-          </Entity>
-        );
-      }),
-    [withCoords, sceneMode, pointsHidden, imageUrlsByKey, savedOccurrenceKeys, selectedOccurrenceKey]
-  );
-
-  return <>{entities}</>;
 }
