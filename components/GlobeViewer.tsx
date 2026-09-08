@@ -48,7 +48,7 @@ export default function GlobeViewer({
   drawnBounds = null,
   drawnPolygon = null,
   sceneMode = '3D',
-  baseMap = 'positron',
+  baseMap = 'opentopomap',
   photorealistic3D = false,
   savedOccurrenceKeys,
   selectedOccurrenceKey,

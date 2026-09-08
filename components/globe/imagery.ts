@@ -12,8 +12,8 @@ export type BaseMapType =
 
 export type SceneModeType = '3D' | '2D';
 
-/** Free default basemap (Carto Positron) — avoids OSMF tile.openstreetmap.org usage policy. */
-export const DEFAULT_BASE_MAP: BaseMapType = 'positron';
+/** Free default basemap (OpenTopoMap) — avoids OSMF tile.openstreetmap.org and Carto API-key watermarks. */
+export const DEFAULT_BASE_MAP: BaseMapType = 'opentopomap';
 
 let defaultImageryProvider: Cesium.ImageryProvider | undefined;
 
