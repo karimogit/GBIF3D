@@ -63,6 +63,8 @@ interface GlobeSceneProps {
   drawRegionMode?: boolean;
   drawShapeMode?: DrawShapeMode;
   onDrawnRegion?: (region: DrawnRegion) => void;
+  /** Live preview vertices while a region is being drawn. */
+  onDrawPreviewVerticesChange?: (vertices: LonLat[]) => void;
   drawnBounds?: Bounds | null;
   drawnPolygon?: LonLat[] | null;
   sceneMode?: SceneModeType;
@@ -210,6 +212,7 @@ export default function GlobeScene({
   drawRegionMode = false,
   drawShapeMode = 'polygon',
   onDrawnRegion,
+  onDrawPreviewVerticesChange,
   drawnBounds,
   drawnPolygon,
   sceneMode = '3D',
@@ -365,6 +368,7 @@ export default function GlobeScene({
           active
           mode={drawShapeMode}
           onDrawnRegion={onDrawnRegion}
+          onPreviewVerticesChange={onDrawPreviewVerticesChange}
           finishRef={drawFinishRef}
         />
       )}

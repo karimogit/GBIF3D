@@ -1,5 +1,5 @@
 import type { FavoriteRegion } from '@/lib/favorites';
-import type { Bounds } from '@/lib/geometry';
+import type { Bounds, LonLat } from '@/lib/geometry';
 import type { OccurrenceFilters, GBIFOccurrence } from '@/types/gbif';
 import type { ExportDataOptions } from '@/lib/export-data';
 import type { BaseMapId } from '@/lib/base-map';
@@ -21,6 +21,8 @@ export interface MapTopBarRegionProps {
   onRegionChange: (regionId: string) => void;
   favorites: FavoriteRegion[];
   drawnBounds: Bounds | null;
+  /** Polygon of the current drawn region; used to show area (ha) in the region label. */
+  drawnPolygon?: LonLat[] | null;
   placeSearchResult: { name: string; bounds: Bounds; countryCode?: string } | null;
   onPlaceSelect: (bounds: Bounds, name: string, countryCode?: string) => void;
   onStartDrawRegion?: (mode?: DrawShapeMode) => void;

@@ -8,7 +8,11 @@ import {
   boundsFromCoords,
   padBounds,
   splitPolygonAtAntimeridian,
+  polygonAreaSquareMeters,
+  polygonAreaHectares,
+  formatAreaHectares,
 } from '@/lib/geometry';
+import { circleToPolygon } from '@/lib/draw-shapes';
 
 /** Shoelace signed area of a closed "lon lat, lon lat" WKT ring; positive = counter-clockwise. */
 function wktRingSignedArea(ring: string): number {
@@ -220,6 +224,56 @@ describe('geometry', () => {
       const b = padBounds({ west: 170, south: 0, east: 179, north: 10 }, 0.5, 0.01);
       expect(b.west).toBeCloseTo(165.5);
       expect(b.east).toBeCloseTo(-176.5);
+    });
+  });
+
+  describe('polygon area (hectares)', () => {
+    const equatorOneDegreeSquare: [number, number][] = [
+      [0, 0],
+      [1, 0],
+      [1, 1],
+      [0, 1],
+    ];
+
+    it('returns 0 for fewer than 3 vertices', () => {
+      expect(polygonAreaSquareMeters([])).toBe(0);
+      expect(polygonAreaSquareMeters([[0, 0], [1, 0]])).toBe(0);
+      expect(formatAreaHectares([[0, 0], [1, 0]])).toBeNull();
+    });
+
+    it('computes a plausible area for a 1°×1° square at the equator', () => {
+      // Flat approx ~111.3 km × 111.3 km ≈ 1.239e10 m² ≈ 1.239e6 ha
+      const m2 = polygonAreaSquareMeters(equatorOneDegreeSquare);
+      expect(m2).toBeGreaterThan(1.23e10);
+      expect(m2).toBeLessThan(1.25e10);
+      const ha = polygonAreaHectares(equatorOneDegreeSquare);
+      expect(ha).toBeGreaterThan(1.23e6);
+      expect(ha).toBeLessThan(1.25e6);
+    });
+
+    it('is winding-order independent', () => {
+      const cw = [...equatorOneDegreeSquare].reverse();
+      expect(polygonAreaHectares(cw)).toBeCloseTo(polygonAreaHectares(equatorOneDegreeSquare), 6);
+    });
+
+    it('matches πr² for a small geodesic circle approximation', () => {
+      const radiusM = 1000;
+      const ring = circleToPolygon([18, 59], radiusM, 64);
+      const ha = polygonAreaHectares(ring);
+      const expectedHa = (Math.PI * radiusM * radiusM) / 10_000;
+      expect(ha).toBeGreaterThan(expectedHa * 0.98);
+      expect(ha).toBeLessThan(expectedHa * 1.02);
+    });
+
+    it('formats hectares with sensible precision', () => {
+      expect(formatAreaHectares(equatorOneDegreeSquare)).toMatch(/1,?\d{3},\d{3} ha|1\d{6} ha/);
+      const small = formatAreaHectares([
+        [18, 59],
+        [18.001, 59],
+        [18.001, 59.001],
+        [18, 59.001],
+      ]);
+      expect(small).toMatch(/^\d+(\.\d+)? ha$/);
     });
   });
 });

@@ -80,11 +80,14 @@ export function DrawRegionHandler({
   active,
   mode = 'polygon',
   onDrawnRegion,
+  onPreviewVerticesChange,
   finishRef,
 }: {
   active: boolean;
   mode?: DrawShapeMode;
   onDrawnRegion: (region: DrawnRegion) => void;
+  /** Live preview ring while drawing (empty when cleared / finished). */
+  onPreviewVerticesChange?: (vertices: LonLat[]) => void;
   /** Assigned while drawing so imperative finishDrawing can complete the polygon. */
   finishRef?: MutableRefObject<(() => void) | null>;
 }) {
@@ -94,6 +97,8 @@ export function DrawRegionHandler({
   const anchorRef = useRef<LonLat | null>(null);
   const draggingRef = useRef(false);
   const previewEntitiesRef = useRef<Cesium.Entity[]>([]);
+  const onPreviewRef = useRef(onPreviewVerticesChange);
+  onPreviewRef.current = onPreviewVerticesChange;
 
   useEffect(() => {
     if (!active) {
@@ -101,6 +106,7 @@ export function DrawRegionHandler({
       anchorRef.current = null;
       draggingRef.current = false;
       if (finishRef) finishRef.current = null;
+      onPreviewRef.current?.([]);
       return;
     }
     if (viewer == null || !viewer.scene?.canvas || !viewer.camera) return;
@@ -113,6 +119,7 @@ export function DrawRegionHandler({
     const updatePreview = (vertices: LonLat[]) => {
       clearPreview();
       previewEntitiesRef.current = addDrawPreviewEntities(viewer, vertices);
+      onPreviewRef.current?.(vertices);
     };
 
     const emitRegion = (region: DrawnRegion | null) => {
@@ -121,6 +128,7 @@ export function DrawRegionHandler({
       verticesRef.current = [];
       anchorRef.current = null;
       draggingRef.current = false;
+      onPreviewRef.current?.([]);
       onDrawnRegion(region);
     };
 
@@ -238,6 +246,7 @@ export function DrawRegionHandler({
       anchorRef.current = null;
       draggingRef.current = false;
       if (finishRef) finishRef.current = null;
+      onPreviewRef.current?.([]);
       try {
         controller.enableRotate = prevRotate;
         controller.enableTilt = prevTilt;
