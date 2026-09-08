@@ -275,3 +275,52 @@ export function pointInPolygon(lon: number, lat: number, polygon: LonLat[]): boo
   }
   return inside;
 }
+
+/**
+ * Spherical Earth radius used for geodesic area (WGS84 semi-major; matches draw-shapes haversine).
+ */
+const EARTH_RADIUS_M = 6378137;
+
+/**
+ * Approximate geodesic area of a lon/lat polygon on a sphere (Chamberlain–Duquette).
+ * Handles antimeridian-crossing rings via longitude unwrapping. Returns square metres.
+ */
+export function polygonAreaSquareMeters(coords: LonLat[]): number {
+  if (coords.length < 3) return 0;
+  const ring = ensureClosedRing(unwrapLongitudes(stripClosingVertex(coords)));
+  if (ring.length < 4) return 0;
+  let sum = 0;
+  for (let i = 0; i < ring.length - 1; i++) {
+    const lon1 = ring[i][0];
+    const lat1 = ring[i][1];
+    const lon2 = ring[i + 1][0];
+    const lat2 = ring[i + 1][1];
+    sum +=
+      (((lon2 - lon1) * Math.PI) / 180) *
+      (Math.sin((lat1 * Math.PI) / 180) + Math.sin((lat2 * Math.PI) / 180));
+  }
+  return Math.abs((sum * EARTH_RADIUS_M * EARTH_RADIUS_M) / 2);
+}
+
+/** Geodesic polygon area in hectares (1 ha = 10_000 m²). */
+export function polygonAreaHectares(coords: LonLat[]): number {
+  return polygonAreaSquareMeters(coords) / 10_000;
+}
+
+/**
+ * Human-readable area label in hectares, or null when the ring is too small to measure.
+ * Examples: "0.42 ha", "12.3 ha", "1,240 ha"
+ */
+export function formatAreaHectares(coords: LonLat[]): string | null {
+  if (coords.length < 3) return null;
+  const ha = polygonAreaHectares(coords);
+  if (!(ha > 0) || !Number.isFinite(ha)) return null;
+  let formatted: string;
+  if (ha >= 1000) formatted = Math.round(ha).toLocaleString('en-US');
+  else if (ha >= 100) formatted = ha.toFixed(0);
+  else if (ha >= 10) formatted = ha.toFixed(1);
+  else if (ha >= 1) formatted = ha.toFixed(2);
+  else if (ha >= 0.01) formatted = ha.toFixed(2);
+  else formatted = ha.toFixed(3);
+  return `${formatted} ha`;
+}

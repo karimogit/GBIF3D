@@ -47,6 +47,7 @@ import Tooltip from '@mui/material/Tooltip';
 import { REGIONS } from '@/lib/regions';
 import { ION_TOKEN_CONFIGURED } from '@/lib/ion';
 import type { Bounds } from '@/lib/geometry';
+import { formatAreaHectares } from '@/lib/geometry';
 import type { DrawShapeMode } from '@/lib/draw-shapes';
 import FilterForm from './FilterForm';
 import ImportSummaryContent from './map-top-bar/ImportSummaryContent';
@@ -72,6 +73,7 @@ export default function MapTopBar(rawProps: MapTopBarProps | MapTopBarFlatProps)
     onRegionChange,
     favorites,
     drawnBounds,
+    drawnPolygon = null,
     placeSearchResult,
     onPlaceSelect,
     onStartDrawRegion,
@@ -283,15 +285,26 @@ export default function MapTopBar(rawProps: MapTopBarProps | MapTopBarFlatProps)
   }, [placeQuery, fetchPlaces]);
 
   const staticOptions = useMemo(() => {
+    const drawnArea =
+      drawnPolygon && drawnPolygon.length >= 3 ? formatAreaHectares(drawnPolygon) : null;
+    const drawnLabel = drawnArea ? `Drawn region (${drawnArea})` : 'Drawn region';
     const list: RegionOption[] = [
-      ...(drawnBounds != null ? [{ id: 'drawn', label: 'Drawn region' }] : []),
+      ...(drawnBounds != null ? [{ id: 'drawn', label: drawnLabel }] : []),
       ...REGIONS.map((r) => ({ id: r.id, label: r.name })),
       ...(favorites.length > 0
-        ? favorites.map((f) => ({ id: f.id, label: f.name, group: 'Saved' }))
+        ? favorites.map((f) => {
+            const area =
+              f.polygon && f.polygon.length >= 3 ? formatAreaHectares(f.polygon) : null;
+            return {
+              id: f.id,
+              label: area ? `${f.name} (${area})` : f.name,
+              group: 'Saved',
+            };
+          })
         : []),
     ];
     return list;
-  }, [drawnBounds, favorites]);
+  }, [drawnBounds, drawnPolygon, favorites]);
 
   const options = useMemo(() => {
     // Include the selected place so Autocomplete value is always in `options` (avoids MUI warning).

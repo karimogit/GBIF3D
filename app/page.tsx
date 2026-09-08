@@ -25,7 +25,12 @@ import {
   type FavoriteRegion,
 } from '@/lib/favorites';
 import type { Bounds, DrawnRegion, LonLat } from '@/lib/geometry';
-import { boundsToWktPolygon, coordsToWktPolygon, padBounds } from '@/lib/geometry';
+import {
+  boundsToWktPolygon,
+  coordsToWktPolygon,
+  formatAreaHectares,
+  padBounds,
+} from '@/lib/geometry';
 import type { DrawShapeMode } from '@/lib/draw-shapes';
 import { DEFAULT_OCCURRENCE_LIMIT } from '@/lib/gbif';
 import { ION_TOKEN_CONFIGURED } from '@/lib/ion';
@@ -113,15 +118,23 @@ function getSelectedRegionPolygon(
 function getRegionDisplayName(
   selectedRegionId: string,
   favorites: FavoriteRegion[],
-  placeSearchResult: { name: string; bounds: Bounds; countryCode?: string } | null
+  placeSearchResult: { name: string; bounds: Bounds; countryCode?: string } | null,
+  drawnPolygon: LonLat[] | null
 ): string {
   if (!selectedRegionId) return '';
-  if (selectedRegionId === REGION_ID_DRAWN) return 'Drawn region';
+  if (selectedRegionId === REGION_ID_DRAWN) {
+    const area = drawnPolygon && drawnPolygon.length >= 3 ? formatAreaHectares(drawnPolygon) : null;
+    return area ? `Drawn region (${area})` : 'Drawn region';
+  }
   if (selectedRegionId === REGION_ID_PLACE && placeSearchResult) return placeSearchResult.name;
   const fromRegions = REGIONS.find((r) => r.id === selectedRegionId);
   if (fromRegions) return fromRegions.name;
   const fav = favorites.find((f) => f.id === selectedRegionId);
-  if (fav) return fav.name;
+  if (fav) {
+    const area =
+      fav.polygon && fav.polygon.length >= 3 ? formatAreaHectares(fav.polygon) : null;
+    return area ? `${fav.name} (${area})` : fav.name;
+  }
   return selectedRegionId;
 }
 
@@ -245,7 +258,12 @@ export default function Home() {
     ]
   );
 
-  const regionDisplayName = getRegionDisplayName(selectedRegionId, favorites, placeSearchResult);
+  const regionDisplayName = getRegionDisplayName(
+    selectedRegionId,
+    favorites,
+    placeSearchResult,
+    drawnPolygon
+  );
 
   const savedOccurrenceKeys = useMemo(
     () => new Set(savedOccurrences.map((o) => o.key)),
@@ -669,6 +687,7 @@ export default function Home() {
             },
             favorites,
             drawnBounds,
+            drawnPolygon,
             placeSearchResult,
             onPlaceSelect: (bounds, name, countryCode) => {
               setPlaceSearchResult({ name, bounds, ...(countryCode != null ? { countryCode } : {}) });

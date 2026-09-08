@@ -1,7 +1,9 @@
 'use client';
 
+import { useCallback, useEffect, useState } from 'react';
 import type { ChunkProgress } from '@/lib/gbif';
 import type { Bounds, DrawnRegion, LonLat } from '@/lib/geometry';
+import { formatAreaHectares } from '@/lib/geometry';
 import type { BaseMapId } from '@/lib/base-map';
 import { toImageryBaseMap } from '@/lib/base-map';
 import type { GBIFOccurrence } from '@/types/gbif';
@@ -61,10 +63,22 @@ export default function GlobeViewer({
   selectedOccurrenceRequestId,
   onSelectedOccurrenceHandled,
 }: GlobeViewerProps) {
+  const [previewVertices, setPreviewVertices] = useState<LonLat[]>([]);
+
+  useEffect(() => {
+    if (!drawRegionMode) setPreviewVertices([]);
+  }, [drawRegionMode, drawShapeMode]);
+
+  const handlePreviewVerticesChange = useCallback((vertices: LonLat[]) => {
+    setPreviewVertices(vertices);
+  }, []);
+
   const progressLabel =
     progress != null
       ? `Loaded ${progress.loadedChunks} / ${progress.totalChunks} chunks (${progress.loadedRecords.toLocaleString()} records)`
       : 'Loading occurrences from GBIF…';
+
+  const previewAreaLabel = formatAreaHectares(previewVertices);
 
   const drawHint =
     drawShapeMode === 'rectangle'
@@ -72,6 +86,9 @@ export default function GlobeViewer({
       : drawShapeMode === 'circle'
         ? 'Click the center, then drag (or click again) to set the radius.'
         : 'Click to add polygon points. Double-click or tap Done to finish.';
+
+  const drawStatus =
+    previewAreaLabel != null ? `${drawHint} Area: ${previewAreaLabel}` : drawHint;
 
   return (
     <div
@@ -95,6 +112,7 @@ export default function GlobeViewer({
         drawRegionMode={drawRegionMode}
         drawShapeMode={drawShapeMode}
         onDrawnRegion={onDrawnRegion}
+        onDrawPreviewVerticesChange={handlePreviewVerticesChange}
         drawnBounds={drawnBounds}
         drawnPolygon={drawnPolygon}
         sceneMode={sceneMode}
@@ -123,7 +141,7 @@ export default function GlobeViewer({
             pointerEvents: 'none',
           }}
         >
-          {drawHint}
+          {drawStatus}
         </div>
       )}
       {flyMode && !drawRegionMode && (

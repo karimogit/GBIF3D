@@ -18,7 +18,7 @@ Built with Next.js, Cesium (Resium), and the GBIF API.
 
 - **3D interactive globe** — Pan, zoom, tilt, and rotate using CesiumJS
 - **Region selection** — In the top bar: choose World or a continent, search places by name (Photon / komoot), or pick a saved favorite. With no region selected, camera bounds at filter-apply time are used; panning alone does not refetch
-- **Draw region** — Pencil menu: draw a **polygon** (click points, Done to finish), **rectangle**, or **circle** on the globe and fetch occurrences for that area; save it as a favorite or clear it. Regions crossing the antimeridian are handled (sent to GBIF as a `MULTIPOLYGON`)
+- **Draw region** — Pencil menu: draw a **polygon** (click points, Done to finish), **rectangle**, or **circle** on the globe and fetch occurrences for that area; area size is shown in hectares (ha) while drawing and on the selected region. Save it as a favorite or clear it. Regions crossing the antimeridian are handled (sent to GBIF as a `MULTIPOLYGON`)
 - **Keyboard navigation** — Arrow keys (and WASD when not flying) pan the map; Page Up/Down zoom
 - **Fly mode** — Airplane control (bottom right): free-look flight with WASD / Q·E / mouse look — great with Photorealistic 3D; Esc exits
 - **Saved favorites** — Save a drawn polygon (or region bounds) as a named favorite (stored in browser); quick access from the Region dropdown
@@ -99,6 +99,7 @@ Click **Filters** in the top bar to refine your search:
 - Click the **pencil** icon next to place search and choose **Polygon**, **Rectangle**, or **Circle**
 - **Polygon** — Click points on the globe; double-click or **Done** to close
 - **Rectangle / Circle** — Click and drag (or click two points) to set the shape
+- The **area in hectares (ha)** updates live while you draw and stays on the selected region label
 - Occurrences will load for that area
 - Save it as a favorite from the Region dropdown for quick access later
 
@@ -239,7 +240,7 @@ The **default** base map is [OpenTopoMap](https://opentopomap.org/) (`*.tile.ope
 │   └── Lightbox.tsx       # Photo lightbox from InfoBox
 ├── lib/
 │   ├── gbif.ts            # GBIF API client (occurrence search, chunked fetching, species suggest)
-│   ├── geometry.ts        # Bounds/polygons ↔ WKT (antimeridian-aware), point-in-polygon
+│   ├── geometry.ts        # Bounds/polygons ↔ WKT (antimeridian-aware), point-in-polygon, area (ha)
 │   ├── regions.ts         # Predefined regions for Region dropdown
 │   ├── cache.ts           # Bounded LRU in-memory cache for API responses
 │   ├── favorites.ts       # Saved regions (localStorage)
@@ -269,7 +270,7 @@ npm test
 Tests include:
 
 - **GBIF API:** Occurrence search with geometry, taxonKey; species suggest; error handling (mocked `fetch`)
-- **Geometry:** WKT polygon from bounds and drawn polygons (counter-clockwise, lon/lat), antimeridian handling (`MULTIPOLYGON`), point-in-bounds/polygon, bounds padding
+- **Geometry:** WKT polygon from bounds and drawn polygons (counter-clockwise, lon/lat), antimeridian handling (`MULTIPOLYGON`), point-in-bounds/polygon, geodesic area in hectares, bounds padding
 - **Cache:** TTL expiry, LRU eviction, weight budget
 - **Import:** CSV/TSV/JSON detection, DwC-A entry selection, header matching, date parsing, synthetic keys
 - **Export:** CSV formula-injection guard, region columns, GeoJSON winding and `MultiPolygon` output
