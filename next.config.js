@@ -7,7 +7,7 @@ const CONTENT_SECURITY_POLICY_REPORT_ONLY = [
   "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https:",
-  "connect-src 'self' https://api.gbif.org https://*.basemaps.cartocdn.com https://tile.openstreetmap.org https://*.tile.opentopomap.org https://photon.komoot.io https://api.cesium.com https://*.cesium.com https://*.bing.com https://tiles.arcgis.com https://*.arcgis.com",
+  "connect-src 'self' https://api.gbif.org https://tile.openstreetmap.org https://*.tile.opentopomap.org https://photon.komoot.io https://api.cesium.com https://*.cesium.com https://*.bing.com https://tiles.arcgis.com https://*.arcgis.com",
   "frame-src 'self' blob:",
   "worker-src 'self' blob:",
   "font-src 'self' data:",
