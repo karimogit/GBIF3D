@@ -91,7 +91,7 @@ Click **Filters** in the top bar to refine your search:
 - **View points** — Each occurrence appears as a colored dot on the globe (colors indicate IUCN status; palette is colour-blind friendly: black / brown / orange / gold / blue / green / grey)
 - **Click a point** — Opens an info box with species name, date, location, photos (if available), and a link to the full GBIF record
 - **Timeline** — Use the timeline at the bottom to filter by year and month; click a year bar to see only occurrences from that year
-- **Navigate** — Pan, zoom, and rotate the globe with your mouse or touch gestures
+- **Navigate** — Pan, zoom, and rotate the globe with your mouse or touch gestures. Bottom-right controls reset the view (home) or point north.
 
 ### Step 4: Draw a Custom Region (Optional)
 - Click **Draw region** in the top bar
