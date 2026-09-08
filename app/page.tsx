@@ -14,6 +14,7 @@ import OccurrenceTimeline from '@/components/OccurrenceTimeline';
 import IucnLegend from '@/components/IucnLegend';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import Lightbox from '@/components/Lightbox';
+import MapCornerControls from '@/components/MapCornerControls';
 import type { OccurrenceFilters } from '@/types/gbif';
 import type { GBIFOccurrence } from '@/types/gbif';
 import { getRegionBounds, REGIONS } from '@/lib/regions';
@@ -445,6 +446,14 @@ export default function Home() {
     globeHandleRef.current?.finishDrawing();
   }, []);
 
+  const handleResetNorth = useCallback(() => {
+    globeHandleRef.current?.resetNorth();
+  }, []);
+
+  const handleResetHome = useCallback(() => {
+    globeHandleRef.current?.resetHome();
+  }, []);
+
   const handleCancelDrawRegion = useCallback(() => {
     setDrawRegionMode(false);
   }, []);
@@ -624,6 +633,7 @@ export default function Home() {
             onMonthChange={setSelectedMonth}
           />
         </div>
+        <MapCornerControls onResetHome={handleResetHome} onResetNorth={handleResetNorth} />
         <MapTopBar
           region={{
             selectedRegionId,

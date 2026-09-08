@@ -14,6 +14,8 @@ import {
   prepareCanvasForExport,
 } from './globe/export-utils';
 import {
+  resetCameraHome,
+  resetCameraNorth,
   restoreCameraState,
   saveCameraState,
   setTopDownExportView,
@@ -167,7 +169,27 @@ function GlobeCommands({
       drawFinishRef.current?.();
     };
 
-    register({ exportImage, capturePdfSnapshot, finishDrawing });
+    const resetNorth = () => {
+      try {
+        const viewer = cesium?.viewer;
+        if (viewer?.camera == null) return;
+        resetCameraNorth(viewer);
+      } catch {
+        // viewer may be destroyed
+      }
+    };
+
+    const resetHome = () => {
+      try {
+        const viewer = cesium?.viewer;
+        if (viewer?.camera == null) return;
+        resetCameraHome(viewer);
+      } catch {
+        // viewer may be destroyed
+      }
+    };
+
+    register({ exportImage, capturePdfSnapshot, finishDrawing, resetNorth, resetHome });
   }, [cesium?.viewer, register, drawFinishRef]);
 
   return null;

@@ -61,6 +61,50 @@ html, body {
   display: none !important;
 }
 
+/* Custom home / north pills stacked above the Cesium fullscreen control */
+.map-corner-controls {
+  position: absolute;
+  right: max(16px, env(safe-area-inset-right));
+  bottom: calc(16px + 40px + 8px + env(safe-area-inset-bottom, 0px));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 1000;
+  pointer-events: none;
+}
+
+.map-corner-control {
+  pointer-events: auto !important;
+  width: 40px !important;
+  height: 40px !important;
+  min-width: 40px !important;
+  min-height: 40px !important;
+  padding: 0 !important;
+  color: rgba(255, 255, 255, 0.9) !important;
+  background: rgba(18, 22, 28, 0.88) !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4) !important;
+  border-radius: 10px !important;
+  transition: background 0.15s !important;
+}
+
+.map-corner-control:hover {
+  background-color: rgba(40, 46, 54, 0.95) !important;
+}
+
+.map-corner-control:focus-visible {
+  outline: 2px solid var(--focus-ring) !important;
+  outline-offset: 1px !important;
+}
+
+.map-corner-control:active {
+  background: rgba(76, 175, 80, 0.2) !important;
+}
+
+.map-corner-control .MuiSvgIcon-root {
+  font-size: 22px;
+}
+
 /* Species info box: centered below the top bar (matches filter/dialog placement) */
 .cesium-infoBox {
   margin-top: 56px;

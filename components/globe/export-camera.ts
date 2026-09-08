@@ -26,6 +26,25 @@ export function restoreCameraState(viewer: Cesium.Viewer, state: SavedCameraStat
   });
 }
 
+/** Animate camera heading/roll to north-up; keep position and pitch. */
+export function resetCameraNorth(viewer: Cesium.Viewer, duration = 0.6): void {
+  const camera = viewer.camera;
+  camera.flyTo({
+    destination: camera.positionWC.clone(),
+    orientation: {
+      heading: 0,
+      pitch: camera.pitch,
+      roll: 0,
+    },
+    duration,
+  });
+}
+
+/** Fly to Cesium's default whole-Earth home view. */
+export function resetCameraHome(viewer: Cesium.Viewer, duration = 1.2): void {
+  viewer.camera.flyHome(duration);
+}
+
 /** Frame the map with a straight top-down view over the given bounds (for export snapshots). */
 export function setTopDownExportView(viewer: Cesium.Viewer, bounds: Bounds): void {
   const rectangle = Cesium.Rectangle.fromDegrees(bounds.west, bounds.south, bounds.east, bounds.north);
