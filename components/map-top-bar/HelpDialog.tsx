@@ -27,11 +27,12 @@ export default function HelpDialog({
           <p><strong>1. Pick a region</strong> — Search for a place by name (Photon / komoot), or choose World or a continent from the list. With no region selected, occurrences use the camera bounds at the moment you apply filters; panning alone does not refetch — re-apply a filter or pick a region.</p>
           <p><strong>2. Add species filters</strong> — Open Filters to search by species/taxon, taxonomic group, IUCN status, date range, and advanced options (e.g. country, dataset, institution).</p>
           <p><strong>3. Import your own data</strong> — Use Import to add GBIF-style CSV or JSON files; imported points appear alongside live API data and saved occurrences.</p>
-          <p><strong>4. Explore the globe</strong> — Each dot is an occurrence (fixed height in 3D primitive mode). Rotate, pan, and zoom to see where records are concentrated. Use the home and compass icons (bottom right) to reset the view or point north, and the fullscreen icon to go fullscreen.</p>
+          <p><strong>4. Explore the globe</strong> — Each dot is an occurrence (fixed height in 3D primitive mode). Rotate, pan, and zoom to see where records are concentrated. Use arrow keys (or WASD) to pan, and Page Up/Down to zoom. Use the home and compass icons (bottom right) to reset the view or point north, and the fullscreen icon to go fullscreen.</p>
           <p><strong>5. Use the timeline</strong> — Click a year (and optionally a month) at the bottom to focus on that period. Click “All” to reset.</p>
-          <p><strong>6. Draw your own area</strong> — Use Draw region to outline a polygon on the globe and fetch occurrences for that area; you can save it as a favorite.</p>
-          <p><strong>7. Export</strong> — Use Export to save the current view as an image, or export GeoJSON, CSV, or PDF with options for visible vs all data and whether to include the region boundary polygon.</p>
-          <p><strong>Navigation tips</strong> — Left-click and drag to rotate (3D) or pan (2D); right-click and drag to pan; use the mouse wheel to zoom; on touch, drag to pan and pinch to zoom. Point north resets rotation; Reset view flies back to the whole Earth.</p>
+          <p><strong>6. Draw your own area</strong> — Open the draw menu (pencil) and choose polygon, rectangle, or circle. Outline an area on the globe to fetch occurrences for it; you can save it as a favorite.</p>
+          <p><strong>7. Fly mode</strong> — Toggle the airplane icon (bottom right) for free-look flight: WASD to move, Q/E up/down, Shift to go faster, drag to look. Pairs well with Photorealistic 3D in the View menu. Press Esc to exit.</p>
+          <p><strong>8. Export</strong> — Use Export to save the current view as an image, or export GeoJSON, CSV, or PDF with options for visible vs all data and whether to include the region boundary polygon.</p>
+          <p><strong>Navigation tips</strong> — Left-click and drag to rotate (3D) or pan (2D); right-click and drag to pan; use the mouse wheel to zoom; on touch, drag to pan and pinch to zoom. Arrow keys pan the map. Point north resets rotation; Reset view flies back to the whole Earth.</p>
         </Typography>
       </DialogContent>
       <DialogActions>

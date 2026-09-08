@@ -1,10 +1,10 @@
 'use client';
 
-import { useCallback, useEffect, useRef, type MutableRefObject } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useCesium } from 'resium';
 import * as Cesium from 'cesium';
 import type { GBIFOccurrence } from '@/types/gbif';
-import type { Bounds } from '@/lib/geometry';
+import type { Bounds, LonLat } from '@/lib/geometry';
 import { rectangleToBounds } from '@/lib/geometry';
 import {
   BOUNDS_REPORT_THROTTLE_MS,
@@ -14,8 +14,6 @@ import {
   SAVE_OCCURRENCE_EVENT,
   SELECTED_INFO_ENTITY_ID,
 } from './constants';
-import type { DrawnRegion, LonLat } from '@/lib/geometry';
-import { boundsFromCoords, boundsLonSpan } from '@/lib/geometry';
 import {
   DEFAULT_BASE_MAP,
   type BaseMapType,
@@ -23,6 +21,9 @@ import {
   createImageryProvider,
   getIonImageryStyle,
 } from './imagery';
+
+export { DrawRegionHandler, type DrawShapeMode } from './draw-region-handler';
+export { MapKeyboardPan, FlyModeHandler } from './map-navigation';
 
 export type { SceneModeType };
 
@@ -614,156 +615,3 @@ export function DrawnRegionOverlay({
   return null;
 }
 
-/** Remove consecutive vertices that are within a small fraction of the polygon's extent of each other. */
-function dedupeConsecutiveVertices(vertices: LonLat[]): LonLat[] {
-  if (vertices.length < 2) return vertices;
-  const bounds = boundsFromCoords(vertices);
-  const tolerance = Math.max(1e-6, Math.max(boundsLonSpan(bounds), bounds.north - bounds.south) * 1e-3);
-  const out: LonLat[] = [vertices[0]];
-  for (let i = 1; i < vertices.length; i++) {
-    const [px, py] = out[out.length - 1];
-    const [x, y] = vertices[i];
-    if (Math.abs(x - px) > tolerance || Math.abs(y - py) > tolerance) out.push(vertices[i]);
-  }
-  const [fx, fy] = out[0];
-  const [lx, ly] = out[out.length - 1];
-  if (out.length > 1 && Math.abs(fx - lx) <= tolerance && Math.abs(fy - ly) <= tolerance) out.pop();
-  return out;
-}
-
-/** Multi-click polygon drawing on the globe; double-click or finishRef completes the shape. */
-export function DrawRegionHandler({
-  active,
-  onDrawnRegion,
-  finishRef,
-}: {
-  active: boolean;
-  onDrawnRegion: (region: DrawnRegion) => void;
-  /** Assigned while drawing so imperative finishDrawing can complete the polygon. */
-  finishRef?: MutableRefObject<(() => void) | null>;
-}) {
-  const cesium = useCesium();
-  const viewer = cesium?.viewer;
-  const verticesRef = useRef<LonLat[]>([]);
-  const previewEntitiesRef = useRef<Cesium.Entity[]>([]);
-
-  useEffect(() => {
-    if (!active) {
-      verticesRef.current = [];
-      if (finishRef) finishRef.current = null;
-      return;
-    }
-    if (viewer == null || !viewer.scene?.canvas || !viewer.camera) return;
-
-    const clearPreview = () => {
-      for (const entity of previewEntitiesRef.current) viewer.entities.remove(entity);
-      previewEntitiesRef.current = [];
-    };
-
-    const updatePreview = (vertices: LonLat[]) => {
-      clearPreview();
-      previewEntitiesRef.current = addDrawPreviewEntities(viewer, vertices);
-    };
-
-    const finishPolygon = () => {
-      // A double-click also delivers two LEFT_CLICKs at (nearly) the same spot; drop the repeats.
-      const vertices = dedupeConsecutiveVertices(verticesRef.current);
-      if (vertices.length < 3) return;
-      clearPreview();
-      verticesRef.current = [];
-      onDrawnRegion({
-        bounds: boundsFromCoords(vertices),
-        polygon: vertices,
-      });
-    };
-
-    if (finishRef) finishRef.current = finishPolygon;
-
-    const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
-
-    const pickLonLat = (position: Cesium.Cartesian2): LonLat | null => {
-      try {
-        const ray = viewer.camera.getPickRay(position);
-        if (!ray) return null;
-        const cartesian = viewer.scene.globe.pick(ray, viewer.scene);
-        if (!cartesian) return null;
-        const carto = Cesium.Cartographic.fromCartesian(cartesian);
-        return [
-          Cesium.Math.toDegrees(carto.longitude),
-          Cesium.Math.toDegrees(carto.latitude),
-        ];
-      } catch {
-        return null;
-      }
-    };
-
-    handler.setInputAction((event: { position: Cesium.Cartesian2 }) => {
-      const coord = pickLonLat(event.position);
-      if (!coord) return;
-      verticesRef.current = [...verticesRef.current, coord];
-      updatePreview(verticesRef.current);
-    }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
-
-    handler.setInputAction(finishPolygon, Cesium.ScreenSpaceEventType.LEFT_DOUBLE_CLICK);
-
-    return () => {
-      if (!handler.isDestroyed()) handler.destroy();
-      clearPreview();
-      verticesRef.current = [];
-      if (finishRef) finishRef.current = null;
-    };
-  }, [active, viewer, onDrawnRegion, finishRef]);
-
-  return null;
-}
-
-/** Vertex dots, connecting polyline and (from 3 vertices) a translucent fill for the in-progress polygon. */
-function addDrawPreviewEntities(viewer: Cesium.Viewer, vertices: LonLat[]): Cesium.Entity[] {
-  if (vertices.length === 0) return [];
-  const entities: Cesium.Entity[] = [];
-  const pointColor = Cesium.Color.fromCssColorString('#78b578');
-  for (const [lon, lat] of vertices) {
-    entities.push(
-      viewer.entities.add({
-        position: Cesium.Cartesian3.fromDegrees(lon, lat),
-        point: {
-          pixelSize: 8,
-          color: pointColor,
-          outlineColor: Cesium.Color.WHITE,
-          outlineWidth: 1,
-          disableDepthTestDistance: Number.POSITIVE_INFINITY,
-        },
-      })
-    );
-  }
-
-  if (vertices.length >= 2) {
-    entities.push(
-      viewer.entities.add({
-        polyline: {
-          positions: vertices.map(([lon, lat]) => Cesium.Cartesian3.fromDegrees(lon, lat)),
-          width: 2,
-          material: pointColor,
-          clampToGround: true,
-        },
-      })
-    );
-  }
-
-  if (vertices.length >= 3) {
-    const closed = [...vertices, vertices[0]];
-    entities.push(
-      viewer.entities.add({
-        polygon: {
-          hierarchy: new Cesium.PolygonHierarchy(closed.map(([lon, lat]) => Cesium.Cartesian3.fromDegrees(lon, lat))),
-          material: pointColor.withAlpha(0.15),
-          outline: true,
-          outlineColor: pointColor,
-          outlineWidth: 2,
-          height: 0,
-        },
-      })
-    );
-  }
-  return entities;
-}

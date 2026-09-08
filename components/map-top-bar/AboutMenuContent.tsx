@@ -14,7 +14,7 @@ export default function AboutMenuContent() {
         Explore where species have been recorded on an interactive 3D globe. Data comes from GBIF: millions of observations from museums, surveys, and citizen science.
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-        Pick a region or search for a place, import your own GBIF-style datasets, filter by species or year, and draw your own area. Each dot is an occurrence; colors show IUCN status. Use the <strong>timeline</strong> at the bottom to filter by year. Use <strong>View</strong> for 3D/2D, base maps, and optional Photorealistic 3D. Export current data as image, GeoJSON, CSV, or PDF.
+        Pick a region or search for a place, import your own GBIF-style datasets, filter by species or year, and draw your own area (polygon, rectangle, or circle). Each dot is an occurrence; colors show IUCN status. Use the <strong>timeline</strong> at the bottom to filter by year. Use <strong>View</strong> for 3D/2D, base maps, and optional Photorealistic 3D. Use <strong>fly mode</strong> (airplane control) to free-look over the globe. Export current data as image, GeoJSON, CSV, or PDF.
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
         Built with Next.js, Cesium (Resium), and the GBIF API.

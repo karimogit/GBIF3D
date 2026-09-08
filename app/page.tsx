@@ -26,6 +26,7 @@ import {
 } from '@/lib/favorites';
 import type { Bounds, DrawnRegion, LonLat } from '@/lib/geometry';
 import { boundsToWktPolygon, coordsToWktPolygon, padBounds } from '@/lib/geometry';
+import type { DrawShapeMode } from '@/lib/draw-shapes';
 import { DEFAULT_OCCURRENCE_LIMIT } from '@/lib/gbif';
 import { ION_TOKEN_CONFIGURED } from '@/lib/ion';
 import { generateOccurrencePdf } from '@/lib/pdf-export';
@@ -142,9 +143,11 @@ export default function Home() {
     countryCode?: string;
   } | null>(null);
   const [drawRegionMode, setDrawRegionMode] = useState(false);
+  const [drawShapeMode, setDrawShapeMode] = useState<DrawShapeMode>('polygon');
   const [sceneMode, setSceneMode] = useState<'3D' | '2D'>('3D');
   const [baseMap, setBaseMap] = useState<BaseMapId>(DEFAULT_BASE_MAP);
   const [photorealistic3D, setPhotorealistic3D] = useState(false);
+  const [flyMode, setFlyMode] = useState(false);
   const [selectedYear, setSelectedYear] = useState<number | null>(null);
   const [selectedMonth, setSelectedMonth] = useState<number | null>(null);
   const [importedOccurrences, setImportedOccurrences] = useState<GBIFOccurrence[]>([]);
@@ -458,6 +461,20 @@ export default function Home() {
     setDrawRegionMode(false);
   }, []);
 
+  const handleStartDrawRegion = useCallback((mode: DrawShapeMode = 'polygon') => {
+    setDrawShapeMode(mode);
+    setFlyMode(false);
+    setDrawRegionMode(true);
+  }, []);
+
+  const handleToggleFlyMode = useCallback(() => {
+    setFlyMode((prev) => {
+      const next = !prev;
+      if (next) setDrawRegionMode(false);
+      return next;
+    });
+  }, []);
+
   const handleClearDrawnRegion = useCallback(() => {
     setDrawnBounds(null);
     setDrawnPolygon(null);
@@ -589,6 +606,7 @@ export default function Home() {
             flyToBounds={selectedRegionBounds ?? undefined}
             flyToBoundsKey={flyToBoundsKey}
             drawRegionMode={drawRegionMode}
+            drawShapeMode={drawShapeMode}
             onDrawnRegion={handleDrawnRegion}
             drawnBounds={
               selectedRegionId === REGION_ID_DRAWN
@@ -601,6 +619,8 @@ export default function Home() {
             sceneMode={sceneMode}
             baseMap={baseMap}
             photorealistic3D={photorealistic3D}
+            flyMode={flyMode}
+            onFlyModeChange={setFlyMode}
             savedOccurrenceKeys={savedOccurrenceKeys}
             selectedOccurrenceKey={selectedOccurrenceKey}
             selectedOccurrenceRequestId={selectedOccurrenceRequestId}
@@ -633,7 +653,12 @@ export default function Home() {
             onMonthChange={setSelectedMonth}
           />
         </div>
-        <MapCornerControls onResetHome={handleResetHome} onResetNorth={handleResetNorth} />
+        <MapCornerControls
+          onResetHome={handleResetHome}
+          onResetNorth={handleResetNorth}
+          flyMode={flyMode}
+          onToggleFlyMode={handleToggleFlyMode}
+        />
         <MapTopBar
           region={{
             selectedRegionId,
@@ -650,8 +675,9 @@ export default function Home() {
               setSelectedRegionId(REGION_ID_PLACE);
               setFlyNonce((n) => n + 1);
             },
-            onStartDrawRegion: () => setDrawRegionMode(true),
+            onStartDrawRegion: handleStartDrawRegion,
             drawRegionMode,
+            drawShapeMode,
             onCancelDrawRegion: handleCancelDrawRegion,
             onFinishDrawRegion: handleFinishDrawRegion,
             onSaveDrawnRegion: handleSaveDrawnRegion,

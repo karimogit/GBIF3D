@@ -5,7 +5,7 @@ import type { Bounds, DrawnRegion, LonLat } from '@/lib/geometry';
 import type { BaseMapId } from '@/lib/base-map';
 import { toImageryBaseMap } from '@/lib/base-map';
 import type { GBIFOccurrence } from '@/types/gbif';
-import GlobeScene, { type GlobeSceneHandle } from './GlobeScene';
+import GlobeScene, { type GlobeSceneHandle, type DrawShapeMode } from './GlobeScene';
 
 interface GlobeViewerProps {
   /** Already-filtered occurrences to show on the globe (parent owns fetch + display merge). */
@@ -20,12 +20,15 @@ interface GlobeViewerProps {
   flyToBounds?: Bounds | null;
   flyToBoundsKey?: string | number;
   drawRegionMode?: boolean;
+  drawShapeMode?: DrawShapeMode;
   onDrawnRegion?: (region: DrawnRegion) => void;
   drawnBounds?: Bounds | null;
   drawnPolygon?: LonLat[] | null;
   sceneMode?: '3D' | '2D';
   baseMap?: BaseMapId;
   photorealistic3D?: boolean;
+  flyMode?: boolean;
+  onFlyModeChange?: (enabled: boolean) => void;
   savedOccurrenceKeys?: Set<number>;
   selectedOccurrenceKey?: number | null;
   selectedOccurrenceRequestId?: number;
@@ -44,12 +47,15 @@ export default function GlobeViewer({
   flyToBounds = null,
   flyToBoundsKey,
   drawRegionMode = false,
+  drawShapeMode = 'polygon',
   onDrawnRegion,
   drawnBounds = null,
   drawnPolygon = null,
   sceneMode = '3D',
   baseMap = 'opentopomap',
   photorealistic3D = false,
+  flyMode = false,
+  onFlyModeChange,
   savedOccurrenceKeys,
   selectedOccurrenceKey,
   selectedOccurrenceRequestId,
@@ -59,6 +65,13 @@ export default function GlobeViewer({
     progress != null
       ? `Loaded ${progress.loadedChunks} / ${progress.totalChunks} chunks (${progress.loadedRecords.toLocaleString()} records)`
       : 'Loading occurrences from GBIF…';
+
+  const drawHint =
+    drawShapeMode === 'rectangle'
+      ? 'Click and drag (or click two corners) to draw a rectangle.'
+      : drawShapeMode === 'circle'
+        ? 'Click the center, then drag (or click again) to set the radius.'
+        : 'Click to add polygon points. Double-click or tap Done to finish.';
 
   return (
     <div
@@ -80,12 +93,15 @@ export default function GlobeViewer({
         flyToBounds={flyToBounds ?? undefined}
         flyToBoundsKey={flyToBoundsKey}
         drawRegionMode={drawRegionMode}
+        drawShapeMode={drawShapeMode}
         onDrawnRegion={onDrawnRegion}
         drawnBounds={drawnBounds}
         drawnPolygon={drawnPolygon}
         sceneMode={sceneMode}
         baseMap={toImageryBaseMap(baseMap)}
         photorealistic3D={photorealistic3D}
+        flyMode={flyMode}
+        onFlyModeChange={onFlyModeChange}
         loading={loading}
         error={error}
       />
@@ -107,7 +123,31 @@ export default function GlobeViewer({
             pointerEvents: 'none',
           }}
         >
-          Click to add polygon points. Double-click or tap Done to finish.
+          {drawHint}
+        </div>
+      )}
+      {flyMode && !drawRegionMode && (
+        <div
+          role="status"
+          aria-live="polite"
+          style={{
+            position: 'absolute',
+            top: 124,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            padding: '10px 16px',
+            background: 'rgba(0,0,0,0.75)',
+            color: '#fff',
+            borderRadius: 8,
+            fontSize: 14,
+            zIndex: 997,
+            pointerEvents: 'none',
+            textAlign: 'center',
+            maxWidth: 'min(420px, calc(100vw - 32px))',
+          }}
+        >
+          Fly mode — WASD move, Q/E up/down, Shift faster, drag to look. Esc or toggle to exit.
+          {photorealistic3D ? ' Photorealistic 3D is on.' : ' Tip: enable Photorealistic 3D in View.'}
         </div>
       )}
       {loading && (

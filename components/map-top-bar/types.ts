@@ -3,8 +3,9 @@ import type { Bounds } from '@/lib/geometry';
 import type { OccurrenceFilters, GBIFOccurrence } from '@/types/gbif';
 import type { ExportDataOptions } from '@/lib/export-data';
 import type { BaseMapId } from '@/lib/base-map';
+import type { DrawShapeMode } from '@/lib/draw-shapes';
 
-export type { BaseMapId };
+export type { BaseMapId, DrawShapeMode };
 
 export interface RegionOption {
   id: string;
@@ -22,8 +23,9 @@ export interface MapTopBarRegionProps {
   drawnBounds: Bounds | null;
   placeSearchResult: { name: string; bounds: Bounds; countryCode?: string } | null;
   onPlaceSelect: (bounds: Bounds, name: string, countryCode?: string) => void;
-  onStartDrawRegion?: () => void;
+  onStartDrawRegion?: (mode?: DrawShapeMode) => void;
   drawRegionMode?: boolean;
+  drawShapeMode?: DrawShapeMode;
   onCancelDrawRegion?: () => void;
   onFinishDrawRegion?: () => void;
   onSaveDrawnRegion?: () => void;

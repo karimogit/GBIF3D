@@ -24,6 +24,9 @@ import PictureAsPdfOutlined from '@mui/icons-material/PictureAsPdfOutlined';
 import InfoOutlined from '@mui/icons-material/InfoOutlined';
 import GitHub from '@mui/icons-material/GitHub';
 import EditOutlined from '@mui/icons-material/EditOutlined';
+import PentagonOutlined from '@mui/icons-material/PentagonOutlined';
+import CropSquare from '@mui/icons-material/CropSquare';
+import CircleOutlined from '@mui/icons-material/CircleOutlined';
 import Public from '@mui/icons-material/Public';
 import HelpOutline from '@mui/icons-material/HelpOutline';
 import MenuIcon from '@mui/icons-material/Menu';
@@ -40,9 +43,11 @@ import Popover from '@mui/material/Popover';
 import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
 import DialogActions from '@mui/material/DialogActions';
+import Tooltip from '@mui/material/Tooltip';
 import { REGIONS } from '@/lib/regions';
 import { ION_TOKEN_CONFIGURED } from '@/lib/ion';
 import type { Bounds } from '@/lib/geometry';
+import type { DrawShapeMode } from '@/lib/draw-shapes';
 import FilterForm from './FilterForm';
 import ImportSummaryContent from './map-top-bar/ImportSummaryContent';
 import HelpDialog from './map-top-bar/HelpDialog';
@@ -71,6 +76,7 @@ export default function MapTopBar(rawProps: MapTopBarProps | MapTopBarFlatProps)
     onPlaceSelect,
     onStartDrawRegion,
     drawRegionMode = false,
+    drawShapeMode = 'polygon',
     onCancelDrawRegion,
     onFinishDrawRegion,
     onSaveDrawnRegion,
@@ -136,9 +142,44 @@ export default function MapTopBar(rawProps: MapTopBarProps | MapTopBarFlatProps)
   const [aboutMenuAnchor, setAboutMenuAnchor] = useState<null | HTMLElement>(null);
   const [savedMenuAnchor, setSavedMenuAnchor] = useState<null | HTMLElement>(null);
   const [moreMenuAnchor, setMoreMenuAnchor] = useState<null | HTMLElement>(null);
+  const [drawMenuAnchor, setDrawMenuAnchor] = useState<null | HTMLElement>(null);
   // Out-of-order responses must not overwrite results for the latest query.
   const placeRequestSeqRef = useRef(0);
   const moreButtonAnchorRef = useRef<HTMLElement | null>(null);
+
+  const drawTools: Array<{
+    mode: DrawShapeMode;
+    label: string;
+    secondary: string;
+    icon: ReactNode;
+  }> = [
+    {
+      mode: 'polygon',
+      label: 'Polygon',
+      secondary: 'Click points, then Done',
+      icon: <PentagonOutlined fontSize="small" />,
+    },
+    {
+      mode: 'rectangle',
+      label: 'Rectangle',
+      secondary: 'Click and drag two corners',
+      icon: <CropSquare fontSize="small" />,
+    },
+    {
+      mode: 'circle',
+      label: 'Circle',
+      secondary: 'Center, then set radius',
+      icon: <CircleOutlined fontSize="small" />,
+    },
+  ];
+
+  const startDraw = useCallback(
+    (mode: DrawShapeMode) => {
+      setDrawMenuAnchor(null);
+      onStartDrawRegion?.(mode);
+    },
+    [onStartDrawRegion]
+  );
 
   const openExportDialog = useCallback((format: ExportDataFormat) => {
     setExportMenuAnchor(null);
@@ -595,7 +636,7 @@ export default function MapTopBar(rawProps: MapTopBarProps | MapTopBarFlatProps)
             <>
               {drawRegionMode && onCancelDrawRegion ? (
                 <>
-                  {onFinishDrawRegion && (
+                  {drawShapeMode === 'polygon' && onFinishDrawRegion && (
                     <Button
                       variant="text"
                       size="small"
@@ -619,15 +660,37 @@ export default function MapTopBar(rawProps: MapTopBarProps | MapTopBarFlatProps)
                   </Button>
                 </>
               ) : (
-                <IconButton
-                  size="small"
-                  onClick={onStartDrawRegion}
-                  disabled={drawRegionMode}
-                  aria-label="Draw a polygon region on the globe"
-                  sx={{ flexShrink: 0 }}
-                >
-                  <EditOutlined fontSize="small" />
-                </IconButton>
+                <>
+                  <Tooltip title="Draw region">
+                    <IconButton
+                      size="small"
+                      onClick={(e) => setDrawMenuAnchor(e.currentTarget)}
+                      disabled={drawRegionMode}
+                      aria-label="Draw a region on the globe"
+                      aria-haspopup="true"
+                      aria-expanded={Boolean(drawMenuAnchor)}
+                      sx={{ flexShrink: 0 }}
+                    >
+                      <EditOutlined fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                  <Menu
+                    anchorEl={drawMenuAnchor}
+                    open={Boolean(drawMenuAnchor)}
+                    onClose={() => setDrawMenuAnchor(null)}
+                    anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+                    transformOrigin={{ vertical: 'top', horizontal: 'left' }}
+                    slotProps={{ paper: { sx: { minWidth: 220, maxWidth: 'calc(100vw - 24px)' } } }}
+                  >
+                    <ListSubheader sx={{ lineHeight: 2 }}>Draw region</ListSubheader>
+                    {drawTools.map((tool) => (
+                      <MenuItem key={tool.mode} onClick={() => startDraw(tool.mode)}>
+                        <ListItemIcon>{tool.icon}</ListItemIcon>
+                        <ListItemText primary={tool.label} secondary={tool.secondary} />
+                      </MenuItem>
+                    ))}
+                  </Menu>
+                </>
               )}
               {drawnBounds != null && selectedRegionId === 'drawn' && (
                 <>
