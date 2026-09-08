@@ -102,7 +102,7 @@ export default function MapTopBar(rawProps: MapTopBarProps | MapTopBarFlatProps)
   const {
     sceneMode = '3D',
     onSceneModeChange,
-    baseMap = 'positron',
+    baseMap = 'opentopomap',
     onBaseMapChange,
     photorealistic3D = false,
     onPhotorealistic3DChange,
@@ -1132,8 +1132,6 @@ export default function MapTopBar(rawProps: MapTopBarProps | MapTopBarFlatProps)
                       },
                       { id: 'osm' as const, primary: 'OpenStreetMap', secondary: 'Street map' },
                       { id: 'opentopomap' as const, primary: 'OpenTopoMap', secondary: 'Terrain and contours' },
-                      { id: 'positron' as const, primary: 'CartoDB Positron', secondary: 'Light, minimal style' },
-                      { id: 'dark-matter' as const, primary: 'CartoDB Dark Matter', secondary: 'Dark style' },
                     ].map(({ id, primary, secondary, disabled }) => (
                       <MenuItem
                         key={id}

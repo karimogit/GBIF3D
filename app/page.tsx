@@ -49,7 +49,7 @@ import {
   type ExportRegionDetail,
 } from '@/components/globe/constants';
 import type { GlobeSceneHandle } from '@/components/globe/globe-handle';
-import { VALID_BASE_MAPS, type BaseMapId } from '@/lib/base-map';
+import { normalizeBaseMapId, type BaseMapId } from '@/lib/base-map';
 
 const REGION_ID_DRAWN = 'drawn';
 const REGION_ID_PLACE = 'place';
@@ -69,7 +69,7 @@ function loadViewFromStorage(): { sceneMode: '3D' | '2D'; baseMap: BaseMapId } |
     // Backward compatibility: previously stored "Columbus" should now behave like 2D.
     const storedScene = p.sceneMode === 'Columbus' ? '2D' : p.sceneMode;
     const sceneMode = VALID_SCENE_MODES.includes(storedScene as (typeof VALID_SCENE_MODES)[number]) ? storedScene : null;
-    let baseMap = VALID_BASE_MAPS.includes(p.baseMap as BaseMapId) ? (p.baseMap as BaseMapId) : null;
+    let baseMap = p.baseMap != null ? normalizeBaseMapId(p.baseMap, DEFAULT_BASE_MAP) : null;
     if (baseMap === 'bing' && !ION_TOKEN_CONFIGURED) baseMap = 'opentopomap';
     if (sceneMode != null || baseMap != null) {
       return {

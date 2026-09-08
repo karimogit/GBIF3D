@@ -1,18 +1,16 @@
 import * as Cesium from 'cesium';
 
-/** Base map types for View menu (Cesium Ion/Bing, OSM, CartoDB, OpenTopoMap). */
+/** Base map types for View menu (Cesium Ion/Bing, OSM, OpenTopoMap). */
 export type BaseMapType =
   | 'bing-aerial'
   | 'bing-aerial-labels'
   | 'bing-road'
   | 'osm'
-  | 'positron'
-  | 'dark-matter'
   | 'opentopomap';
 
 export type SceneModeType = '3D' | '2D';
 
-/** Free default basemap (OpenTopoMap) — avoids OSMF tile.openstreetmap.org and Carto API-key watermarks. */
+/** Free default basemap (OpenTopoMap) — avoids OSMF tile.openstreetmap.org usage policy. */
 export const DEFAULT_BASE_MAP: BaseMapType = 'opentopomap';
 
 let defaultImageryProvider: Cesium.ImageryProvider | undefined;
@@ -28,18 +26,6 @@ export function getDefaultImageryProvider(): Cesium.ImageryProvider | undefined 
 
 export function createImageryProvider(type: BaseMapType): Cesium.ImageryProvider {
   switch (type) {
-    case 'positron':
-      return new Cesium.UrlTemplateImageryProvider({
-        url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',
-        subdomains: ['a', 'b', 'c', 'd'],
-        credit: 'Map tiles by CartoDB, under CC BY 3.0. Data by OpenStreetMap, under ODbL.',
-      });
-    case 'dark-matter':
-      return new Cesium.UrlTemplateImageryProvider({
-        url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
-        subdomains: ['a', 'b', 'c', 'd'],
-        credit: 'Map tiles by CartoDB, under CC BY 3.0. Data by OpenStreetMap, under ODbL.',
-      });
     case 'opentopomap':
       return new Cesium.UrlTemplateImageryProvider({
         url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
@@ -47,7 +33,7 @@ export function createImageryProvider(type: BaseMapType): Cesium.ImageryProvider
         credit: 'Map tiles: © OpenTopoMap (CC-BY-SA)',
       });
     case 'osm':
-      // Explicit OSM choice only (light use); default basemap is Carto Positron.
+      // Explicit OSM choice only (light use); default basemap is OpenTopoMap.
       return new Cesium.OpenStreetMapImageryProvider({
         url: 'https://tile.openstreetmap.org/',
       });
