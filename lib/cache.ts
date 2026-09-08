@@ -30,6 +30,7 @@ function remove(key: string): void {
   cache.delete(key);
 }
 
+/** Sweep expired entries (used on write / eviction paths). */
 function pruneExpired(now = Date.now()): void {
   for (const [key, entry] of cache) {
     if (now > entry.expiresAt) remove(key);
@@ -45,9 +46,12 @@ function evictLeastRecentlyUsed(): void {
 }
 
 export function getCached<T>(key: string): T | null {
-  pruneExpired();
   const entry = cache.get(key) as CacheEntry<T> | undefined;
   if (!entry) return null;
+  if (Date.now() > entry.expiresAt) {
+    remove(key);
+    return null;
+  }
   cache.delete(key);
   cache.set(key, entry);
   return entry.data;
@@ -62,9 +66,20 @@ export function setCache<T>(key: string, data: T, ttlMs = DEFAULT_TTL_MS, weight
   evictLeastRecentlyUsed();
 }
 
+/** Recursively sort object keys so nested params (e.g. Bounds) stay deterministic. */
+function canonicalize(value: unknown): unknown {
+  if (value === null || typeof value !== 'object') return value;
+  if (Array.isArray(value)) return value.map(canonicalize);
+  const obj = value as Record<string, unknown>;
+  const sorted: Record<string, unknown> = {};
+  for (const k of Object.keys(obj).sort()) {
+    sorted[k] = canonicalize(obj[k]);
+  }
+  return sorted;
+}
+
 export function cacheKey(prefix: string, params: Record<string, unknown>): string {
-  const sorted = JSON.stringify(params, Object.keys(params).sort());
-  return `${prefix}:${sorted}`;
+  return `${prefix}:${JSON.stringify(canonicalize(params))}`;
 }
 
 export function clearCache(): void {

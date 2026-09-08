@@ -12,15 +12,16 @@ export type BaseMapType =
 
 export type SceneModeType = '3D' | '2D';
 
+/** Free default basemap (Carto Positron) — avoids OSMF tile.openstreetmap.org usage policy. */
+export const DEFAULT_BASE_MAP: BaseMapType = 'positron';
+
 let defaultImageryProvider: Cesium.ImageryProvider | undefined;
 
 /** Lazily construct on the client to avoid Cesium constructors during SSR. */
 export function getDefaultImageryProvider(): Cesium.ImageryProvider | undefined {
   if (typeof window === 'undefined') return undefined;
   if (!defaultImageryProvider) {
-    defaultImageryProvider = new Cesium.OpenStreetMapImageryProvider({
-      url: 'https://tile.openstreetmap.org/',
-    });
+    defaultImageryProvider = createImageryProvider(DEFAULT_BASE_MAP);
   }
   return defaultImageryProvider;
 }
@@ -45,14 +46,16 @@ export function createImageryProvider(type: BaseMapType): Cesium.ImageryProvider
         subdomains: ['a', 'b', 'c'],
         credit: 'Map tiles: © OpenTopoMap (CC-BY-SA)',
       });
-    case 'bing-aerial':
-    case 'bing-aerial-labels':
-    case 'bing-road':
     case 'osm':
-    default:
+      // Explicit OSM choice only (light use); default basemap is Carto Positron.
       return new Cesium.OpenStreetMapImageryProvider({
         url: 'https://tile.openstreetmap.org/',
       });
+    case 'bing-aerial':
+    case 'bing-aerial-labels':
+    case 'bing-road':
+    default:
+      return createImageryProvider(DEFAULT_BASE_MAP);
   }
 }
 

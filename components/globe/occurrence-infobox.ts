@@ -1,32 +1,7 @@
 import * as Cesium from 'cesium';
 import type { GBIFOccurrence } from '@/types/gbif';
+import { IUCN_COLORS, formatIucnStatus } from '@/lib/iucn';
 import { LIGHTBOX_PHOTO_CLASS, SAVE_BUTTON_CLASS } from './constants';
-
-const IUCN_COLORS: Record<string, string> = {
-  EX: '#000000',
-  EW: '#8B0000',
-  CR: '#FF0000',
-  EN: '#FF9800',
-  VU: '#F9A825',
-  NT: '#FBC02D',
-  LC: '#2E7D32',
-  DD: '#757575',
-  NE: '#BDBDBD',
-  NA: '#BDBDBD',
-};
-
-const IUCN_LABELS: Record<string, string> = {
-  EX: 'Extinct',
-  EW: 'Extinct in the Wild',
-  CR: 'Critically Endangered',
-  EN: 'Endangered',
-  VU: 'Vulnerable',
-  NT: 'Near Threatened',
-  LC: 'Least Concern',
-  DD: 'Data Deficient',
-  NE: 'Not Evaluated',
-  NA: 'Not Applicable',
-};
 
 let occurrencePointScaleByDistance: Cesium.NearFarScalar | undefined;
 
@@ -35,13 +10,6 @@ export function getOccurrencePointScaleByDistance(): Cesium.NearFarScalar {
     occurrencePointScaleByDistance = new Cesium.NearFarScalar(2e2, 1.6, 1e7, 0.5);
   }
   return occurrencePointScaleByDistance;
-}
-
-function formatIucnStatus(code: string): string {
-  if (!code) return '';
-  const upper = code.toUpperCase();
-  const label = IUCN_LABELS[upper];
-  return label ? `${upper} (${label})` : code;
 }
 
 function toFullSizeUrl(thumbUrl: string): string {
@@ -136,6 +104,7 @@ ${validUrls
   const iucnRaw = occ.iucnRedListCategory?.trim() || '';
   const iucn = formatIucnStatus(iucnRaw);
   const rank = occ.taxonRank?.trim() || '';
+  const isSaved = savedKeys?.has(occ.key) ?? false;
 
   return `
     <div style="font-family: system-ui; width: 100%; max-width: 100%; min-width: 0; font-size: 13px; line-height: 1.45;">
@@ -154,7 +123,7 @@ ${validUrls
       ${line('IUCN status', iucn)}
       <div style="margin-top: 10px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center;">
         ${gbifUrl ? `<a href="${escapeHtml(gbifUrl)}" target="_blank" rel="noopener noreferrer" class="gbif-infobox-view-button" style="display: inline-block; padding: 8px 14px; background: #4caf50; color: #fff; border-radius: 6px; text-decoration: none; font-weight: 500; font-size: 14px;">View on GBIF →</a>` : '<span style="display: inline-block; padding: 8px 0; color: rgba(255,255,255,0.75); font-size: 13px;">Imported record</span>'}
-        <a href="#" class="${SAVE_BUTTON_CLASS}" data-key="${occ.key}" data-action="${savedKeys?.has(occ.key) ? 'remove' : 'add'}" style="display: inline-block; padding: 8px 14px; background: ${savedKeys?.has(occ.key) ? 'rgba(76, 175, 80, 0.3)' : 'rgba(255,255,255,0.15)'}; color: ${savedKeys?.has(occ.key) ? '#2e7d32' : 'rgba(255,255,255,0.9)'}; border: 1px solid rgba(255,255,255,0.3); border-radius: 6px; text-decoration: none; font-weight: 500; font-size: 14px;">${savedKeys?.has(occ.key) ? 'Saved ✓' : 'Save'}</a>
+        <button type="button" role="button" class="${SAVE_BUTTON_CLASS}" data-key="${occ.key}" data-action="${isSaved ? 'remove' : 'add'}" style="display: inline-block; padding: 8px 14px; background: ${isSaved ? 'rgba(76, 175, 80, 0.3)' : 'rgba(255,255,255,0.15)'}; color: ${isSaved ? '#2e7d32' : 'rgba(255,255,255,0.9)'}; border: 1px solid rgba(255,255,255,0.3); border-radius: 6px; font-weight: 500; font-size: 14px; cursor: pointer; font-family: inherit;">${isSaved ? 'Saved ✓' : 'Save'}</button>
       </div>
     </div>
   `;

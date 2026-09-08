@@ -1,32 +1,33 @@
 import { searchOccurrences, suggestSpecies, GBIFApiError, TAXON_CLASS_KEYS } from '@/lib/gbif';
 import { clearCache } from '@/lib/cache';
 
-jest.mock('axios', () => {
-  const get = jest.fn();
+function jsonResponse(body: unknown, status = 200): Response {
   return {
-    __esModule: true,
-    default: {
-      create: jest.fn(() => ({ get })),
-      isCancel: jest.fn(() => false),
-    },
-    __mockGet: get,
-  };
-});
-
-const mockGet = (jest.requireMock('axios') as { __mockGet: jest.Mock }).__mockGet;
+    ok: status >= 200 && status < 300,
+    status,
+    headers: { get: () => null },
+    json: async () => body,
+  } as unknown as Response;
+}
 
 describe('GBIF API', () => {
+  let fetchMock: jest.Mock;
+
   beforeEach(() => {
     clearCache();
-    mockGet.mockReset();
+    fetchMock = jest.fn();
+    (global as typeof globalThis & { fetch: typeof fetch }).fetch = fetchMock as unknown as typeof fetch;
     jest.restoreAllMocks();
+  });
+
+  afterEach(() => {
     Reflect.deleteProperty(globalThis, 'fetch');
   });
 
   describe('searchOccurrences', () => {
     it('returns occurrence results for a geometry query', async () => {
-      mockGet.mockResolvedValueOnce({
-        data: {
+      fetchMock.mockResolvedValueOnce(
+        jsonResponse({
           offset: 0,
           limit: 10,
           endOfRecords: true,
@@ -38,8 +39,8 @@ describe('GBIF API', () => {
               decimalLongitude: 15,
             },
           ],
-        },
-      });
+        })
+      );
       const geometry = 'POLYGON((10 58, 20 58, 20 62, 10 62, 10 58))'; // Sweden bbox approx
       const res = await searchOccurrences({
         geometry,
@@ -53,19 +54,20 @@ describe('GBIF API', () => {
       expect(o).toHaveProperty('key');
       expect(o).toHaveProperty('decimalLatitude');
       expect(o).toHaveProperty('decimalLongitude');
-      expect(mockGet).toHaveBeenCalledTimes(1);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(String(fetchMock.mock.calls[0][0])).toContain('geometry=');
     });
 
     it('filters by taxonKey when provided', async () => {
-      mockGet.mockResolvedValueOnce({
-        data: {
+      fetchMock.mockResolvedValueOnce(
+        jsonResponse({
           offset: 0,
           limit: 5,
           endOfRecords: true,
           count: 1,
           results: [{ key: 456, kingdom: 'Plantae' }],
-        },
-      });
+        })
+      );
       const geometry = 'POLYGON((10 58, 20 58, 20 62, 10 62, 10 58))';
       const res = await searchOccurrences({
         geometry,
@@ -76,15 +78,12 @@ describe('GBIF API', () => {
       res.results.forEach((o) => {
         expect(o.kingdom).toBeDefined();
       });
-      expect(mockGet.mock.calls[0][1].params.taxonKey).toBe(TAXON_CLASS_KEYS.plants);
+      expect(String(fetchMock.mock.calls[0][0])).toContain(`taxonKey=${TAXON_CLASS_KEYS.plants}`);
     });
 
     it('throws GBIFApiError on invalid geometry without echoing the request payload', async () => {
       expect.assertions(2);
-      mockGet.mockRejectedValueOnce({
-        response: { status: 400, data: {} },
-        message: 'Request failed with status code 400',
-      });
+      fetchMock.mockResolvedValueOnce(jsonResponse({}, 400));
       await searchOccurrences({ geometry: 'INVALID', limit: 1 }).catch((err) => {
         expect(err).toBeInstanceOf(GBIFApiError);
         expect(String(err.message)).not.toContain('Sent:');
@@ -94,10 +93,9 @@ describe('GBIF API', () => {
 
   describe('suggestSpecies', () => {
     it('returns species suggestions for a query', async () => {
-      (global as typeof globalThis & { fetch: jest.Mock }).fetch = jest.fn().mockResolvedValueOnce({
-        ok: true,
-        json: async () => [{ key: 1, scientificName: 'Pinus sylvestris', canonicalName: 'Pinus sylvestris' }],
-      } as Response);
+      fetchMock.mockResolvedValueOnce(
+        jsonResponse([{ key: 1, scientificName: 'Pinus sylvestris', canonicalName: 'Pinus sylvestris' }])
+      );
       const results = await suggestSpecies('Pinus sylvestris');
       expect(Array.isArray(results)).toBe(true);
       expect(results.length).toBeGreaterThan(0);
@@ -108,6 +106,7 @@ describe('GBIF API', () => {
     it('returns empty array for short query', async () => {
       const results = await suggestSpecies('P');
       expect(results).toEqual([]);
+      expect(fetchMock).not.toHaveBeenCalled();
     });
   });
 

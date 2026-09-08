@@ -1,19 +1,31 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Viewer } from 'resium';
+import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
+import { Viewer, useCesium } from 'resium';
 import * as Cesium from 'cesium';
 import type { GBIFOccurrence } from '@/types/gbif';
 import type { Bounds, DrawnRegion, LonLat } from '@/lib/geometry';
 import { CESIUM_ION_TOKEN } from '@/lib/ion';
-import { MAX_OCCURRENCES_FOR_ENTITIES, VIEWER_CONTEXT_OPTIONS } from './globe/constants';
+import { VIEWER_CONTEXT_OPTIONS, type ExportRegionDetail } from './globe/constants';
+import type { GlobeSceneHandle } from './globe/globe-handle';
 import {
+  captureCanvasAsDataUrl,
+  downloadCanvasAsPng,
+  prepareCanvasForExport,
+} from './globe/export-utils';
+import {
+  restoreCameraState,
+  saveCameraState,
+  setTopDownExportView,
+  waitForTilesLoaded,
+} from './globe/export-camera';
+import {
+  DEFAULT_BASE_MAP,
   type BaseMapType,
   type SceneModeType,
   getDefaultImageryProvider,
 } from './globe/imagery';
 import {
-  OccurrenceEntities,
   OccurrencePointsPrimitive,
   SelectedOccurrenceInfoSync,
 } from './globe/occurrence-layer';
@@ -25,8 +37,6 @@ import {
   DrawRegionHandler,
   DrawnRegionOverlay,
   EnsureBaseImagery,
-  ExportImageHandler,
-  ExportPdfCanvasHandler,
   FlyToBounds,
   InfoBoxLinkFix,
   OccurrenceImageLoader,
@@ -35,14 +45,15 @@ import {
   SelectOccurrence,
 } from './globe/scene-handlers';
 
-export { SAVE_OCCURRENCE_EVENT } from './globe/constants';
-export { EXPORT_PDF_EVENT, EXPORT_PDF_CANVAS_READY_EVENT } from './globe/export-utils';
 export type { BaseMapType, SceneModeType } from './globe/imagery';
+export type { GlobeSceneHandle } from './globe/globe-handle';
 
 interface GlobeSceneProps {
   occurrences: GBIFOccurrence[];
   onBoundsChange: (bounds: Bounds) => void;
   flyToBounds?: Bounds | null;
+  /** Remount FlyToBounds when this changes so re-selecting the same region re-flies. */
+  flyToBoundsKey?: string | number;
   drawRegionMode?: boolean;
   onDrawnRegion?: (region: DrawnRegion) => void;
   drawnBounds?: Bounds | null;
@@ -56,23 +67,129 @@ interface GlobeSceneProps {
   selectedOccurrenceKey?: number | null;
   selectedOccurrenceRequestId?: number;
   onSelectedOccurrenceHandled?: () => void;
+  /** Registers imperative export/draw commands with the parent (avoids dynamic forwardRef). */
+  onGlobeHandle?: (handle: GlobeSceneHandle | null) => void;
+}
+
+/**
+ * Registers Cesium-backed export/draw commands onto a mutable ref from the parent Viewer tree.
+ * useCesium() only works inside Viewer children.
+ */
+function GlobeCommands({
+  register,
+  drawFinishRef,
+}: {
+  register: (api: GlobeSceneHandle) => void;
+  drawFinishRef: MutableRefObject<(() => void) | null>;
+}) {
+  const cesium = useCesium();
+
+  useEffect(() => {
+    const exportImage = (detail?: ExportRegionDetail) => {
+      try {
+        const viewer = cesium?.viewer;
+        if (viewer?.scene?.canvas == null) return;
+        const onPostRender = () => {
+          viewer.scene.postRender.removeEventListener(onPostRender);
+          try {
+            const canvas = viewer.scene?.canvas;
+            if (!canvas) return;
+            const prepared = prepareCanvasForExport(canvas as HTMLCanvasElement, viewer, detail);
+            downloadCanvasAsPng(prepared, 'gbif-globe.png');
+          } catch {
+            // ignore
+          }
+        };
+        viewer.scene.postRender.addEventListener(onPostRender);
+        viewer.scene.requestRender();
+      } catch {
+        // ignore
+      }
+    };
+
+    const capturePdfSnapshot = async (detail?: ExportRegionDetail): Promise<string | null> => {
+      const viewer = cesium?.viewer;
+      if (!viewer?.scene?.canvas) return null;
+      const frameBounds = detail?.frameBounds ?? null;
+      const savedCamera = saveCameraState(viewer);
+      try {
+        if (frameBounds) {
+          setTopDownExportView(viewer, frameBounds);
+        } else {
+          viewer.scene.requestRender();
+        }
+        await waitForTilesLoaded(viewer);
+        return await new Promise<string | null>((resolve) => {
+          const onPostRender = () => {
+            viewer.scene.postRender.removeEventListener(onPostRender);
+            try {
+              const canvas = viewer.scene?.canvas;
+              if (!canvas) {
+                resolve(null);
+                return;
+              }
+              const prepared = prepareCanvasForExport(canvas as HTMLCanvasElement, viewer, detail);
+              resolve(captureCanvasAsDataUrl(prepared));
+            } catch {
+              resolve(null);
+            } finally {
+              try {
+                restoreCameraState(viewer, savedCamera);
+                viewer.scene.requestRender();
+              } catch {
+                // viewer may be destroyed
+              }
+            }
+          };
+          try {
+            viewer.scene.postRender.addEventListener(onPostRender);
+            viewer.scene.requestRender();
+          } catch {
+            try {
+              restoreCameraState(viewer, savedCamera);
+            } catch {
+              // ignore
+            }
+            resolve(null);
+          }
+        });
+      } catch {
+        try {
+          restoreCameraState(viewer, savedCamera);
+        } catch {
+          // ignore
+        }
+        return null;
+      }
+    };
+
+    const finishDrawing = () => {
+      drawFinishRef.current?.();
+    };
+
+    register({ exportImage, capturePdfSnapshot, finishDrawing });
+  }, [cesium?.viewer, register, drawFinishRef]);
+
+  return null;
 }
 
 export default function GlobeScene({
   occurrences,
   onBoundsChange,
   flyToBounds,
+  flyToBoundsKey,
   drawRegionMode = false,
   onDrawnRegion,
   drawnBounds,
   drawnPolygon,
   sceneMode = '3D',
-  baseMap = 'osm',
+  baseMap = DEFAULT_BASE_MAP,
   photorealistic3D = false,
   savedOccurrenceKeys,
   selectedOccurrenceKey,
   selectedOccurrenceRequestId,
   onSelectedOccurrenceHandled,
+  onGlobeHandle,
 }: GlobeSceneProps) {
   const [isClient, setIsClient] = useState(false);
   const [ionEnabled, setIonEnabled] = useState(false);
@@ -82,7 +199,23 @@ export default function GlobeScene({
   const [pickedOccurrenceKey, setPickedOccurrenceKey] = useState<number | null>(null);
   const [pickRequestId, setPickRequestId] = useState(0);
 
-  const usePrimitiveMode = occurrences.length > MAX_OCCURRENCES_FOR_ENTITIES;
+  const commandsRef = useRef<GlobeSceneHandle | null>(null);
+  const drawFinishRef = useRef<(() => void) | null>(null);
+  const onGlobeHandleRef = useRef(onGlobeHandle);
+  onGlobeHandleRef.current = onGlobeHandle;
+
+  const registerCommands = useCallback((api: GlobeSceneHandle) => {
+    commandsRef.current = api;
+    onGlobeHandleRef.current?.(api);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      commandsRef.current = null;
+      onGlobeHandleRef.current?.(null);
+    };
+  }, []);
+
   const displayedOccurrenceKey = selectedOccurrenceKey ?? pickedOccurrenceKey;
 
   useEffect(() => {
@@ -171,6 +304,7 @@ export default function GlobeScene({
       baseLayer={baseLayer}
       contextOptions={VIEWER_CONTEXT_OPTIONS}
     >
+      <GlobeCommands register={registerCommands} drawFinishRef={drawFinishRef} />
       <CameraTiltConstraints sceneMode={sceneMode} />
       <CameraTiltReporter onPointsHiddenChange={setPointsHidden} />
       <SceneModeSync sceneMode={sceneMode} />
@@ -178,57 +312,43 @@ export default function GlobeScene({
       <BaseMapSync baseMap={baseMap} ionEnabled={ionEnabled} />
       <Photorealistic3DSync enabled={photorealistic3D && ionEnabled} />
       <OccurrenceImageLoader
-        occurrenceKey={usePrimitiveMode ? displayedOccurrenceKey : null}
+        occurrenceKey={displayedOccurrenceKey}
         onImageLoaded={handleOccurrenceImageLoaded}
       />
-      <ExportImageHandler />
-      <ExportPdfCanvasHandler />
       <InfoBoxLinkFix />
       <CameraBoundsReporter onBoundsChange={onBoundsChange} />
-      {flyToBounds && <FlyToBounds bounds={flyToBounds} />}
+      {flyToBounds && (
+        <FlyToBounds key={flyToBoundsKey ?? 'fly'} bounds={flyToBounds} />
+      )}
       {selectedOccurrenceKey != null && (
         <SelectOccurrence
           occurrenceKey={selectedOccurrenceKey}
           requestId={selectedOccurrenceRequestId}
           occurrences={occurrences}
-          usePrimitiveMode={usePrimitiveMode}
           onHandled={onSelectedOccurrenceHandled}
         />
       )}
       {drawRegionMode && onDrawnRegion && (
-        <DrawRegionHandler active onDrawnRegion={onDrawnRegion} />
+        <DrawRegionHandler active onDrawnRegion={onDrawnRegion} finishRef={drawFinishRef} />
       )}
       {drawnBounds && (
         <DrawnRegionOverlay bounds={drawnBounds} polygon={drawnPolygon ?? undefined} />
       )}
-      {usePrimitiveMode ? (
-        <>
-          <OccurrencePointsPrimitive
-            occurrences={occurrences}
-            sceneMode={sceneMode}
-            pointsHidden={pointsHidden}
-            selectedOccurrenceKey={displayedOccurrenceKey ?? undefined}
-            onPickedKey={handlePickedKey}
-          />
-          <SelectedOccurrenceInfoSync
-            displayedKey={displayedOccurrenceKey}
-            selectionRequestId={pickRequestId}
-            occurrences={occurrences}
-            imageUrlsByKey={imageUrlsByKey}
-            savedOccurrenceKeys={savedOccurrenceKeys}
-            onDeselected={handleDeselected}
-          />
-        </>
-      ) : (
-        <OccurrenceEntities
-          occurrences={occurrences}
-          sceneMode={sceneMode}
-          pointsHidden={pointsHidden}
-          imageUrlsByKey={imageUrlsByKey}
-          savedOccurrenceKeys={savedOccurrenceKeys}
-          selectedOccurrenceKey={selectedOccurrenceKey}
-        />
-      )}
+      <OccurrencePointsPrimitive
+        occurrences={occurrences}
+        sceneMode={sceneMode}
+        pointsHidden={pointsHidden}
+        selectedOccurrenceKey={displayedOccurrenceKey ?? undefined}
+        onPickedKey={handlePickedKey}
+      />
+      <SelectedOccurrenceInfoSync
+        displayedKey={displayedOccurrenceKey}
+        selectionRequestId={pickRequestId}
+        occurrences={occurrences}
+        imageUrlsByKey={imageUrlsByKey}
+        savedOccurrenceKeys={savedOccurrenceKeys}
+        onDeselected={handleDeselected}
+      />
     </Viewer>
   );
 }

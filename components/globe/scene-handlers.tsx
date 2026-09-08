@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, type MutableRefObject } from 'react';
 import { useCesium } from 'resium';
 import * as Cesium from 'cesium';
 import type { GBIFOccurrence } from '@/types/gbif';
@@ -8,31 +8,16 @@ import type { Bounds } from '@/lib/geometry';
 import { rectangleToBounds } from '@/lib/geometry';
 import {
   BOUNDS_REPORT_THROTTLE_MS,
-  EXPORT_IMAGE_EVENT,
-  EXPORT_PDF_CANVAS_READY_EVENT,
-  EXPORT_PDF_EVENT,
-  FINISH_DRAW_EVENT,
   LIGHTBOX_EVENT,
   LIGHTBOX_PHOTO_CLASS,
   SAVE_BUTTON_CLASS,
   SAVE_OCCURRENCE_EVENT,
   SELECTED_INFO_ENTITY_ID,
-  type ExportRegionDetail,
 } from './constants';
-import {
-  captureCanvasAsDataUrl,
-  downloadCanvasAsPng,
-  prepareCanvasForExport,
-} from './export-utils';
 import type { DrawnRegion, LonLat } from '@/lib/geometry';
 import { boundsFromCoords, boundsLonSpan } from '@/lib/geometry';
 import {
-  restoreCameraState,
-  saveCameraState,
-  setTopDownExportView,
-  waitForSceneRender,
-} from './export-camera';
-import {
+  DEFAULT_BASE_MAP,
   type BaseMapType,
   type SceneModeType,
   createImageryProvider,
@@ -102,8 +87,8 @@ export function CameraTiltReporter({
 
 /**
  * Fetches occurrence images from our API when an occurrence is selected.
- * Entity mode: listens to Cesium's selection. Primitive mode: driven by `occurrenceKey`, since the
- * selected entity is the shared info entity and carries no key.
+ * Primary path: `occurrenceKey` prop (primitive / shared info entity). Entity selection remains
+ * as a fallback for safety.
  */
 export function OccurrenceImageLoader({
   occurrenceKey,
@@ -142,6 +127,7 @@ export function OccurrenceImageLoader({
     if (occurrenceKey != null) load(occurrenceKey);
   }, [occurrenceKey, load]);
 
+  // Fallback: entity-id selection (shared info entity is ignored — it has no occurrence key).
   useEffect(() => {
     const viewer = cesium?.viewer;
     if (viewer?.selectedEntityChanged == null) return;
@@ -160,91 +146,6 @@ export function OccurrenceImageLoader({
 
   useEffect(() => () => activeControllerRef.current?.abort(), []);
 
-  return null;
-}
-
-/** Listens for export-image event and captures the Cesium scene canvas (after a render) so PNG is not black. */
-export function ExportImageHandler() {
-  const cesium = useCesium();
-  useEffect(() => {
-    let v: (typeof cesium)['viewer'];
-    try {
-      v = cesium?.viewer;
-      if (v?.scene?.canvas == null) return;
-    } catch {
-      return;
-    }
-    const viewer = v;
-    const handler = (e: Event) => {
-      try {
-        const canvas = viewer.scene?.canvas;
-        if (!canvas) return;
-        const detail = (e as CustomEvent<ExportRegionDetail>).detail;
-        viewer.scene.requestRender();
-        requestAnimationFrame(() => {
-          const prepared = prepareCanvasForExport(canvas as HTMLCanvasElement, viewer, detail);
-          downloadCanvasAsPng(prepared, 'gbif-globe.png');
-        });
-      } catch {
-        // ignore
-      }
-    };
-    window.addEventListener(EXPORT_IMAGE_EVENT, handler);
-    return () => window.removeEventListener(EXPORT_IMAGE_EVENT, handler);
-  }, [cesium?.viewer]);
-  return null;
-}
-
-/** Listens for export-pdf event; frames top-down, captures globe canvas, restores camera. */
-export function ExportPdfCanvasHandler() {
-  const cesium = useCesium();
-  useEffect(() => {
-    const viewer = cesium?.viewer;
-    const handler = (e: Event) => {
-      const detail = (e as CustomEvent<ExportRegionDetail>).detail ?? { scope: 'full' as const };
-      const frameBounds = detail.frameBounds ?? null;
-      const dispatchReady = (imageDataUrl: string | null) => {
-        window.dispatchEvent(
-          new CustomEvent(EXPORT_PDF_CANVAS_READY_EVENT, { detail: { imageDataUrl } })
-        );
-      };
-      try {
-        const canvas = viewer?.scene?.canvas;
-        if (!viewer || !canvas) {
-          dispatchReady(null);
-          return;
-        }
-        const savedCamera = saveCameraState(viewer);
-        const capture = () => {
-          try {
-            const prepared = prepareCanvasForExport(canvas as HTMLCanvasElement, viewer, detail);
-            const dataUrl = captureCanvasAsDataUrl(prepared);
-            dispatchReady(dataUrl);
-          } catch {
-            dispatchReady(null);
-          } finally {
-            try {
-              restoreCameraState(viewer, savedCamera);
-              viewer.scene.requestRender();
-            } catch {
-              // viewer may be destroyed
-            }
-          }
-        };
-        if (frameBounds) {
-          setTopDownExportView(viewer, frameBounds);
-          void waitForSceneRender(viewer).then(capture);
-        } else {
-          viewer.scene.requestRender();
-          void waitForSceneRender(viewer).then(capture);
-        }
-      } catch {
-        dispatchReady(null);
-      }
-    };
-    window.addEventListener(EXPORT_PDF_EVENT, handler);
-    return () => window.removeEventListener(EXPORT_PDF_EVENT, handler);
-  }, [cesium?.viewer]);
   return null;
 }
 
@@ -403,18 +304,16 @@ export function FlyToBounds({ bounds }: { bounds: Bounds }) {
   return null;
 }
 
-/** Selects an occurrence entity by key and flies to it, opening the info box. */
+/** Flies to an occurrence and selects the shared info entity (primitive path). */
 export function SelectOccurrence({
   occurrenceKey,
   requestId,
   occurrences,
-  usePrimitiveMode,
   onHandled,
 }: {
   occurrenceKey: number | null;
   requestId?: number;
   occurrences: GBIFOccurrence[];
-  usePrimitiveMode: boolean;
   onHandled?: () => void;
 }) {
   const cesium = useCesium();
@@ -434,85 +333,32 @@ export function SelectOccurrence({
       0
     );
     const currentHeading = viewer.camera.heading;
+    const infoEntity = viewer.entities.getById(SELECTED_INFO_ENTITY_ID);
 
-    if (usePrimitiveMode) {
-      const infoEntity = viewer.entities.getById(SELECTED_INFO_ENTITY_ID);
-      try {
-        viewer.camera.flyTo({
-          destination: position,
-          duration: 1.2,
-          orientation: {
-            heading: currentHeading,
-            pitch: -Cesium.Math.PI_OVER_TWO,
-            roll: 0,
-          },
-          complete: () => {
-            try {
-              if (infoEntity) viewer.selectedEntity = infoEntity;
-            } catch {
-              // viewer may be destroyed
-            } finally {
-              onHandled?.();
-            }
-          },
-        });
-      } catch {
-        // viewer may be destroyed
-        onHandled?.();
-      }
-      return;
+    try {
+      viewer.camera.flyTo({
+        destination: position,
+        duration: 1.2,
+        orientation: {
+          heading: currentHeading,
+          pitch: -Cesium.Math.PI_OVER_TWO,
+          roll: 0,
+        },
+        complete: () => {
+          try {
+            if (infoEntity) viewer.selectedEntity = infoEntity;
+          } catch {
+            // viewer may be destroyed
+          } finally {
+            onHandled?.();
+          }
+        },
+      });
+    } catch {
+      // viewer may be destroyed
+      onHandled?.();
     }
-
-    let retryCount = 0;
-    const MAX_RETRIES = 20;
-    let timeoutId: ReturnType<typeof setTimeout> | null = null;
-    let cancelled = false;
-
-    const findAndSelectEntity = () => {
-      if (cancelled) return;
-      const entity = viewer.entities.getById(String(occurrenceKey));
-      if (!entity) {
-        retryCount++;
-        if (retryCount < MAX_RETRIES) {
-          timeoutId = setTimeout(findAndSelectEntity, 50);
-        } else {
-          onHandled?.();
-        }
-        return;
-      }
-      try {
-        viewer.camera.flyTo({
-          destination: position,
-          duration: 1.2,
-          orientation: {
-            heading: currentHeading,
-            pitch: -Cesium.Math.PI_OVER_TWO,
-            roll: 0,
-          },
-          complete: () => {
-            if (cancelled) return;
-            try {
-              viewer.selectedEntity = entity;
-            } catch {
-              // viewer may be destroyed
-            } finally {
-              onHandled?.();
-            }
-          },
-        });
-      } catch {
-        // viewer may be destroyed
-        onHandled?.();
-      }
-    };
-
-    findAndSelectEntity();
-
-    return () => {
-      cancelled = true;
-      if (timeoutId != null) clearTimeout(timeoutId);
-    };
-  }, [viewer, occurrenceKey, requestId, occurrences, usePrimitiveMode, onHandled]);
+  }, [viewer, occurrenceKey, requestId, occurrences, onHandled]);
   return null;
 }
 
@@ -545,6 +391,8 @@ export function SceneModeSync({ sceneMode }: { sceneMode: SceneModeType }) {
 /** Replaces the base imagery layer when base map selection changes (View menu). */
 export function BaseMapSync({ baseMap, ionEnabled }: { baseMap: BaseMapType; ionEnabled: boolean }) {
   const cesium = useCesium();
+  const appliedBaseMapRef = useRef<BaseMapType | null>(null);
+
   useEffect(() => {
     const viewer = cesium?.viewer;
     if (viewer?.scene?.imageryLayers == null) return;
@@ -554,13 +402,31 @@ export function BaseMapSync({ baseMap, ionEnabled }: { baseMap: BaseMapType; ion
     if (!base) return;
 
     const ionStyle = getIonImageryStyle(baseMap);
+
+    // Viewer already boots with DEFAULT_BASE_MAP; skip the first-mount same-map reload.
+    if (
+      ionStyle == null &&
+      appliedBaseMapRef.current === null &&
+      baseMap === DEFAULT_BASE_MAP
+    ) {
+      appliedBaseMapRef.current = baseMap;
+      return;
+    }
+
+    if (ionStyle == null && appliedBaseMapRef.current === baseMap) {
+      return;
+    }
+
+    appliedBaseMapRef.current = baseMap;
+
     if (ionStyle != null) {
       if (!ionEnabled) {
         // Bing via ion requires a valid token; keep the app usable by falling back to a free basemap.
         try {
-          const fallback = createImageryProvider('osm');
+          const fallback = createImageryProvider(DEFAULT_BASE_MAP);
           layers.addImageryProvider(fallback, 0);
           layers.remove(base, true);
+          appliedBaseMapRef.current = DEFAULT_BASE_MAP;
         } catch {
           // ignore
         }
@@ -573,7 +439,7 @@ export function BaseMapSync({ baseMap, ionEnabled }: { baseMap: BaseMapType; ion
           try {
             const ionLayer = layers.addImageryProvider(provider, 0);
             layers.remove(base, true);
-            // If the provider later fails (e.g. bad token / rate limit), swap in OSM for the Ion layer.
+            // If the provider later fails (e.g. bad token / rate limit), swap in the default free basemap.
             const errorEvent = provider.errorEvent;
             if (errorEvent) {
               const remove = errorEvent.addEventListener(() => {
@@ -583,8 +449,9 @@ export function BaseMapSync({ baseMap, ionEnabled }: { baseMap: BaseMapType; ion
                   // ignore
                 }
                 try {
-                  layers.addImageryProvider(createImageryProvider('osm'), 0);
+                  layers.addImageryProvider(createImageryProvider(DEFAULT_BASE_MAP), 0);
                   if (layers.contains(ionLayer)) layers.remove(ionLayer, true);
+                  appliedBaseMapRef.current = DEFAULT_BASE_MAP;
                 } catch {
                   // ignore
                 }
@@ -597,9 +464,10 @@ export function BaseMapSync({ baseMap, ionEnabled }: { baseMap: BaseMapType; ion
         .catch(() => {
           if (cancelled) return;
           try {
-            const fallback = createImageryProvider('osm');
+            const fallback = createImageryProvider(DEFAULT_BASE_MAP);
             layers.addImageryProvider(fallback, 0);
             layers.remove(base, true);
+            appliedBaseMapRef.current = DEFAULT_BASE_MAP;
           } catch {
             // ignore
           }
@@ -763,13 +631,16 @@ function dedupeConsecutiveVertices(vertices: LonLat[]): LonLat[] {
   return out;
 }
 
-/** Multi-click polygon drawing on the globe; double-click or finish event completes the shape. */
+/** Multi-click polygon drawing on the globe; double-click or finishRef completes the shape. */
 export function DrawRegionHandler({
   active,
   onDrawnRegion,
+  finishRef,
 }: {
   active: boolean;
   onDrawnRegion: (region: DrawnRegion) => void;
+  /** Assigned while drawing so imperative finishDrawing can complete the polygon. */
+  finishRef?: MutableRefObject<(() => void) | null>;
 }) {
   const cesium = useCesium();
   const viewer = cesium?.viewer;
@@ -779,6 +650,7 @@ export function DrawRegionHandler({
   useEffect(() => {
     if (!active) {
       verticesRef.current = [];
+      if (finishRef) finishRef.current = null;
       return;
     }
     if (viewer == null || !viewer.scene?.canvas || !viewer.camera) return;
@@ -804,6 +676,8 @@ export function DrawRegionHandler({
         polygon: vertices,
       });
     };
+
+    if (finishRef) finishRef.current = finishPolygon;
 
     const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
 
@@ -832,15 +706,13 @@ export function DrawRegionHandler({
 
     handler.setInputAction(finishPolygon, Cesium.ScreenSpaceEventType.LEFT_DOUBLE_CLICK);
 
-    window.addEventListener(FINISH_DRAW_EVENT, finishPolygon);
-
     return () => {
       if (!handler.isDestroyed()) handler.destroy();
       clearPreview();
       verticesRef.current = [];
-      window.removeEventListener(FINISH_DRAW_EVENT, finishPolygon);
+      if (finishRef) finishRef.current = null;
     };
-  }, [active, viewer, onDrawnRegion]);
+  }, [active, viewer, onDrawnRegion, finishRef]);
 
   return null;
 }

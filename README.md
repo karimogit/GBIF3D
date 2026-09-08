@@ -17,15 +17,15 @@ Built with Next.js, Cesium (Resium), and the GBIF API.
 ## Features
 
 - **3D interactive globe** — Pan, zoom, tilt, and rotate using CesiumJS
-- **Region selection** — In the top bar: choose a predefined region (World, Europe, Sweden, etc.), search places by name (Nominatim), use “Current view” to follow the camera, or pick a saved favorite
+- **Region selection** — In the top bar: choose World or a continent, search places by name (Photon / komoot), or pick a saved favorite. With no region selected, camera bounds at filter-apply time are used; panning alone does not refetch
 - **Draw region** — Click points on the globe to outline a polygon (double-click or **Finish** to close it) and fetch occurrences for that area; save it as a favorite or clear it. Regions crossing the antimeridian are handled (sent to GBIF as a `MULTIPOLYGON`)
-- **Saved favorites** — Save current view bounds or a drawn polygon as a named favorite (stored in browser); quick access from the Region dropdown
-- **Real-time GBIF data** — Occurrences fetched by selected region or current view bounds, plus filters
-- **Import your own data** — Load GBIF-style CSV/TSV, JSON, or a Darwin Core Archive (`.zip`) and explore it on the globe alongside live data
+- **Saved favorites** — Save a drawn polygon (or region bounds) as a named favorite (stored in browser); quick access from the Region dropdown
+- **GBIF data** — Occurrences fetched for the selected region (or camera bounds when filters are applied), plus filters
+- **Import your own data** — Load GBIF-style CSV/TSV, JSON, or a Darwin Core Archive (`.zip`) and explore it on the globe alongside live and saved data (`displayed-occurrences` merges all three)
 - **Filters** — Species/taxon search (autocomplete), taxonomic group, date range, IUCN Red List status; advanced: Basis of Record, Continent, Country (ISO 2-letter code), Dataset key, Institution code
-- **Visualization** — Points on the globe, color-coded by IUCN threat level; points clamp to terrain when zoomed in
+- **Visualization** — Points on the globe, color-coded by IUCN threat level; in primitive mode points use a fixed height above the ellipsoid (not terrain-clamped)
 - **Tooltips** — Click any point for species name, date, location, photo(s), and link to the GBIF record
-- **Terrain** — Cesium World Terrain (optional Ion token); elevation visible when zoomed; occurrence points clamp to the surface
+- **Terrain** — Cesium World Terrain (optional Ion token); elevation visible when zoomed
 - **Export** — Save current view as PNG image, visible occurrences as GeoJSON or CSV, or generate a PDF report with map snapshot and species summary
 - **Accessibility** — Skip link, keyboard focus, color-blind friendly palette, aria-labels on controls
 - **Performance** — Caching to reduce API load; configurable result limit (100–100,000, default 1,000, fetched in chunks of 300 per request — GBIF API max)
@@ -45,7 +45,7 @@ All dependencies are open-source (MIT-compatible).
 - **No secrets in code** — The app uses only the public GBIF API; no API keys are required. The optional Cesium Ion token is read from `NEXT_PUBLIC_CESIUM_ION_TOKEN` (e.g. in Vercel env) and never committed.
 - **XSS mitigation** — Text from GBIF (species names, dates, locations) is escaped before being shown in the InfoBox.
 - **Lightbox** — Only `https://` image URLs are accepted for the photo lightbox (no `javascript:` or `data:`).
-- **API routes** — Occurrence image route validates the key; places search proxies to Nominatim with a proper User-Agent (set `NOMINATIM_USER_AGENT`, see [Nominatim usage policy](https://operations.osmfoundation.org/policies/nominatim/)) and is throttled to one upstream request per second.
+- **API routes** — Occurrence image route validates the key; places search proxies to [Photon](https://photon.komoot.io/) (komoot) and is cached for 60 minutes (`RESULT_TTL_MS`). Photon does not require a Nominatim-style User-Agent env var.
 - **Imports** — Uploaded files are size-limited (including the uncompressed size of `.zip` entries) and rows with invalid coordinates are rejected. Imported records get synthetic negative keys so they never collide with live GBIF records.
 - **CSV export** — Non-numeric cells starting with `=`, `+`, `-`, `@`, tab or carriage return are prefixed with `'` to prevent spreadsheet formula injection.
 - **Dependencies** — Run `npm audit` and address high/critical findings before deployment.
@@ -56,7 +56,7 @@ Occurrence requests to the GBIF API are **cached in memory** (per geometry + fil
 
 - **When it’s used:** The same search (same region, filters, and limit) returns cached results if the entry is still valid.
 - **When it refreshes:**
-  - **After 15 minutes:** Each occurrence cache entry expires after 15 minutes (other endpoints such as species suggest and place search use 5 minutes). The next request for that search then calls the API again.
+  - **After 15 minutes:** Each occurrence cache entry expires after 15 minutes (species suggest uses a shorter TTL; place search is cached for 60 minutes). The next request for that search then calls the API again.
   - **When evicted:** The cache is bounded (1,000 entries / 300,000 records); least-recently-used entries are dropped first.
   - **On page reload:** The cache is empty (in-memory only), so the first load after a refresh always hits the API.
 - **Not persisted:** We don’t store the cache in `localStorage` or `sessionStorage` because occurrence responses can be large; keeping them in memory avoids storage limits and keeps the logic simple.
@@ -66,11 +66,12 @@ So revisiting the same region with the same filters within 15 minutes does not c
 ## How to Use (Operating Instructions)
 
 ### Step 1: Select a Region
-- Click **Region** in the top bar to choose:
-  - A predefined region (World, Europe, Sweden, etc.)
-  - Search for a place by name (e.g., "Paris", "New York")
-  - **Current view** — fetches occurrences for the area currently visible on the globe
-- The camera will fly to the selected region and occurrences will load automatically
+- Use the region field in the top bar to:
+  - Choose a predefined region (World or a continent)
+  - Search for a place by name (e.g., "Paris", "New York") via Photon
+  - Pick a saved favorite region
+- With **no region selected**, data uses the area visible on the globe **when you apply filters**. Panning alone does not refetch — re-apply a filter or pick a region.
+- Choosing a region flies the camera there and loads occurrences for that area
 
 ### Step 2: Filter Occurrences
 Click **Filters** in the top bar to refine your search:
@@ -87,14 +88,14 @@ Click **Filters** in the top bar to refine your search:
 - **Max results** — Set how many occurrences to fetch (100–100,000; applied when you leave the field or press Enter)
 
 ### Step 3: Explore Occurrences
-- **View points** — Each occurrence appears as a colored dot on the globe (colors indicate IUCN status)
+- **View points** — Each occurrence appears as a colored dot on the globe (colors indicate IUCN status; palette is colour-blind friendly: black / brown / orange / gold / blue / green / grey)
 - **Click a point** — Opens an info box with species name, date, location, photos (if available), and a link to the full GBIF record
 - **Timeline** — Use the timeline at the bottom to filter by year and month; click a year bar to see only occurrences from that year
 - **Navigate** — Pan, zoom, and rotate the globe with your mouse or touch gestures
 
 ### Step 4: Draw a Custom Region (Optional)
 - Click **Draw region** in the top bar
-- Click points on the globe to outline a polygon; double-click (or click **Finish**) to close it
+- Click points on the globe to outline a **polygon**; double-click (or click **Finish**) to close it
 - Occurrences will load for that area
 - Save it as a favorite from the Region dropdown for quick access later
 
@@ -104,7 +105,7 @@ Click **Import** in the top bar and pick a file:
 - **JSON** — A GBIF API response (`{ results: [...] }`) or a plain array of occurrences
 - **Darwin Core Archive (.zip)** — The `occurrence.txt` core is read directly from the archive
 
-Imported records are shown on the globe and can be exported like live data. They get negative keys so they never collide with GBIF records.
+Imported records are merged with live API results and saved occurrences for display, and can be exported like live data. They get negative keys so they never collide with GBIF records.
 
 ### Step 6: Export Data (Optional)
 Click **Export** in the top bar to save:
@@ -116,7 +117,7 @@ Click **Export** in the top bar to save:
 ### Step 7: Change View Options
 Click **View** in the top bar to:
 - Switch between **3D Globe** and **2D Map**
-- Change base map (OpenStreetMap, OpenTopoMap, Positron, etc.; Bing Aerial requires a Cesium Ion token)
+- Change base map (default **Carto Positron**; also OpenStreetMap, OpenTopoMap, Dark Matter; Bing Aerial requires a Cesium Ion token)
 - Enable **Photorealistic 3D** (requires Cesium Ion token)
 
 ---
@@ -144,8 +145,8 @@ All are optional. Put them in `.env.local` for development or in your hosting pr
 
 | Variable | Purpose |
 | --- | --- |
-| `NEXT_PUBLIC_CESIUM_ION_TOKEN` | [Cesium Ion](https://cesium.com/ion/) access token. Enables Cesium World Terrain, Bing base maps and Photorealistic 3D. Without it the app defaults to OpenStreetMap and a flat ellipsoid and disables the Ion-only options in the **View** menu. |
-| `NOMINATIM_USER_AGENT` | Identifies your deployment to OpenStreetMap Nominatim (required by their [usage policy](https://operations.osmfoundation.org/policies/nominatim/)), e.g. `MyApp/1.0 (me@example.org)`. Server-side only. |
+| `NEXT_PUBLIC_CESIUM_ION_TOKEN` | [Cesium Ion](https://cesium.com/ion/) access token. Enables Cesium World Terrain, Bing base maps and Photorealistic 3D. Without it the app defaults to **Carto Positron** and a flat ellipsoid and disables the Ion-only options in the **View** menu. |
+| `PHOTON_USER_AGENT` | Optional User-Agent for Photon place search. Defaults to `GBIF3D/1.0 (...)`. Photon does **not** require `NOMINATIM_USER_AGENT` (that env var is unused). |
 | `NEXT_PUBLIC_GITHUB_REPO_URL` | Overrides the repository link shown in the top bar and About menu. |
 
 ### Run locally
@@ -165,7 +166,7 @@ npm run build
 npm start
 ```
 
-**Build note:** You may see a warning *"Mismatching @next/swc version, detected: 15.5.7 while Next.js is on 15.5.11"*. This is a known Next.js packaging quirk (15.5.11 ships with 15.5.7 SWC binaries) and can be ignored; the build completes successfully.
+**Build note:** Keep `next` and related tooling (e.g. `eslint-config-next`, SWC) on matching versions when upgrading Next.js.
 
 ### Lint and type-check
 
@@ -183,9 +184,9 @@ npm run typecheck  # tsc --noEmit
 
 ## Example queries
 
-- **Forest species in Sweden:** Select region “Sweden”, set taxonomic group to “Plants”, optionally search for e.g. *Pinus sylvestris*.
-- **Birds in a region:** Select region “Europe” (or “Current view” and pan), set taxonomic group to “Birds”.
-- **Threatened species:** Set IUCN Red List to “Endangered” or “Vulnerable”, select a region or use current view, and explore.
+- **Forest species in Europe:** Select region “Europe”, set taxonomic group to “Plants”, optionally search for e.g. *Pinus sylvestris*.
+- **Birds in a region:** Select region “Europe” (or leave region empty, pan, then apply a filter), set taxonomic group to “Birds”.
+- **Threatened species:** Set IUCN Red List to “Endangered” or “Vulnerable”, select a region or apply filters with the current camera bounds, and explore.
 
 ## API usage
 
@@ -193,14 +194,14 @@ The app uses:
 
 - **Occurrence search:** `GET https://api.gbif.org/v1/occurrence/search` with `geometry` (WKT polygon from view bounds), `taxonKey`, `year`, `eventDate`, `iucnRedListCategory`, `basisOfRecord`, `continent`, `country`, `datasetKey`, `institutionCode`, `limit`, etc.
 - **Species suggest:** `GET https://api.gbif.org/v1/species/suggest?q=...` for autocomplete.
-- **Places (Nominatim):** `/api/places/search?q=...` — server proxy to OpenStreetMap Nominatim for place search; returns bounding boxes for the Region dropdown. Throttled to one upstream request per second and cached for 5 minutes.
+- **Places (Photon):** `/api/places/search?q=...` — server proxy to [Photon](https://photon.komoot.io/) (komoot) for place search; returns bounding boxes for the Region field. Results are cached for 60 minutes.
 - **Occurrence images:** `/api/occurrence/[key]/image` — returns image URLs for an occurrence (from GBIF cache) for the InfoBox photo strip.
 
 See [Caching and when data refreshes](#caching-and-when-data-refreshes) for cache lifetimes. No API key required for normal use; Cesium Ion token is optional for World Terrain.
 
-### Map tiles (OpenStreetMap)
+### Map tiles
 
-The base map uses [OpenStreetMap](https://www.openstreetmap.org/) tiles (`https://tile.openstreetmap.org/`). Use of OSM tiles must comply with the [OpenStreetMap Tile Usage Policy](https://operations.osmfoundation.org/policies/tiles/); avoid heavy automated requests and respect the usage guidelines.
+The **default** base map is [Carto Positron](https://carto.com/basemaps/) (`*.basemaps.cartocdn.com`). OpenStreetMap (`https://tile.openstreetmap.org/`) and other styles are available under **View**. Use of OSM tiles must comply with the [OpenStreetMap Tile Usage Policy](https://operations.osmfoundation.org/policies/tiles/); avoid heavy automated requests and respect the usage guidelines.
 
 ## Project structure
 
@@ -211,7 +212,7 @@ The base map uses [OpenStreetMap](https://www.openstreetmap.org/) tiles (`https:
 │   ├── globals.css        # Global styles, accessibility
 │   ├── providers.tsx      # MUI ThemeProvider
 │   └── api/
-│       ├── places/search/ # Nominatim proxy for place search (throttled, cached)
+│       ├── places/search/ # Photon (komoot) proxy for place search (cached 60 min)
 │       ├── species/suggest/ # GBIF species suggest proxy (CORS)
 │       ├── species/search/ # GBIF species search proxy (CORS)
 │       └── occurrence/[key]/image/ # Occurrence images (GBIF cache)
@@ -268,7 +269,7 @@ Tests include:
 
 - Skip link to main content
 - Visible keyboard focus (green outline)
-- Color-blind friendly point colors (not red-green only): black/orange/gold/blue/green/gray for IUCN categories
+- Color-blind friendly point colors (not red-green only): black / brown / orange / gold / blue / green / grey for IUCN categories
 
 ## License
 

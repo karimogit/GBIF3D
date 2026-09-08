@@ -6,6 +6,7 @@ import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
 import DialogActions from '@mui/material/DialogActions';
 import Button from '@mui/material/Button';
+import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import GlobeViewer from '@/components/GlobeViewerDynamic';
 import MapTopBar from '@/components/MapTopBar';
@@ -29,6 +30,7 @@ import { ION_TOKEN_CONFIGURED } from '@/lib/ion';
 import { generateOccurrencePdf } from '@/lib/pdf-export';
 import { parseOccurrencesFile } from '@/lib/import-occurrences';
 import { getDisplayedOccurrences } from '@/lib/displayed-occurrences';
+import { useOccurrences } from '@/lib/use-occurrences';
 import {
   type ExportDataOptions,
   boundsFromOccurrences,
@@ -42,24 +44,20 @@ import {
   removeSavedOccurrence,
 } from '@/lib/saved-occurrences';
 import {
-  EXPORT_IMAGE_EVENT,
-  EXPORT_PDF_CANVAS_READY_EVENT,
-  EXPORT_PDF_EVENT,
-  FINISH_DRAW_EVENT,
   SAVE_OCCURRENCE_EVENT,
   type ExportRegionDetail,
 } from '@/components/globe/constants';
+import type { GlobeSceneHandle } from '@/components/globe/globe-handle';
+import { VALID_BASE_MAPS, type BaseMapId } from '@/lib/base-map';
 
 const REGION_ID_DRAWN = 'drawn';
 const REGION_ID_PLACE = 'place';
 
 const VIEW_STORAGE_KEY = 'gbif-globe-view';
 const VALID_SCENE_MODES = ['3D', '2D'] as const;
-const VALID_BASE_MAPS = ['bing', 'osm', 'positron', 'dark-matter', 'opentopomap'] as const;
-type BaseMapId = (typeof VALID_BASE_MAPS)[number];
 
-/** Bing imagery needs a Cesium Ion token; without one, default to a free basemap so the menu matches what's shown. */
-const DEFAULT_BASE_MAP: BaseMapId = ION_TOKEN_CONFIGURED ? 'bing' : 'osm';
+/** Bing imagery needs a Cesium Ion token; without one, default to Carto Positron (OSMF-friendly). */
+const DEFAULT_BASE_MAP: BaseMapId = ION_TOKEN_CONFIGURED ? 'bing' : 'positron';
 
 function loadViewFromStorage(): { sceneMode: '3D' | '2D'; baseMap: BaseMapId } | null {
   if (typeof window === 'undefined') return null;
@@ -71,7 +69,7 @@ function loadViewFromStorage(): { sceneMode: '3D' | '2D'; baseMap: BaseMapId } |
     const storedScene = p.sceneMode === 'Columbus' ? '2D' : p.sceneMode;
     const sceneMode = VALID_SCENE_MODES.includes(storedScene as (typeof VALID_SCENE_MODES)[number]) ? storedScene : null;
     let baseMap = VALID_BASE_MAPS.includes(p.baseMap as BaseMapId) ? (p.baseMap as BaseMapId) : null;
-    if (baseMap === 'bing' && !ION_TOKEN_CONFIGURED) baseMap = 'osm';
+    if (baseMap === 'bing' && !ION_TOKEN_CONFIGURED) baseMap = 'positron';
     if (sceneMode != null || baseMap != null) {
       return {
         sceneMode: (sceneMode ?? '3D') as '3D' | '2D',
@@ -129,12 +127,14 @@ export default function Home() {
   const [filters, setFilters] = useState<OccurrenceFilters>({
     limit: DEFAULT_OCCURRENCE_LIMIT,
   });
-  const [occurrences, setOccurrences] = useState<GBIFOccurrence[]>([]);
   const [selectedRegionId, setSelectedRegionId] = useState('');
   const [favorites, setFavorites] = useState<FavoriteRegion[]>([]);
   const [drawnBounds, setDrawnBounds] = useState<Bounds | null>(null);
   const [drawnPolygon, setDrawnPolygon] = useState<LonLat[] | null>(null);
   const [exportScopePrompt, setExportScopePrompt] = useState<'image' | null>(null);
+  const [favoriteNameOpen, setFavoriteNameOpen] = useState(false);
+  const [favoriteName, setFavoriteName] = useState('');
+  const [importError, setImportError] = useState<string | null>(null);
   const [placeSearchResult, setPlaceSearchResult] = useState<{
     name: string;
     bounds: Bounds;
@@ -150,7 +150,39 @@ export default function Home() {
   const [savedOccurrences, setSavedOccurrences] = useState<GBIFOccurrence[]>([]);
   const [selectedOccurrenceKey, setSelectedOccurrenceKey] = useState<number | null>(null);
   const [selectedOccurrenceRequestId, setSelectedOccurrenceRequestId] = useState(0);
+  const [flyNonce, setFlyNonce] = useState(0);
   const allOccurrencesRef = useRef<GBIFOccurrence[]>([]);
+  const globeHandleRef = useRef<GlobeSceneHandle | null>(null);
+
+  const selectedRegionBounds = getSelectedRegionBounds(
+    selectedRegionId,
+    favorites,
+    drawnBounds,
+    placeSearchResult
+  );
+
+  const selectedRegionPolygon = getSelectedRegionPolygon(selectedRegionId, favorites, drawnPolygon);
+
+  // Place-search results carry an ISO country code that lets the API restrict by country too
+  const selectedCountryCode =
+    selectedRegionId === REGION_ID_PLACE && placeSearchResult?.countryCode
+      ? placeSearchResult.countryCode
+      : null;
+
+  const {
+    occurrences,
+    loading,
+    error,
+    progress,
+    setViewBounds,
+    hasTaxonFilter,
+    cancel: cancelLoad,
+  } = useOccurrences({
+    filters,
+    selectedRegionBounds,
+    selectedCountryCode,
+    drawnPolygon: selectedRegionPolygon,
+  });
 
   useEffect(() => {
     setFavorites(getFavorites());
@@ -176,20 +208,16 @@ export default function Home() {
     }
   }, [sceneMode, baseMap]);
 
-  const allOccurrences = useMemo(
-    () => [...occurrences, ...importedOccurrences],
-    [occurrences, importedOccurrences]
-  );
+  const allOccurrences = useMemo(() => {
+    const byKey = new Map<number, GBIFOccurrence>();
+    for (const o of occurrences) byKey.set(o.key, o);
+    for (const o of importedOccurrences) byKey.set(o.key, o);
+    for (const o of savedOccurrences) {
+      if (!byKey.has(o.key)) byKey.set(o.key, o);
+    }
+    return Array.from(byKey.values());
+  }, [occurrences, importedOccurrences, savedOccurrences]);
   allOccurrencesRef.current = allOccurrences;
-
-  const selectedRegionBounds = getSelectedRegionBounds(
-    selectedRegionId,
-    favorites,
-    drawnBounds,
-    placeSearchResult
-  );
-
-  const selectedRegionPolygon = getSelectedRegionPolygon(selectedRegionId, favorites, drawnPolygon);
 
   const displayedOccurrences = useMemo(
     () =>
@@ -199,9 +227,18 @@ export default function Home() {
         selectedRegionBounds,
         selectedYear,
         selectedMonth,
-        selectedRegionPolygon
+        selectedRegionPolygon,
+        savedOccurrences
       ),
-    [occurrences, importedOccurrences, selectedRegionBounds, selectedYear, selectedMonth, selectedRegionPolygon]
+    [
+      occurrences,
+      importedOccurrences,
+      selectedRegionBounds,
+      selectedYear,
+      selectedMonth,
+      selectedRegionPolygon,
+      savedOccurrences,
+    ]
   );
 
   const regionDisplayName = getRegionDisplayName(selectedRegionId, favorites, placeSearchResult);
@@ -210,6 +247,8 @@ export default function Home() {
     () => new Set(savedOccurrences.map((o) => o.key)),
     [savedOccurrences]
   );
+
+  const flyToBoundsKey = `${selectedRegionId}:${flyNonce}`;
 
   // Reset timeline year/month when species filter changes (so new species shows all data, not filtered by old year)
   const prevTaxonKeysRef = useRef<number[] | undefined>(filters.taxonKeys);
@@ -268,9 +307,13 @@ export default function Home() {
     [exportableRegionOutline]
   );
 
+  const handleGlobeHandle = useCallback((handle: GlobeSceneHandle | null) => {
+    globeHandleRef.current = handle;
+  }, []);
+
   const runImageExport = useCallback(
     (scope: 'full' | 'region') => {
-      window.dispatchEvent(new CustomEvent(EXPORT_IMAGE_EVENT, { detail: buildExportDetail(scope) }));
+      globeHandleRef.current?.exportImage(buildExportDetail(scope));
     },
     [buildExportDetail]
   );
@@ -333,14 +376,18 @@ export default function Home() {
   );
 
   const handleExportPDF = useCallback(
-    (opts: ExportDataOptions) => {
+    async (opts: ExportDataOptions) => {
       const data = opts.scope === 'visible' ? displayedOccurrences : allOccurrences;
       const includeRegion = opts.includePolygon && selectedRegionBounds != null;
       const mapBounds =
         selectedRegionBounds != null
           ? padBounds(selectedRegionBounds)
           : boundsFromOccurrences(data);
-      const pdfOpts = {
+      const url = await globeHandleRef.current?.capturePdfSnapshot({
+        scope: 'full',
+        frameBounds: mapBounds ?? undefined,
+      });
+      generateOccurrencePdf({
         occurrences: data,
         filters,
         regionName: regionDisplayName || undefined,
@@ -348,30 +395,8 @@ export default function Home() {
           ? regionPolygonWkt(selectedRegionBounds, selectedRegionPolygon)
           : undefined,
         repoUrl: process.env.NEXT_PUBLIC_GITHUB_REPO_URL,
-      };
-      let generated = false;
-      const onCanvasReady = (e: Event) => {
-        if (generated) return;
-        generated = true;
-        window.removeEventListener(EXPORT_PDF_CANVAS_READY_EVENT, onCanvasReady);
-        const detail = (e as CustomEvent<{ imageDataUrl: string | null }>).detail;
-        generateOccurrencePdf({ ...pdfOpts, mapImageDataUrl: detail?.imageDataUrl ?? undefined });
-      };
-      window.addEventListener(EXPORT_PDF_CANVAS_READY_EVENT, onCanvasReady);
-      window.dispatchEvent(
-        new CustomEvent<ExportRegionDetail>(EXPORT_PDF_EVENT, {
-          detail: {
-            scope: 'full',
-            frameBounds: mapBounds ?? undefined,
-          },
-        })
-      );
-      setTimeout(() => {
-        if (generated) return;
-        generated = true;
-        window.removeEventListener(EXPORT_PDF_CANVAS_READY_EVENT, onCanvasReady);
-        generateOccurrencePdf(pdfOpts);
-      }, 4000);
+        mapImageDataUrl: url ?? undefined,
+      });
     },
     [
       allOccurrences,
@@ -384,22 +409,23 @@ export default function Home() {
     ]
   );
 
-  // Place-search results carry an ISO country code that lets the API restrict by country too
-  const selectedCountryCode =
-    selectedRegionId === REGION_ID_PLACE && placeSearchResult?.countryCode
-      ? placeSearchResult.countryCode
-      : null;
-
   const handleSaveDrawnRegion = useCallback(() => {
     if (!drawnBounds) return;
-    const name = window.prompt('Name this region');
-    if (!name?.trim()) return;
-    const added = addFavorite(name.trim(), drawnBounds, drawnPolygon);
+    setFavoriteName('');
+    setFavoriteNameOpen(true);
+  }, [drawnBounds]);
+
+  const handleConfirmFavoriteName = useCallback(() => {
+    if (!drawnBounds || !favoriteName.trim()) return;
+    const added = addFavorite(favoriteName.trim(), drawnBounds, drawnPolygon);
     setFavorites(getFavorites());
     setSelectedRegionId(added.id);
+    setFlyNonce((n) => n + 1);
     setDrawnBounds(null);
     setDrawnPolygon(null);
-  }, [drawnBounds, drawnPolygon]);
+    setFavoriteNameOpen(false);
+    setFavoriteName('');
+  }, [drawnBounds, drawnPolygon, favoriteName]);
 
   const handleRemoveFavorite = useCallback((id: string) => {
     removeFavorite(id);
@@ -411,11 +437,12 @@ export default function Home() {
     setDrawnBounds(region.bounds);
     setDrawnPolygon(region.polygon ?? null);
     setSelectedRegionId(REGION_ID_DRAWN);
+    setFlyNonce((n) => n + 1);
     setDrawRegionMode(false);
   }, []);
 
   const handleFinishDrawRegion = useCallback(() => {
-    window.dispatchEvent(new CustomEvent(FINISH_DRAW_EVENT));
+    globeHandleRef.current?.finishDrawing();
   }, []);
 
   const handleCancelDrawRegion = useCallback(() => {
@@ -432,7 +459,7 @@ export default function Home() {
     try {
       const parsed = await parseOccurrencesFile(file);
       if (parsed.length === 0) {
-        window.alert(
+        setImportError(
           `No occurrences with coordinates found in "${file.name}". Use a GBIF-style CSV/TSV, JSON, or Darwin Core Archive with decimalLatitude and decimalLongitude columns.`
         );
         return;
@@ -440,7 +467,7 @@ export default function Home() {
       setImportedOccurrences(parsed);
     } catch (err) {
       const reason = err instanceof Error && err.message ? ` (${err.message})` : '';
-      window.alert(`Could not read "${file.name}"${reason}.`);
+      setImportError(`Could not read "${file.name}"${reason}.`);
     }
   }, []);
 
@@ -492,24 +519,79 @@ export default function Home() {
           <Button onClick={() => setExportScopePrompt(null)}>Cancel</Button>
         </DialogActions>
       </Dialog>
+      <Dialog
+        open={favoriteNameOpen}
+        onClose={() => setFavoriteNameOpen(false)}
+        maxWidth="xs"
+        fullWidth
+        PaperProps={{ sx: { borderRadius: 2, m: 1, maxWidth: 'min(420px, calc(100vw - 16px))' } }}
+      >
+        <DialogTitle>Save region</DialogTitle>
+        <DialogContent dividers>
+          <TextField
+            autoFocus
+            fullWidth
+            label="Name this region"
+            value={favoriteName}
+            onChange={(e) => setFavoriteName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handleConfirmFavoriteName();
+            }}
+            margin="dense"
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setFavoriteNameOpen(false)}>Cancel</Button>
+          <Button
+            variant="contained"
+            onClick={handleConfirmFavoriteName}
+            disabled={!favoriteName.trim()}
+          >
+            Save
+          </Button>
+        </DialogActions>
+      </Dialog>
+      <Dialog
+        open={importError != null}
+        onClose={() => setImportError(null)}
+        maxWidth="xs"
+        fullWidth
+        PaperProps={{ sx: { borderRadius: 2, m: 1, maxWidth: 'min(420px, calc(100vw - 16px))' } }}
+      >
+        <DialogTitle>Import failed</DialogTitle>
+        <DialogContent dividers>
+          <Typography variant="body2">{importError}</Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setImportError(null)}>OK</Button>
+        </DialogActions>
+      </Dialog>
       <div style={{ position: 'absolute', inset: 0 }}>
         <ErrorBoundary>
           <GlobeViewer
-            filters={filters}
-            onOccurrencesChange={setOccurrences}
-            selectedRegionBounds={selectedRegionBounds}
-            selectedCountryCode={selectedCountryCode}
+            occurrences={displayedOccurrences}
+            loading={loading}
+            error={error}
+            progress={progress}
+            onCancelLoad={cancelLoad}
+            hasTaxonFilter={hasTaxonFilter}
+            onBoundsChange={setViewBounds}
+            onGlobeHandle={handleGlobeHandle}
             flyToBounds={selectedRegionBounds ?? undefined}
+            flyToBoundsKey={flyToBoundsKey}
             drawRegionMode={drawRegionMode}
             onDrawnRegion={handleDrawnRegion}
-            drawnBounds={selectedRegionId === REGION_ID_DRAWN ? drawnBounds : selectedRegionPolygon ? selectedRegionBounds : null}
+            drawnBounds={
+              selectedRegionId === REGION_ID_DRAWN
+                ? drawnBounds
+                : selectedRegionPolygon
+                  ? selectedRegionBounds
+                  : null
+            }
             drawnPolygon={selectedRegionPolygon}
             sceneMode={sceneMode}
             baseMap={baseMap}
             photorealistic3D={photorealistic3D}
-            timeFilterYear={selectedYear}
-            timeFilterMonth={selectedMonth}
-            importedOccurrences={importedOccurrences}
             savedOccurrenceKeys={savedOccurrenceKeys}
             selectedOccurrenceKey={selectedOccurrenceKey}
             selectedOccurrenceRequestId={selectedOccurrenceRequestId}
@@ -543,53 +625,65 @@ export default function Home() {
           />
         </div>
         <MapTopBar
-          selectedRegionId={selectedRegionId}
-          onRegionChange={(id) => {
-            setSelectedRegionId(id);
-            if (id !== REGION_ID_PLACE) setPlaceSearchResult(null);
-          }}
-          favorites={favorites}
-          drawnBounds={drawnBounds}
-          placeSearchResult={placeSearchResult}
-          onPlaceSelect={(bounds, name, countryCode) => {
-            setPlaceSearchResult({ name, bounds, ...(countryCode != null ? { countryCode } : {}) });
-            setSelectedRegionId(REGION_ID_PLACE);
+          region={{
+            selectedRegionId,
+            onRegionChange: (id) => {
+              setSelectedRegionId(id);
+              setFlyNonce((n) => n + 1);
+              if (id !== REGION_ID_PLACE) setPlaceSearchResult(null);
+            },
+            favorites,
+            drawnBounds,
+            placeSearchResult,
+            onPlaceSelect: (bounds, name, countryCode) => {
+              setPlaceSearchResult({ name, bounds, ...(countryCode != null ? { countryCode } : {}) });
+              setSelectedRegionId(REGION_ID_PLACE);
+              setFlyNonce((n) => n + 1);
+            },
+            onStartDrawRegion: () => setDrawRegionMode(true),
+            drawRegionMode,
+            onCancelDrawRegion: handleCancelDrawRegion,
+            onFinishDrawRegion: handleFinishDrawRegion,
+            onSaveDrawnRegion: handleSaveDrawnRegion,
+            onClearDrawnRegion: handleClearDrawnRegion,
+            onRemoveFavorite: handleRemoveFavorite,
+            regionBounds: selectedRegionBounds,
+            regionName: regionDisplayName || undefined,
           }}
           filters={filters}
           onFiltersChange={setFilters}
-          onStartDrawRegion={() => setDrawRegionMode(true)}
-          drawRegionMode={drawRegionMode}
-          onCancelDrawRegion={handleCancelDrawRegion}
-          onFinishDrawRegion={handleFinishDrawRegion}
-          onSaveDrawnRegion={handleSaveDrawnRegion}
-          onClearDrawnRegion={handleClearDrawnRegion}
-          onRemoveFavorite={handleRemoveFavorite}
-          onExportImage={handleExportImage}
-          onExportGeoJSON={handleExportGeoJSON}
-          onExportCSV={handleExportCSV}
-          onExportPDF={handleExportPDF}
-          occurrenceCount={allOccurrences.length}
-          visibleOccurrenceCount={displayedOccurrences.length}
-          regionBounds={selectedRegionBounds}
-          regionName={regionDisplayName || undefined}
-          onImportFile={handleImportFile}
-          importedOccurrenceCount={importedOccurrences.length}
-          importedOccurrences={importedOccurrences}
-          onClearImport={importedOccurrences.length > 0 ? handleClearImport : undefined}
-          savedOccurrences={savedOccurrences}
-          onSelectOccurrence={handleSelectOccurrence}
-          onRemoveSavedOccurrence={(key) => {
-            removeSavedOccurrence(key);
-            setSavedOccurrences(getSavedOccurrences());
+          importState={{
+            onImportFile: handleImportFile,
+            importedOccurrenceCount: importedOccurrences.length,
+            importedOccurrences,
+            onClearImport: importedOccurrences.length > 0 ? handleClearImport : undefined,
           }}
-            sceneMode={sceneMode}
-            onSceneModeChange={setSceneMode}
-            baseMap={baseMap}
-            onBaseMapChange={setBaseMap}
-            photorealistic3D={photorealistic3D}
-            onPhotorealistic3DChange={setPhotorealistic3D}
-            githubUrl={process.env.NEXT_PUBLIC_GITHUB_REPO_URL}
-          />
+          exportHandlers={{
+            onExportImage: handleExportImage,
+            onExportGeoJSON: handleExportGeoJSON,
+            onExportCSV: handleExportCSV,
+            onExportPDF: handleExportPDF,
+            occurrenceCount: allOccurrences.length,
+            visibleOccurrenceCount: displayedOccurrences.length,
+          }}
+          saved={{
+            savedOccurrences,
+            onSelectOccurrence: handleSelectOccurrence,
+            onRemoveSavedOccurrence: (key) => {
+              removeSavedOccurrence(key);
+              setSavedOccurrences(getSavedOccurrences());
+            },
+          }}
+          viewOptions={{
+            sceneMode,
+            onSceneModeChange: setSceneMode,
+            baseMap,
+            onBaseMapChange: setBaseMap,
+            photorealistic3D,
+            onPhotorealistic3DChange: setPhotorealistic3D,
+          }}
+          githubUrl={process.env.NEXT_PUBLIC_GITHUB_REPO_URL}
+        />
       </div>
     </main>
   );

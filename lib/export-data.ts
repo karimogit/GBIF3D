@@ -213,5 +213,12 @@ export function downloadBlob(blob: Blob, filename: string): void {
   a.href = url;
   a.download = filename;
   a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 100);
+  // Defer revoke until after the browser starts the download (Safari aborts if revoked too soon).
+  const revoke = () => URL.revokeObjectURL(url);
+  if (typeof window !== 'undefined') {
+    window.addEventListener('focus', revoke, { once: true });
+    setTimeout(revoke, 60_000);
+  } else {
+    setTimeout(revoke, 0);
+  }
 }
