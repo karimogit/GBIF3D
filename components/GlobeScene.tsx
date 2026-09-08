@@ -39,16 +39,20 @@ import {
   DrawRegionHandler,
   DrawnRegionOverlay,
   EnsureBaseImagery,
+  FlyModeHandler,
   FlyToBounds,
   InfoBoxLinkFix,
+  MapKeyboardPan,
   OccurrenceImageLoader,
   Photorealistic3DSync,
   SceneModeSync,
   SelectOccurrence,
+  type DrawShapeMode,
 } from './globe/scene-handlers';
 
 export type { BaseMapType, SceneModeType } from './globe/imagery';
 export type { GlobeSceneHandle } from './globe/globe-handle';
+export type { DrawShapeMode };
 
 interface GlobeSceneProps {
   occurrences: GBIFOccurrence[];
@@ -57,12 +61,15 @@ interface GlobeSceneProps {
   /** Remount FlyToBounds when this changes so re-selecting the same region re-flies. */
   flyToBoundsKey?: string | number;
   drawRegionMode?: boolean;
+  drawShapeMode?: DrawShapeMode;
   onDrawnRegion?: (region: DrawnRegion) => void;
   drawnBounds?: Bounds | null;
   drawnPolygon?: LonLat[] | null;
   sceneMode?: SceneModeType;
   baseMap?: BaseMapType;
   photorealistic3D?: boolean;
+  flyMode?: boolean;
+  onFlyModeChange?: (enabled: boolean) => void;
   loading?: boolean;
   error?: string | null;
   savedOccurrenceKeys?: Set<number>;
@@ -201,12 +208,15 @@ export default function GlobeScene({
   flyToBounds,
   flyToBoundsKey,
   drawRegionMode = false,
+  drawShapeMode = 'polygon',
   onDrawnRegion,
   drawnBounds,
   drawnPolygon,
   sceneMode = '3D',
   baseMap = DEFAULT_BASE_MAP,
   photorealistic3D = false,
+  flyMode = false,
+  onFlyModeChange,
   savedOccurrenceKeys,
   selectedOccurrenceKey,
   selectedOccurrenceRequestId,
@@ -351,8 +361,18 @@ export default function GlobeScene({
         />
       )}
       {drawRegionMode && onDrawnRegion && (
-        <DrawRegionHandler active onDrawnRegion={onDrawnRegion} finishRef={drawFinishRef} />
+        <DrawRegionHandler
+          active
+          mode={drawShapeMode}
+          onDrawnRegion={onDrawnRegion}
+          finishRef={drawFinishRef}
+        />
       )}
+      <MapKeyboardPan enabled={!drawRegionMode} reserveWasd={flyMode} />
+      <FlyModeHandler
+        active={flyMode && !drawRegionMode}
+        onRequestExit={() => onFlyModeChange?.(false)}
+      />
       {drawnBounds && (
         <DrawnRegionOverlay bounds={drawnBounds} polygon={drawnPolygon ?? undefined} />
       )}

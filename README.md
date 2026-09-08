@@ -18,7 +18,9 @@ Built with Next.js, Cesium (Resium), and the GBIF API.
 
 - **3D interactive globe** — Pan, zoom, tilt, and rotate using CesiumJS
 - **Region selection** — In the top bar: choose World or a continent, search places by name (Photon / komoot), or pick a saved favorite. With no region selected, camera bounds at filter-apply time are used; panning alone does not refetch
-- **Draw region** — Click points on the globe to outline a polygon (double-click or **Finish** to close it) and fetch occurrences for that area; save it as a favorite or clear it. Regions crossing the antimeridian are handled (sent to GBIF as a `MULTIPOLYGON`)
+- **Draw region** — Pencil menu: draw a **polygon** (click points, Done to finish), **rectangle**, or **circle** on the globe and fetch occurrences for that area; save it as a favorite or clear it. Regions crossing the antimeridian are handled (sent to GBIF as a `MULTIPOLYGON`)
+- **Keyboard navigation** — Arrow keys (and WASD when not flying) pan the map; Page Up/Down zoom
+- **Fly mode** — Airplane control (bottom right): free-look flight with WASD / Q·E / mouse look — great with Photorealistic 3D; Esc exits
 - **Saved favorites** — Save a drawn polygon (or region bounds) as a named favorite (stored in browser); quick access from the Region dropdown
 - **GBIF data** — Occurrences fetched for the selected region (or camera bounds when filters are applied), plus filters
 - **Import your own data** — Load GBIF-style CSV/TSV, JSON, or a Darwin Core Archive (`.zip`) and explore it on the globe alongside live and saved data (`displayed-occurrences` merges all three)
@@ -91,15 +93,22 @@ Click **Filters** in the top bar to refine your search:
 - **View points** — Each occurrence appears as a colored dot on the globe (colors indicate IUCN status; palette is colour-blind friendly: black / brown / orange / gold / blue / green / grey)
 - **Click a point** — Opens an info box with species name, date, location, photos (if available), and a link to the full GBIF record
 - **Timeline** — Use the timeline at the bottom to filter by year and month; click a year bar to see only occurrences from that year
-- **Navigate** — Pan, zoom, and rotate the globe with your mouse or touch gestures. Bottom-right controls reset the view (home) or point north.
+- **Navigate** — Pan, zoom, and rotate the globe with your mouse or touch gestures. Use **arrow keys** to pan. Bottom-right controls: fly mode, reset view (home), or point north.
 
 ### Step 4: Draw a Custom Region (Optional)
-- Click **Draw region** in the top bar
-- Click points on the globe to outline a **polygon**; double-click (or click **Finish**) to close it
+- Click the **pencil** icon next to place search and choose **Polygon**, **Rectangle**, or **Circle**
+- **Polygon** — Click points on the globe; double-click or **Done** to close
+- **Rectangle / Circle** — Click and drag (or click two points) to set the shape
 - Occurrences will load for that area
 - Save it as a favorite from the Region dropdown for quick access later
 
-### Step 5: Import Your Own Data (Optional)
+### Step 5: Fly over the globe (Optional)
+- Toggle the **airplane** icon (bottom right) to enter fly mode
+- **WASD** move, **Q/E** up/down, **Shift** faster, drag to look around
+- Enable **Photorealistic 3D** under View for buildings/terrain overlay (needs a Cesium Ion token)
+- Press **Esc** or toggle the airplane again to exit
+
+### Step 6: Import Your Own Data (Optional)
 Click **Import** in the top bar and pick a file:
 - **CSV / TSV** — GBIF occurrence download format (columns such as `decimalLatitude`, `decimalLongitude`, `scientificName`, `eventDate`); headers are matched case-insensitively
 - **JSON** — A GBIF API response (`{ results: [...] }`) or a plain array of occurrences
@@ -107,14 +116,14 @@ Click **Import** in the top bar and pick a file:
 
 Imported records are merged with live API results and saved occurrences for display, and can be exported like live data. They get negative keys so they never collide with GBIF records.
 
-### Step 6: Export Data (Optional)
+### Step 7: Export Data (Optional)
 Click **Export** in the top bar to save:
 - **Image** — Current view as PNG
 - **GeoJSON** — Visible occurrences as GeoJSON (RFC 7946; the selected region is included as a `Polygon`/`MultiPolygon` feature)
 - **CSV** — Visible occurrences as CSV (the selected region is included as `regionName`/`regionWkt` columns)
 - **PDF** — Report with map snapshot, species summary, and filter details
 
-### Step 7: Change View Options
+### Step 8: Change View Options
 Click **View** in the top bar to:
 - Switch between **3D Globe** and **2D Map**
 - Change base map (default **OpenTopoMap**; also OpenStreetMap; Bing Aerial requires a Cesium Ion token)
