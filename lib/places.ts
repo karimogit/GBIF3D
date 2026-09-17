@@ -109,3 +109,51 @@ export function photonFeatureToResult(feature: PhotonFeature): PlaceSearchResult
     ...(country_code ? { country_code } : {}),
   };
 }
+
+function primaryPlaceName(displayName: string): string {
+  return displayName.split(',')[0]?.trim() ?? displayName;
+}
+
+/** Combine English and local display names when the primary label differs. */
+export function combineBilingualDisplayName(english: string, local: string): string {
+  const enPrimary = primaryPlaceName(english);
+  const localPrimary = primaryPlaceName(local);
+  if (enPrimary.toLowerCase() === localPrimary.toLowerCase()) return english;
+  const parts = english.split(',').map((s) => s.trim());
+  parts[0] = `${enPrimary} (${localPrimary})`;
+  return parts.join(', ');
+}
+
+/**
+ * Merge English and local Photon result sets, deduplicating by place_id.
+ * English matches are listed first; local-only matches fill remaining slots.
+ */
+export function mergeBilingualPlaceResults(
+  english: PlaceSearchResult[],
+  local: PlaceSearchResult[],
+  limit = 8
+): PlaceSearchResult[] {
+  const localById = new Map(local.map((r) => [r.place_id, r]));
+  const merged: PlaceSearchResult[] = [];
+  const seen = new Set<number>();
+
+  for (const en of english) {
+    if (seen.has(en.place_id)) continue;
+    seen.add(en.place_id);
+    const loc = localById.get(en.place_id);
+    merged.push({
+      ...en,
+      display_name: loc ? combineBilingualDisplayName(en.display_name, loc.display_name) : en.display_name,
+    });
+    if (merged.length >= limit) return merged;
+  }
+
+  for (const loc of local) {
+    if (seen.has(loc.place_id)) continue;
+    seen.add(loc.place_id);
+    merged.push(loc);
+    if (merged.length >= limit) return merged;
+  }
+
+  return merged;
+}
