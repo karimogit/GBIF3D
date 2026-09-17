@@ -1,49 +1,35 @@
 'use client';
 
-import { useCallback, useEffect, useRef } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { buildShareUrl, decodeShareUrlState, type ShareUrlState } from '@/lib/share-url';
+import { useCallback, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
+import {
+  buildShareUrl,
+  decodeShareUrlState,
+  hasShareParams,
+  type ShareUrlState,
+} from '@/lib/share-url';
 import type { BaseMapId } from '@/lib/base-map';
+
+/** Survives Suspense remounts so shared URL state is applied only once per page load. */
+let shareUrlHydrated = false;
+
+export function resetShareUrlHydrationForTests(): void {
+  shareUrlHydrated = false;
+}
 
 export function useShareUrl(
   state: ShareUrlState,
   defaultBaseMap: BaseMapId,
   onHydrate: (decoded: ShareUrlState) => void
 ) {
-  const router = useRouter();
   const searchParams = useSearchParams();
-  const hydratedRef = useRef(false);
-  const skipNextSyncRef = useRef(false);
 
   useEffect(() => {
-    if (hydratedRef.current) return;
-    hydratedRef.current = true;
+    if (shareUrlHydrated) return;
+    shareUrlHydrated = true;
     const decoded = decodeShareUrlState(searchParams, defaultBaseMap);
-    if (
-      decoded.selectedRegionId ||
-      decoded.placeSearchResult ||
-      decoded.filters ||
-      decoded.selectedYear != null ||
-      decoded.sceneMode ||
-      decoded.baseMap
-    ) {
-      skipNextSyncRef.current = true;
-      onHydrate(decoded);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- hydrate once from URL on mount
-  }, []);
-
-  useEffect(() => {
-    if (skipNextSyncRef.current) {
-      skipNextSyncRef.current = false;
-      return;
-    }
-    const params = buildShareUrl(state).split('?')[1] ?? '';
-    const current = searchParams.toString();
-    if (params === current) return;
-    const next = params ? `/?${params}` : '/';
-    router.replace(next, { scroll: false });
-  }, [state, router, searchParams]);
+    if (hasShareParams(decoded)) onHydrate(decoded);
+  }, [searchParams, defaultBaseMap, onHydrate]);
 
   const copyShareUrl = useCallback(async (): Promise<boolean> => {
     try {
