@@ -50,6 +50,7 @@ import {
   SelectOccurrence,
   type DrawShapeMode,
 } from './globe/scene-handlers';
+import { InfoBoxEnhancements } from './globe/info-box-enhancements';
 
 export type { BaseMapType, SceneModeType } from './globe/imagery';
 export type { GlobeSceneHandle } from './globe/globe-handle';
@@ -354,6 +355,7 @@ export default function GlobeScene({
         onImageLoaded={handleOccurrenceImageLoaded}
       />
       <InfoBoxLinkFix />
+      <InfoBoxEnhancements />
       <CameraBoundsReporter onBoundsChange={onBoundsChange} />
       {flyToBounds && (
         <FlyToBounds key={flyToBoundsKey ?? 'fly'} bounds={flyToBounds} />
