@@ -1,4 +1,10 @@
-import { photonFeatureToResult, type PhotonFeature } from '@/lib/places';
+import {
+  combineBilingualDisplayName,
+  mergeBilingualPlaceResults,
+  photonFeatureToResult,
+  type PlaceSearchResult,
+  type PhotonFeature,
+} from '@/lib/places';
 
 describe('photonFeatureToResult', () => {
   it('maps a feature with extent and country code', () => {
@@ -80,5 +86,50 @@ describe('photonFeatureToResult', () => {
       properties: { osm_id: 5, name: 'X', countrycode: 'SWE' },
     });
     expect(result?.country_code).toBeUndefined();
+  });
+});
+
+describe('combineBilingualDisplayName', () => {
+  it('returns English when primary names match', () => {
+    expect(combineBilingualDisplayName('Stockholm, Sweden', 'Stockholm, Sverige')).toBe(
+      'Stockholm, Sweden'
+    );
+  });
+
+  it('adds local primary name in parentheses when it differs', () => {
+    expect(
+      combineBilingualDisplayName('Munich, Bavaria, Germany', 'München, Bayern, Deutschland')
+    ).toBe('Munich (München), Bavaria, Germany');
+  });
+});
+
+describe('mergeBilingualPlaceResults', () => {
+  const bounds = { west: 1, south: 2, east: 3, north: 4 };
+
+  it('deduplicates by place_id and prefers English ordering', () => {
+    const english: PlaceSearchResult[] = [
+      { display_name: 'Munich, Bavaria, Germany', place_id: 62428, bounds, country_code: 'DE' },
+      { display_name: 'Paris, France', place_id: 99, bounds, country_code: 'FR' },
+    ];
+    const local: PlaceSearchResult[] = [
+      { display_name: 'München, Bayern, Deutschland', place_id: 62428, bounds, country_code: 'DE' },
+      { display_name: 'Lyon, France', place_id: 42, bounds, country_code: 'FR' },
+    ];
+
+    expect(mergeBilingualPlaceResults(english, local)).toEqual([
+      { display_name: 'Munich (München), Bavaria, Germany', place_id: 62428, bounds, country_code: 'DE' },
+      { display_name: 'Paris, France', place_id: 99, bounds, country_code: 'FR' },
+      { display_name: 'Lyon, France', place_id: 42, bounds, country_code: 'FR' },
+    ]);
+  });
+
+  it('respects the result limit', () => {
+    const english: PlaceSearchResult[] = [
+      { display_name: 'A', place_id: 1, bounds },
+      { display_name: 'B', place_id: 2, bounds },
+    ];
+    const local: PlaceSearchResult[] = [{ display_name: 'C', place_id: 3, bounds }];
+
+    expect(mergeBilingualPlaceResults(english, local, 2)).toHaveLength(2);
   });
 });
