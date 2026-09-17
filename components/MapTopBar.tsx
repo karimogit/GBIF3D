@@ -369,9 +369,9 @@ export default function MapTopBar(rawProps: MapTopBarProps | MapTopBarFlatProps)
     return [
       {
         id: 'filters',
-        label: `Filters${filterActive ? ' • active' : ''}`,
-        menuLabel: 'Filters',
-        ariaLabel: 'Filters',
+        label: `Species${filterActive ? ' • active' : ''}`,
+        menuLabel: 'Species',
+        ariaLabel: 'Species',
         icon: <FilterList fontSize="small" />,
         endIcon: <ArrowDropDown />,
         visible: true,
@@ -949,7 +949,7 @@ export default function MapTopBar(rawProps: MapTopBarProps | MapTopBarFlatProps)
         maxWidth="sm"
         PaperProps={{ sx: { borderRadius: 2, m: 1, maxWidth: 'min(420px, calc(100vw - 16px))' } }}
       >
-        <DialogTitle>Filters</DialogTitle>
+        <DialogTitle>Species</DialogTitle>
         <DialogContent dividers>
           <FilterForm
             filters={filters}
