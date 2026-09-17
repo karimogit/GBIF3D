@@ -1,4 +1,4 @@
-import { csvCell, occurrencesToCSV, occurrencesToGeoJSON } from '@/lib/export-data';
+import { csvCell, occurrencesToCSV, occurrencesToGeoJSON, pdfSnapshotFrameBounds } from '@/lib/export-data';
 import type { GBIFOccurrence } from '@/types/gbif';
 
 const occ = (over: Partial<GBIFOccurrence>): GBIFOccurrence => ({ key: 1, decimalLatitude: 1, decimalLongitude: 2, ...over });
@@ -34,6 +34,37 @@ describe('export-data', () => {
       expect(lines).toHaveLength(3);
       const width = lines[0].split(',').length;
       expect(lines[1].split(',').length).toBe(width);
+    });
+  });
+
+  describe('pdfSnapshotFrameBounds', () => {
+    it('does not reframe the camera for visible-on-map exports', () => {
+      expect(
+        pdfSnapshotFrameBounds(
+          'visible',
+          [occ({ decimalLatitude: 59, decimalLongitude: 18 })],
+          { west: 0, south: 0, east: 1, north: 1 }
+        )
+      ).toBeUndefined();
+    });
+
+    it('frames all-data exports to the selected region or occurrence bounds', () => {
+      const region = { west: 10, south: 20, east: 30, north: 40 };
+      const framedRegion = pdfSnapshotFrameBounds(
+        'all',
+        [occ({ decimalLatitude: 59, decimalLongitude: 18 })],
+        region
+      );
+      expect(framedRegion).toBeDefined();
+      expect(framedRegion!.west).toBeLessThan(region.west);
+      expect(framedRegion!.east).toBeGreaterThan(region.east);
+
+      const framed = pdfSnapshotFrameBounds(
+        'all',
+        [occ({ decimalLatitude: 59, decimalLongitude: 18 }), occ({ key: 2, decimalLatitude: 60, decimalLongitude: 19 })],
+        null
+      );
+      expect(framed).toEqual(expect.objectContaining({ west: expect.any(Number), east: expect.any(Number) }));
     });
   });
 

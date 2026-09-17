@@ -20,7 +20,7 @@ import { filterOccurrencesInBounds, getDisplayedOccurrences } from '@/lib/displa
 import { useOccurrences } from '@/lib/use-occurrences';
 import {
   type ExportDataOptions,
-  boundsFromOccurrences,
+  pdfSnapshotFrameBounds,
   occurrencesToGeoJSON,
   occurrencesToCSV,
   downloadBlob,
@@ -420,11 +420,10 @@ export function useMapAppState() {
     async (opts: ExportDataOptions) => {
       const data = opts.scope === 'visible' ? visibleOnMapOccurrences : allOccurrences;
       const includeRegion = opts.includePolygon && selectedRegionBounds != null;
-      const mapBounds =
-        selectedRegionBounds != null ? padBounds(selectedRegionBounds) : boundsFromOccurrences(data);
+      const frameBounds = pdfSnapshotFrameBounds(opts.scope, data, selectedRegionBounds);
       const url = await globeHandleRef.current?.capturePdfSnapshot({
         scope: 'full',
-        frameBounds: mapBounds ?? undefined,
+        ...(frameBounds ? { frameBounds } : {}),
       });
       generateOccurrencePdf({
         occurrences: data,

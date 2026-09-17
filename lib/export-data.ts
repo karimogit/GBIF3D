@@ -32,6 +32,21 @@ export interface ExportDataOptions {
 
 export type ExportDataFormat = 'geojson' | 'csv' | 'pdf';
 
+/**
+ * Camera bounds for a PDF map snapshot.
+ * Visible-on-map exports keep the current view; all-data exports reframe to fit the dataset.
+ */
+export function pdfSnapshotFrameBounds(
+  scope: ExportScope,
+  data: GBIFOccurrence[],
+  selectedRegionBounds: Bounds | null
+): Bounds | undefined {
+  if (scope === 'visible') return undefined;
+  return selectedRegionBounds != null
+    ? padBounds(selectedRegionBounds)
+    : boundsFromOccurrences(data) ?? undefined;
+}
+
 interface GeoJsonPointFeature {
   type: 'Feature';
   geometry: { type: 'Point'; coordinates: [number, number] };
