@@ -9,6 +9,7 @@ import { SELECTED_INFO_ENTITY_ID } from './constants';
 import {
   colorForOccurrence,
   getOccurrencePointScaleByDistance,
+  occurrenceInfoTitle,
   occurrenceToDescription,
 } from './occurrence-infobox';
 import type { SceneModeType } from './imagery';
@@ -163,6 +164,7 @@ export function SelectedOccurrenceInfoSync({
   selectionRequestId,
   occurrences,
   imageUrlsByKey,
+  englishNamesByKey,
   savedOccurrenceKeys,
   onDeselected,
 }: {
@@ -171,6 +173,7 @@ export function SelectedOccurrenceInfoSync({
   selectionRequestId: number;
   occurrences: GBIFOccurrence[];
   imageUrlsByKey: Record<number, string[]>;
+  englishNamesByKey?: Record<number, string>;
   savedOccurrenceKeys?: Set<number>;
   /** Called when the user closes the info box (Cesium clears the selection). */
   onDeselected?: () => void;
@@ -223,12 +226,13 @@ export function SelectedOccurrenceInfoSync({
     entity.position = new Cesium.ConstantPositionProperty(
       Cesium.Cartesian3.fromDegrees(occ.decimalLongitude!, occ.decimalLatitude!, 0)
     );
+    const englishName = englishNamesByKey?.[occ.key];
     entity.description = new Cesium.ConstantProperty(
-      occurrenceToDescription(occ, imageUrlsByKey[occ.key], savedOccurrenceKeys)
+      occurrenceToDescription(occ, imageUrlsByKey[occ.key], savedOccurrenceKeys, englishName)
     );
-    entity.name = occ.scientificName || occ.vernacularName || `Occurrence ${occ.key}`;
+    entity.name = occurrenceInfoTitle(occ, englishName);
     entity.show = true;
-  }, [occ, imageUrlsByKey, savedOccurrenceKeys]);
+  }, [occ, imageUrlsByKey, englishNamesByKey, savedOccurrenceKeys]);
 
   // Only a new pick (or an explicit deselect) changes which entity is selected.
   useEffect(() => {

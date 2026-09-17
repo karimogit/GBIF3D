@@ -45,6 +45,7 @@ import {
   InfoBoxLinkFix,
   MapKeyboardPan,
   OccurrenceImageLoader,
+  OccurrenceSpeciesLoader,
   Photorealistic3DSync,
   SceneModeSync,
   SelectOccurrence,
@@ -234,6 +235,7 @@ export default function GlobeScene({
   const [cameraHeightMeters, setCameraHeightMeters] = useState(2_000_000);
   const [terrain, setTerrain] = useState<Cesium.TerrainProvider | null>(null);
   const [imageUrlsByKey, setImageUrlsByKey] = useState<Record<number, string[]>>({});
+  const [englishNamesByKey, setEnglishNamesByKey] = useState<Record<number, string>>({});
   const [pickedOccurrenceKey, setPickedOccurrenceKey] = useState<number | null>(null);
   const [pickRequestId, setPickRequestId] = useState(0);
 
@@ -255,6 +257,14 @@ export default function GlobeScene({
   }, []);
 
   const displayedOccurrenceKey = selectedOccurrenceKey ?? pickedOccurrenceKey;
+  const displayedOccurrence = useMemo(
+    () =>
+      displayedOccurrenceKey == null
+        ? undefined
+        : occurrences.find((o) => o.key === displayedOccurrenceKey),
+    [displayedOccurrenceKey, occurrences]
+  );
+  const displayedTaxonKey = displayedOccurrence?.speciesKey ?? displayedOccurrence?.taxonKey ?? null;
 
   useEffect(() => {
     if (selectedOccurrenceKey != null) {
@@ -265,6 +275,11 @@ export default function GlobeScene({
 
   const handleOccurrenceImageLoaded = useCallback((occurrenceKey: number, urls: string[]) => {
     if (urls.length > 0) setImageUrlsByKey((prev) => ({ ...prev, [occurrenceKey]: urls }));
+  }, []);
+
+  const handleEnglishNameLoaded = useCallback((occurrenceKey: number, englishName: string | null) => {
+    if (!englishName) return;
+    setEnglishNamesByKey((prev) => ({ ...prev, [occurrenceKey]: englishName }));
   }, []);
 
   const handlePickedKey = useCallback((key: number) => {
@@ -354,6 +369,11 @@ export default function GlobeScene({
         occurrenceKey={displayedOccurrenceKey}
         onImageLoaded={handleOccurrenceImageLoaded}
       />
+      <OccurrenceSpeciesLoader
+        occurrenceKey={displayedOccurrenceKey}
+        taxonKey={displayedTaxonKey}
+        onEnglishNameLoaded={handleEnglishNameLoaded}
+      />
       <InfoBoxLinkFix />
       <InfoBoxEnhancements />
       <CameraBoundsReporter onBoundsChange={onBoundsChange} />
@@ -398,6 +418,7 @@ export default function GlobeScene({
         selectionRequestId={pickRequestId}
         occurrences={occurrences}
         imageUrlsByKey={imageUrlsByKey}
+        englishNamesByKey={englishNamesByKey}
         savedOccurrenceKeys={savedOccurrenceKeys}
         onDeselected={handleDeselected}
       />

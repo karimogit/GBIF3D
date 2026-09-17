@@ -189,6 +189,75 @@ export function OccurrenceImageLoader({
   return null;
 }
 
+/** Fetches an English/common species name from GBIF when an occurrence is selected. */
+export function OccurrenceSpeciesLoader({
+  occurrenceKey,
+  taxonKey,
+  onEnglishNameLoaded,
+}: {
+  occurrenceKey?: number | null;
+  taxonKey?: number | null;
+  onEnglishNameLoaded: (occurrenceKey: number, englishName: string | null) => void;
+}) {
+  const cesium = useCesium();
+  const fetchedKeysRef = useRef(new Set<number>());
+  const activeControllerRef = useRef<AbortController | null>(null);
+  const requestSeqRef = useRef(0);
+
+  const load = useCallback(
+    (occKey: number, speciesKey: number) => {
+      if (!Number.isInteger(occKey) || occKey < 1) return;
+      if (!Number.isInteger(speciesKey) || speciesKey < 1) return;
+      if (fetchedKeysRef.current.has(occKey)) return;
+
+      activeControllerRef.current?.abort();
+      const controller = new AbortController();
+      activeControllerRef.current = controller;
+      const seq = ++requestSeqRef.current;
+
+      fetch(`/api/species/${speciesKey}`, { signal: controller.signal })
+        .then((res) => res.json())
+        .then((data: { vernacularName?: string | null }) => {
+          if (controller.signal.aborted || seq !== requestSeqRef.current) return;
+          fetchedKeysRef.current.add(occKey);
+          const name = typeof data?.vernacularName === 'string' ? data.vernacularName.trim() : '';
+          onEnglishNameLoaded(occKey, name || null);
+        })
+        .catch(() => {
+          if (!controller.signal.aborted && seq === requestSeqRef.current) {
+            fetchedKeysRef.current.add(occKey);
+            onEnglishNameLoaded(occKey, null);
+          }
+        });
+    },
+    [onEnglishNameLoaded]
+  );
+
+  useEffect(() => {
+    if (occurrenceKey != null && taxonKey != null) load(occurrenceKey, taxonKey);
+  }, [occurrenceKey, taxonKey, load]);
+
+  useEffect(() => {
+    const viewer = cesium?.viewer;
+    if (viewer?.selectedEntityChanged == null) return;
+    const remove = viewer.selectedEntityChanged.addEventListener((entity: Cesium.Entity | undefined) => {
+      if (entity == null || entity.id === SELECTED_INFO_ENTITY_ID) return;
+      load(Number(entity.id), Number(entity.id));
+    });
+    return () => {
+      try {
+        remove();
+      } catch {
+        // ignore
+      }
+    };
+  }, [cesium?.viewer, load]);
+
+  useEffect(() => () => activeControllerRef.current?.abort(), []);
+
+  return null;
+}
+
 /** Ensures links in the InfoBox popup open correctly (sandboxed iframe can block them). Handles photo click for lightbox. */
 export function InfoBoxLinkFix() {
   const cesium = useCesium();
