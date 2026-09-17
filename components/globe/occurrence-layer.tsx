@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import { useCesium } from 'resium';
 import * as Cesium from 'cesium';
 import type { GBIFOccurrence } from '@/types/gbif';
+import { cellSizeForCameraHeight, clusterOccurrences } from '@/lib/occurrence-cluster';
 import { SELECTED_INFO_ENTITY_ID } from './constants';
 import {
   colorForOccurrence,
@@ -26,6 +27,7 @@ export function OccurrencePointsPrimitive({
   sceneMode,
   pointsHidden,
   selectedOccurrenceKey,
+  cameraHeightMeters,
   onPickedKey,
 }: {
   occurrences: GBIFOccurrence[];
@@ -33,6 +35,7 @@ export function OccurrencePointsPrimitive({
   /** True while the camera is tilted so far that dots would smear across the horizon. */
   pointsHidden: boolean;
   selectedOccurrenceKey?: number | null;
+  cameraHeightMeters?: number;
   onPickedKey: (key: number) => void;
 }) {
   const cesium = useCesium();
@@ -41,7 +44,10 @@ export function OccurrencePointsPrimitive({
   const selectedKeyRef = useRef<number | null | undefined>(selectedOccurrenceKey);
   const handlerRef = useRef<Cesium.ScreenSpaceEventHandler | null>(null);
 
-  const withCoords = useMemo(() => occurrences.filter(hasCoords), [occurrences]);
+  const renderPoints = useMemo(() => {
+    const cellSize = cellSizeForCameraHeight(cameraHeightMeters ?? 0);
+    return clusterOccurrences(occurrences, cellSize);
+  }, [occurrences, cameraHeightMeters]);
 
   useEffect(() => {
     const viewer = cesium?.viewer;
@@ -71,25 +77,27 @@ export function OccurrencePointsPrimitive({
     const height = sceneMode === '2D' ? 0 : 1;
     const selectedKey = selectedKeyRef.current;
 
-    for (const occ of withCoords) {
-      const isSelected = selectedKey != null && occ.key === selectedKey;
+    for (const { occurrence: occ, count, isCluster } of renderPoints) {
+      if (!hasCoords(occ)) continue;
+      const isSelected = !isCluster && selectedKey != null && occ.key === selectedKey;
+      const baseSize = isCluster ? Math.min(28, 11 + Math.log10(count) * 4) : 11;
       const point = collection.add({
         position: Cesium.Cartesian3.fromDegrees(occ.decimalLongitude!, occ.decimalLatitude!, height),
         color: colorForOccurrence(occ),
-        pixelSize: isSelected ? 18 : 11,
+        pixelSize: isSelected ? 18 : baseSize,
         outlineColor: Cesium.Color.WHITE,
-        outlineWidth: isSelected ? 3 : 2,
-        id: occ.key,
+        outlineWidth: isSelected ? 3 : isCluster ? 2.5 : 2,
+        id: isCluster ? undefined : occ.key,
       });
       point.scaleByDistance = getOccurrencePointScaleByDistance();
       point.disableDepthTestDistance = sceneMode === '2D' ? Number.POSITIVE_INFINITY : 0;
-      pointsByKeyRef.current.set(occ.key, point);
+      if (!isCluster) pointsByKeyRef.current.set(occ.key, point);
     }
 
     collection.show = !pointsHidden;
     // pointsHidden applied for initial show; selection/hide updates use dedicated effects
     // eslint-disable-next-line react-hooks/exhaustive-deps -- rebuild only on data/mode/viewer
-  }, [cesium?.viewer, withCoords, sceneMode]);
+  }, [cesium?.viewer, renderPoints, sceneMode]);
 
   useEffect(() => {
     const collection = collectionRef.current;

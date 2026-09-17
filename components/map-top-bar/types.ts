@@ -77,6 +77,8 @@ export interface MapTopBarProps {
   exportHandlers?: MapTopBarExportHandlers;
   saved?: MapTopBarSavedProps;
   viewOptions?: MapTopBarViewOptions;
+  onShare?: () => void;
+  onStartTour?: () => void;
   githubUrl?: string;
 }
 
@@ -92,6 +94,8 @@ export type MapTopBarFlatProps = MapTopBarRegionProps &
     filters: OccurrenceFilters;
     onFiltersChange: (f: OccurrenceFilters) => void;
     githubUrl?: string;
+    onShare?: () => void;
+    onStartTour?: () => void;
   };
 
 export function isGroupedMapTopBarProps(
@@ -109,6 +113,8 @@ export function normalizeMapTopBarProps(
     filters,
     onFiltersChange,
     githubUrl,
+    onShare,
+    onStartTour,
     onImportFile,
     importedOccurrenceCount,
     importedOccurrences,
@@ -135,6 +141,8 @@ export function normalizeMapTopBarProps(
     filters,
     onFiltersChange,
     githubUrl,
+    onShare,
+    onStartTour,
     importState: {
       onImportFile,
       importedOccurrenceCount,

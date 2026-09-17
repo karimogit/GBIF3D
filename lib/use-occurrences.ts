@@ -104,13 +104,16 @@ export function useOccurrences({
     ]
   );
 
-  const regionFetchKey = useMemo(
-    () =>
-      selectedRegionBounds
-        ? `${selectedRegionBounds.west},${selectedRegionBounds.south},${selectedRegionBounds.east},${selectedRegionBounds.north}`
-        : 'camera',
-    [selectedRegionBounds]
-  );
+  const geometryFetchKey = useMemo(() => {
+    if (drawnPolygon && drawnPolygon.length >= 3) {
+      return `poly:${drawnPolygon.map(([lon, lat]) => `${lon},${lat}`).join(';')}`;
+    }
+    if (selectedRegionBounds) {
+      const { west, south, east, north } = selectedRegionBounds;
+      return `bounds:${west},${south},${east},${north}`;
+    }
+    return 'camera';
+  }, [selectedRegionBounds, drawnPolygon]);
 
   const cancel = useCallback(() => {
     if (fetchTimeoutRef.current) {
@@ -196,7 +199,7 @@ export function useOccurrences({
       if (fetchTimeoutRef.current) clearTimeout(fetchTimeoutRef.current);
       fetchAbortRef.current?.abort();
     };
-  }, [regionFetchKey, filterFetchKey, fetchOccurrences, hasTaxonFilter, selectedRegionBounds]);
+  }, [geometryFetchKey, filterFetchKey, fetchOccurrences, hasTaxonFilter, selectedRegionBounds]);
 
   return {
     occurrences,

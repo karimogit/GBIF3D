@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { guardApiRoute } from '@/lib/api-guard';
 import { cacheKey, getCached, setCache } from '@/lib/cache';
 import { photonFeatureToResult, type PlaceSearchResult, type PhotonFeature } from '@/lib/places';
 
@@ -16,6 +17,9 @@ interface PhotonResponse {
 }
 
 export async function GET(request: NextRequest) {
+  const blocked = guardApiRoute(request, 'places-search', { limit: 30, windowMs: 60_000 });
+  if (blocked) return blocked;
+
   const q = request.nextUrl.searchParams.get('q')?.trim().slice(0, MAX_QUERY_LENGTH);
   if (!q || q.length < 2) {
     return NextResponse.json({ results: [] });

@@ -8,7 +8,7 @@
 
 Explore where species have been recorded on an interactive 3D globe. Data comes from GBIF: millions of observations from museums, surveys, and citizen science.
 
-Pick a region or search for a place, import your own GBIF-style datasets, filter by species or year, and draw your own area. Each dot is an occurrence; colors show IUCN status. Use the **timeline** at the bottom to filter by year. Use **View** for 3D/2D, base maps, and optional Photorealistic 3D. Export current data as image, GeoJSON, CSV, or PDF.
+Pick a region or search for a place, import your own GBIF-style datasets, filter by species or year, and draw your own area. Each dot is an occurrence; colors show IUCN status. Use the **timeline** at the bottom to filter by year (or press **Play** to animate through years). **Share** copies a link with your current region and filters. Use **View** for 3D/2D, base maps, and optional Photorealistic 3D. Export current data as image, GeoJSON, CSV, or PDF.
 
 Built with Next.js, Cesium (Resium), and the GBIF API.
 
@@ -25,12 +25,17 @@ Built with Next.js, Cesium (Resium), and the GBIF API.
 - **GBIF data** — Occurrences fetched for the selected region (or camera bounds when filters are applied), plus filters
 - **Import your own data** — Load GBIF-style CSV/TSV, JSON, or a Darwin Core Archive (`.zip`) and explore it on the globe alongside live and saved data (`displayed-occurrences` merges all three)
 - **Filters** — Species/taxon search (autocomplete), taxonomic group, date range, IUCN Red List status; advanced: Basis of Record, Continent, Country (ISO 2-letter code), Dataset key, Institution code
-- **Visualization** — Points on the globe, color-coded by IUCN threat level; in primitive mode points use a fixed height above the ellipsoid (not terrain-clamped)
+- **Filter presets** — Save and reload named filter combinations from the Filters panel (stored in browser)
+- **Shareable URLs** — Copy a link that restores region, filters, timeline year/month, and view options (place search bounds are encoded in the URL)
+- **Timeline animation** — Play through years on the timeline at ~700 ms per year
+- **Guided tour** — First visit shows a short walkthrough; reopen from **Help → Take a guided tour**
+- **Offline mode** — Last successful occurrence load is cached in IndexedDB; when offline, the app shows cached data with a banner (PWA app shell via service worker)
+- **Visualization** — Points on the globe, color-coded by IUCN threat level; large datasets (2,500+ points) are grid-clustered when zoomed out for smoother rendering
 - **Tooltips** — Click any point for species name, date, location, photo(s), and link to the GBIF record
 - **Terrain** — Cesium World Terrain (optional Ion token); elevation visible when zoomed
 - **Export** — Save current view as PNG image, visible occurrences as GeoJSON or CSV, or generate a PDF report with map snapshot and species summary
 - **Accessibility** — Skip link, keyboard focus, color-blind friendly palette, aria-labels on controls
-- **Performance** — Caching to reduce API load; configurable result limit (100–100,000, default 1,000, fetched in chunks of 300 per request — GBIF API max)
+- **Performance** — In-memory LRU caching to reduce API load; grid clustering at scale; configurable result limit (100–100,000, default 1,000, fetched in chunks of 300 per request — GBIF API max)
 
 ## Tech stack
 
@@ -47,7 +52,8 @@ All dependencies are open-source (MIT-compatible).
 - **No secrets in code** — The app uses only the public GBIF API; no API keys are required. The optional Cesium Ion token is read from `NEXT_PUBLIC_CESIUM_ION_TOKEN` (e.g. in Vercel env) and never committed.
 - **XSS mitigation** — Text from GBIF (species names, dates, locations) is escaped before being shown in the InfoBox.
 - **Lightbox** — Only `https://` image URLs are accepted for the photo lightbox (no `javascript:` or `data:`).
-- **API routes** — Occurrence image route validates the key; places search proxies to [Photon](https://photon.komoot.io/) (komoot) and is cached for 60 minutes (`RESULT_TTL_MS`). Photon does not require a Nominatim-style User-Agent env var.
+- **API routes** — Occurrence image route validates the key; places search proxies to [Photon](https://photon.komoot.io/) (komoot) and is cached for 60 minutes (`RESULT_TTL_MS`). All API routes are rate-limited per IP (in-memory token bucket) to reduce abuse. Photon does not require a Nominatim-style User-Agent env var.
+- **Storage limits** — Saved occurrences capped at 500; filter presets capped at 30; offline snapshot capped at 5,000 records
 - **Imports** — Uploaded files are size-limited (including the uncompressed size of `.zip` entries) and rows with invalid coordinates are rejected. Imported records get synthetic negative keys so they never collide with live GBIF records.
 - **CSV export** — Non-numeric cells starting with `=`, `+`, `-`, `@`, tab or carriage return are prefixed with `'` to prevent spreadsheet formula injection.
 - **Dependencies** — Run `npm audit` and address high/critical findings before deployment.
@@ -64,6 +70,25 @@ Occurrence requests to the GBIF API are **cached in memory** (per geometry + fil
 - **Not persisted:** We don’t store the cache in `localStorage` or `sessionStorage` because occurrence responses can be large; keeping them in memory avoids storage limits and keeps the logic simple.
 
 So revisiting the same region with the same filters within 15 minutes does not call the API again until the TTL has passed, the entry is evicted, or you reload the page.
+
+**Offline snapshot:** After a successful load, up to 5,000 occurrence records are stored in IndexedDB. If you go offline, the app replays that snapshot (filters and region label included) until you reconnect.
+
+## Shareable links
+
+Click **Share** in the top bar to copy a URL that encodes your current state. Supported parameters include:
+
+| Param | Meaning |
+|-------|---------|
+| `r` | Region id (e.g. `world`, `europe`, or a favorite id) |
+| `place` | Place search: `name\|west\|south\|east\|north\|countryCode` |
+| `sp` | Species: `taxonKey:label,taxonKey:label,...` |
+| `tk` | Taxonomic group key |
+| `y` / `m` | Timeline year / month |
+| `ed` | Event date range (`YYYY-MM-DD~YYYY-MM-DD`) |
+| `iucn`, `bor`, `cont`, `co`, `ds`, `inst`, `lim` | Advanced filters |
+| `view` / `map` | Scene mode and base map |
+
+Favorite regions saved only in your browser are not included in share links unless you pick a predefined region or place search.
 
 ## How to Use (Operating Instructions)
 
@@ -92,7 +117,7 @@ Click **Filters** in the top bar to refine your search:
 ### Step 3: Explore Occurrences
 - **View points** — Each occurrence appears as a colored dot on the globe (colors indicate IUCN status; palette is colour-blind friendly: black / brown / orange / gold / blue / green / grey)
 - **Click a point** — Opens an info box with species name, date, location, photos (if available), and a link to the full GBIF record
-- **Timeline** — Use the timeline at the bottom to filter by year and month; click a year bar to see only occurrences from that year
+- **Timeline** — Use the timeline at the bottom to filter by year and month; click a year bar to see only occurrences from that year. Press **Play** to animate through years; **Pause** or click **All** to stop
 - **Navigate** — Pan, zoom, and rotate the globe with your mouse or touch gestures. Use **arrow keys** to pan. Bottom-right controls: fly mode, reset view (home), or point north.
 
 ### Step 4: Draw a Custom Region (Optional)
@@ -218,15 +243,19 @@ The **default** base map is [OpenTopoMap](https://opentopomap.org/) (`*.tile.ope
 ```
 ├── app/
 │   ├── layout.tsx         # Root layout, Cesium CSS, providers
-│   ├── page.tsx           # Main page: GlobeViewer, MapTopBar, import/export handlers
+│   ├── page.tsx           # Main page shell (Suspense wrapper)
 │   ├── globals.css        # Global styles, accessibility
-│   ├── providers.tsx      # MUI ThemeProvider
+│   ├── providers.tsx      # MUI ThemeProvider, service worker registration
 │   └── api/
 │       ├── places/search/ # Photon (komoot) proxy for place search (cached 60 min)
 │       ├── species/suggest/ # GBIF species suggest proxy (CORS)
 │       ├── species/search/ # GBIF species search proxy (CORS)
 │       └── occurrence/[key]/image/ # Occurrence images (GBIF cache)
 ├── components/
+│   ├── MapPageContent.tsx # Main app layout and wiring
+│   ├── MapAppDialogs.tsx  # Export/favorite/import dialogs
+│   ├── GuidedTour.tsx     # First-run and help-triggered tour
+│   ├── OfflineBanner.tsx
 │   ├── GlobeViewer.tsx    # Fetches occurrences by bounds/filters, renders GlobeScene + legend
 │   ├── GlobeViewerDynamic.tsx # Dynamic import (no SSR) for globe
 │   ├── GlobeScene.tsx     # Resium Viewer wiring (terrain, base layer, handlers)

@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect } from 'react';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 
@@ -28,6 +29,13 @@ const theme = createTheme({
 });
 
 export function Providers({ children }: { children: React.ReactNode }) {
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return;
+    navigator.serviceWorker.register('/sw.js').catch(() => {
+      // offline shell is best-effort
+    });
+  }, []);
+
   // Skipped AppRouterCacheProvider (@mui/material-nextjs): MUI 5 package pulls in
   // @emotion/cache/@emotion/server peers; keep providers lean without that dep.
   return (

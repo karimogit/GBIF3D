@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createHash } from 'crypto';
+import { guardApiRoute } from '@/lib/api-guard';
 
 const GBIF_OCCURRENCE_URL = 'https://api.gbif.org/v1/occurrence';
 const GBIF_IMAGE_CACHE_BASE = 'https://api.gbif.org/v1/image/cache';
@@ -20,9 +21,12 @@ function md5Hex(str: string): string {
 }
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   context: { params: Promise<{ key: string }> }
 ) {
+  const blocked = guardApiRoute(request, 'occurrence-image', { limit: 60, windowMs: 60_000 });
+  if (blocked) return blocked;
+
   const { key } = await context.params;
   const occurrenceKey = Number(key);
   if (!Number.isInteger(occurrenceKey) || occurrenceKey < 1) {

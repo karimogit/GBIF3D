@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { GBIFOccurrence } from '@/types/gbif';
 import { occurrenceYear, occurrenceMonth } from '@/lib/occurrence-date';
 
@@ -61,6 +61,8 @@ export default function OccurrenceTimeline({
 }: OccurrenceTimelineProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [hoverYear, setHoverYear] = useState<number | null>(null);
+  const [playing, setPlaying] = useState(false);
+  const playIndexRef = useRef(0);
 
   const { years, counts, maxCount, yearMonthCountsMap } = useMemo(() => {
     const countsMap = yearCounts(occurrences);
@@ -78,6 +80,32 @@ export default function OccurrenceTimeline({
           1
         )
       : 1;
+
+  const stopPlay = useCallback(() => setPlaying(false), []);
+
+  useEffect(() => {
+    if (!playing || years.length === 0) return;
+    let startIdx = 0;
+    if (selectedYear != null) {
+      const found = years.indexOf(selectedYear);
+      if (found >= 0) startIdx = found;
+    }
+    playIndexRef.current = startIdx;
+    const intervalMs = 700;
+    const id = window.setInterval(() => {
+      const idx = playIndexRef.current;
+      if (idx >= years.length) {
+        setPlaying(false);
+        return;
+      }
+      onYearChange(years[idx]);
+      onMonthChange(null);
+      playIndexRef.current = idx + 1;
+    }, intervalMs);
+    return () => window.clearInterval(id);
+    // selectedYear read only when play starts
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playing, years, onYearChange, onMonthChange]);
 
   if (years.length === 0) return null;
 
@@ -101,7 +129,11 @@ export default function OccurrenceTimeline({
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <button
             type="button"
-            onClick={() => { onYearChange(null); onMonthChange(null); }}
+            onClick={() => {
+              stopPlay();
+              onYearChange(null);
+              onMonthChange(null);
+            }}
             aria-pressed={selectedYear === null}
             style={{
               flexShrink: 0,
@@ -116,6 +148,25 @@ export default function OccurrenceTimeline({
             }}
           >
             All
+          </button>
+          <button
+            type="button"
+            onClick={() => setPlaying((p) => !p)}
+            aria-pressed={playing}
+            title={playing ? 'Pause year animation' : 'Play through years'}
+            style={{
+              flexShrink: 0,
+              padding: '4px 10px',
+              fontSize: 12,
+              fontWeight: playing ? 600 : 500,
+              color: playing ? '#4caf50' : 'rgba(255,255,255,0.85)',
+              background: playing ? 'rgba(76, 175, 80, 0.25)' : 'transparent',
+              border: '1px solid ' + (playing ? '#4caf50' : 'rgba(255,255,255,0.2)'),
+              borderRadius: 6,
+              cursor: 'pointer',
+            }}
+          >
+            {playing ? 'Pause' : 'Play'}
           </button>
           <div
             ref={scrollRef}
@@ -141,7 +192,11 @@ export default function OccurrenceTimeline({
                 <button
                   key={year}
                   type="button"
-                  onClick={() => { onYearChange(year); onMonthChange(null); }}
+                  onClick={() => {
+                    stopPlay();
+                    onYearChange(year);
+                    onMonthChange(null);
+                  }}
                   onMouseEnter={() => setHoverYear(year)}
                   onMouseLeave={() => setHoverYear(null)}
                   aria-pressed={isSelected}
