@@ -542,10 +542,14 @@ export function useMapAppState() {
     if (decoded.selectedRegionId) setSelectedRegionId(decoded.selectedRegionId);
     if (decoded.placeSearchResult) setPlaceSearchResult(decoded.placeSearchResult);
     if (decoded.filters) {
-      setFilters((prev) => ({ ...prev, ...decoded.filters, limit: decoded.filters?.limit ?? prev.limit ?? DEFAULT_OCCURRENCE_LIMIT }));
+      setFilters((prev) => ({
+        ...prev,
+        ...decoded.filters,
+        limit: decoded.filters?.limit ?? prev.limit ?? DEFAULT_OCCURRENCE_LIMIT,
+      }));
     }
-    if (decoded.selectedYear !== undefined) setSelectedYear(decoded.selectedYear);
-    if (decoded.selectedMonth !== undefined) setSelectedMonth(decoded.selectedMonth);
+    setSelectedYear(decoded.selectedYear ?? null);
+    setSelectedMonth(decoded.selectedMonth ?? null);
     if (decoded.sceneMode) setSceneMode(decoded.sceneMode);
     if (decoded.baseMap) setBaseMap(decoded.baseMap);
     setFlyNonce((n) => n + 1);

@@ -5,17 +5,20 @@ import Tooltip from '@mui/material/Tooltip';
 import ExploreIcon from '@mui/icons-material/Explore';
 import HomeIcon from '@mui/icons-material/Home';
 import FlightIcon from '@mui/icons-material/Flight';
+import ShareOutlined from '@mui/icons-material/ShareOutlined';
 
 /**
  * Bottom-right map controls stacked above Cesium's fullscreen pill:
- * fly mode, home (reset globe), and point-north (reset rotation).
+ * share link, fly mode, home (reset globe), and point-north (reset rotation).
  */
 export default function MapCornerControls({
+  onShare,
   onResetHome,
   onResetNorth,
   flyMode = false,
   onToggleFlyMode,
 }: {
+  onShare?: () => void;
   onResetHome: () => void;
   onResetNorth: () => void;
   flyMode?: boolean;
@@ -23,6 +26,19 @@ export default function MapCornerControls({
 }) {
   return (
     <div className="map-corner-controls" role="group" aria-label="Map view controls">
+      {onShare && (
+        <Tooltip title="Copy shareable link" placement="left">
+          <IconButton
+            className="map-corner-control"
+            aria-label="Copy shareable link"
+            data-tour="share"
+            onClick={onShare}
+            size="small"
+          >
+            <ShareOutlined fontSize="small" />
+          </IconButton>
+        </Tooltip>
+      )}
       {onToggleFlyMode && (
         <Tooltip title={flyMode ? 'Exit fly mode (Esc)' : 'Fly mode (WASD)'} placement="left">
           <IconButton

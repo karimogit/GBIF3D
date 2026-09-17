@@ -29,7 +29,6 @@ import CropSquare from '@mui/icons-material/CropSquare';
 import CircleOutlined from '@mui/icons-material/CircleOutlined';
 import Public from '@mui/icons-material/Public';
 import HelpOutline from '@mui/icons-material/HelpOutline';
-import ShareOutlined from '@mui/icons-material/ShareOutlined';
 import MenuIcon from '@mui/icons-material/Menu';
 import Check from '@mui/icons-material/Check';
 import BookmarkAdd from '@mui/icons-material/BookmarkAdd';
@@ -117,7 +116,6 @@ export default function MapTopBar(rawProps: MapTopBarProps | MapTopBarFlatProps)
     onPhotorealistic3DChange,
   } = props.viewOptions ?? {};
   const githubUrl = props.githubUrl ?? GITHUB_REPO_DEFAULT;
-  const onShare = props.onShare;
   const onStartTour = props.onStartTour;
   const [placeQuery, setPlaceQuery] = useState('');
   const [placeResults, setPlaceResults] = useState<RegionOption[]>([]);
@@ -419,15 +417,6 @@ export default function MapTopBar(rawProps: MapTopBarProps | MapTopBarFlatProps)
         onActivate: (anchor) => setSavedOccurrencesAnchor(anchor),
       },
       {
-        id: 'share',
-        label: 'Share',
-        ariaLabel: 'Copy shareable link',
-        icon: <ShareOutlined fontSize="small" />,
-        visible: Boolean(onShare),
-        desktopVariant: 'icon',
-        onActivate: () => onShare?.(),
-      },
-      {
         id: 'export',
         label: 'Export',
         ariaLabel: 'Export',
@@ -500,7 +489,6 @@ export default function MapTopBar(rawProps: MapTopBarProps | MapTopBarFlatProps)
     viewMenuAnchor,
     aboutMenuAnchor,
     githubUrl,
-    onShare,
   ]);
 
   const visibleToolbarActions = toolbarActions.filter((a) => a.visible);

@@ -1,4 +1,9 @@
-import { buildShareUrl, decodeShareUrlState, encodeShareUrlState } from '@/lib/share-url';
+import {
+  buildShareUrl,
+  decodeShareUrlState,
+  encodeShareUrlState,
+  hasShareParams,
+} from '@/lib/share-url';
 
 describe('share-url', () => {
   it('round-trips region, filters, and timeline state', () => {
@@ -47,5 +52,11 @@ describe('share-url', () => {
   it('buildShareUrl produces query string', () => {
     const url = buildShareUrl({ selectedRegionId: 'world' }, 'https://example.com');
     expect(url).toBe('https://example.com/?r=world');
+  });
+
+  it('detects when decoded params contain share state', () => {
+    expect(hasShareParams({})).toBe(false);
+    expect(hasShareParams({ selectedYear: 2020 })).toBe(true);
+    expect(hasShareParams({ filters: { taxonKey: 212 } })).toBe(true);
   });
 });
