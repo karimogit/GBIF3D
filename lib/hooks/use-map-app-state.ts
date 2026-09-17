@@ -16,7 +16,7 @@ import { DEFAULT_OCCURRENCE_LIMIT } from '@/lib/gbif';
 import { ION_TOKEN_CONFIGURED } from '@/lib/ion';
 import { generateOccurrencePdf } from '@/lib/pdf-export';
 import { parseOccurrencesFile } from '@/lib/import-occurrences';
-import { getDisplayedOccurrences } from '@/lib/displayed-occurrences';
+import { filterOccurrencesInBounds, getDisplayedOccurrences } from '@/lib/displayed-occurrences';
 import { useOccurrences } from '@/lib/use-occurrences';
 import {
   type ExportDataOptions,
@@ -169,6 +169,7 @@ export function useMapAppState() {
     loading,
     error,
     progress,
+    viewBounds,
     setViewBounds,
     hasTaxonFilter,
     cancel: cancelLoad,
@@ -230,6 +231,12 @@ export function useMapAppState() {
       selectedRegionPolygon,
       savedOccurrences,
     ]
+  );
+
+  /** Map dots + timeline filter, limited to the current camera viewport (for export). */
+  const visibleOnMapOccurrences = useMemo(
+    () => filterOccurrencesInBounds(displayedOccurrences, viewBounds),
+    [displayedOccurrences, viewBounds]
   );
 
   const regionDisplayName = getRegionDisplayName(
@@ -381,7 +388,7 @@ export function useMapAppState() {
 
   const handleExportGeoJSON = useCallback(
     (opts: ExportDataOptions) => {
-      const data = opts.scope === 'visible' ? displayedOccurrences : allOccurrences;
+      const data = opts.scope === 'visible' ? visibleOnMapOccurrences : allOccurrences;
       const includeRegion = opts.includePolygon && selectedRegionBounds != null;
       const geojson = occurrencesToGeoJSON(
         data,
@@ -391,12 +398,12 @@ export function useMapAppState() {
       );
       downloadBlob(new Blob([geojson], { type: 'application/geo+json' }), 'gbif-occurrences.geojson');
     },
-    [allOccurrences, displayedOccurrences, selectedRegionBounds, regionDisplayName, selectedRegionPolygon]
+    [allOccurrences, visibleOnMapOccurrences, selectedRegionBounds, regionDisplayName, selectedRegionPolygon]
   );
 
   const handleExportCSV = useCallback(
     (opts: ExportDataOptions) => {
-      const data = opts.scope === 'visible' ? displayedOccurrences : allOccurrences;
+      const data = opts.scope === 'visible' ? visibleOnMapOccurrences : allOccurrences;
       const includeRegion = opts.includePolygon && selectedRegionBounds != null;
       const csv = occurrencesToCSV(
         data,
@@ -406,12 +413,12 @@ export function useMapAppState() {
       );
       downloadBlob(new Blob([csv], { type: 'text/csv;charset=utf-8' }), 'gbif-occurrences.csv');
     },
-    [allOccurrences, displayedOccurrences, selectedRegionBounds, regionDisplayName, selectedRegionPolygon, regionPolygonWkt]
+    [allOccurrences, visibleOnMapOccurrences, selectedRegionBounds, regionDisplayName, selectedRegionPolygon, regionPolygonWkt]
   );
 
   const handleExportPDF = useCallback(
     async (opts: ExportDataOptions) => {
-      const data = opts.scope === 'visible' ? displayedOccurrences : allOccurrences;
+      const data = opts.scope === 'visible' ? visibleOnMapOccurrences : allOccurrences;
       const includeRegion = opts.includePolygon && selectedRegionBounds != null;
       const mapBounds =
         selectedRegionBounds != null ? padBounds(selectedRegionBounds) : boundsFromOccurrences(data);
@@ -430,7 +437,7 @@ export function useMapAppState() {
         mapImageDataUrl: url ?? undefined,
       });
     },
-    [allOccurrences, displayedOccurrences, filters, selectedRegionBounds, regionDisplayName, selectedRegionPolygon, regionPolygonWkt]
+    [allOccurrences, visibleOnMapOccurrences, filters, selectedRegionBounds, regionDisplayName, selectedRegionPolygon, regionPolygonWkt]
   );
 
   const handleSaveDrawnRegion = useCallback(() => {
@@ -604,6 +611,7 @@ export function useMapAppState() {
     hasTaxonFilter,
     setViewBounds,
     displayedOccurrences,
+    visibleOnMapOccurrences,
     allOccurrences,
     regionDisplayName,
     selectedRegionBounds,
