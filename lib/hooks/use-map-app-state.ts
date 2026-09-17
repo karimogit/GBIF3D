@@ -484,6 +484,7 @@ export function useMapAppState() {
   }, []);
 
   const handleResetHome = useCallback(() => {
+    setFlyMode(false);
     globeHandleRef.current?.resetHome();
   }, []);
 
