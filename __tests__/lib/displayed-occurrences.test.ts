@@ -1,4 +1,4 @@
-import { getDisplayedOccurrences } from '@/lib/displayed-occurrences';
+import { filterOccurrencesInBounds, getDisplayedOccurrences } from '@/lib/displayed-occurrences';
 import type { GBIFOccurrence } from '@/types/gbif';
 import type { Bounds, LonLat } from '@/lib/geometry';
 
@@ -66,5 +66,19 @@ describe('getDisplayedOccurrences', () => {
     const result = getDisplayedOccurrences(live, [], sweden, null, null, null, saved);
     expect(result).toHaveLength(1);
     expect(result[0].scientificName).toBe('Live');
+  });
+});
+
+describe('filterOccurrencesInBounds', () => {
+  const viewport: Bounds = { west: 10, south: 55, east: 20, north: 65 };
+
+  it('keeps only points inside the current map viewport', () => {
+    const data = [occ(1, 15, 60), occ(2, 25, 60), occ(3, 15, 50)];
+    expect(filterOccurrencesInBounds(data, viewport).map((o) => o.key)).toEqual([1]);
+  });
+
+  it('returns all occurrences when bounds are missing', () => {
+    const data = [occ(1, 15, 60), occ(2, 25, 60)];
+    expect(filterOccurrencesInBounds(data, null)).toHaveLength(2);
   });
 });

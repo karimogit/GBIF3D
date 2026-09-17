@@ -143,3 +143,16 @@ export function buildShareUrl(state: ShareUrlState, origin?: string): string {
   const qs = params.toString();
   return qs ? `${base}/?${qs}` : `${base}/`;
 }
+
+/** True when decoded URL params contain shareable view state worth hydrating. */
+export function hasShareParams(decoded: ShareUrlState): boolean {
+  return Boolean(
+    decoded.selectedRegionId ||
+      decoded.placeSearchResult ||
+      decoded.filters ||
+      decoded.selectedYear != null ||
+      decoded.selectedMonth != null ||
+      decoded.sceneMode ||
+      decoded.baseMap
+  );
+}

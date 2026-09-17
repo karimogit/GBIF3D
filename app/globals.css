@@ -105,23 +105,81 @@ html, body {
   font-size: 22px;
 }
 
-/* Species info box: centered below the top bar (matches filter/dialog placement) */
+/* Species info box: default right side below the top bar; draggable via title bar */
 .cesium-infoBox {
-  margin-top: 56px;
-  left: 50% !important;
-  right: auto !important;
-  transform: translateX(-50%);
-  width: min(420px, calc(100vw - 16px));
-  max-width: min(420px, calc(100vw - 16px));
+  top: max(56px, calc(48px + env(safe-area-inset-top))) !important;
+  right: max(16px, env(safe-area-inset-right)) !important;
+  left: auto !important;
+  width: min(420px, calc(100vw - 32px));
+  max-width: min(420px, calc(100vw - 32px));
   border-radius: 8px;
+  border-right: 1px solid #444;
 }
 
-/* Mobile/tablet: nearly full width, centered below top bar */
+.cesium-infoBox.cesium-infoBox-visible {
+  transform: translate(0, 0) !important;
+}
+
+.cesium-infoBox.gbif-infoBox-positioned {
+  right: auto !important;
+  transform: none !important;
+}
+
+.cesium-infoBox.gbif-infoBox-positioned.cesium-infoBox-visible {
+  transform: none !important;
+}
+
+.cesium-infoBox-title {
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+  padding-right: 52px !important;
+}
+
+.cesium-infoBox-title:active {
+  cursor: grabbing;
+}
+
+button.gbif-infoBox-toggle {
+  display: block;
+  position: absolute;
+  top: 5px;
+  right: 28px;
+  height: 20px;
+  background: transparent;
+  border: none;
+  border-radius: 2px;
+  font-size: 14px;
+  line-height: 20px;
+  padding: 0 4px;
+  margin: 0;
+  color: #edffff;
+  cursor: pointer;
+}
+
+button.gbif-infoBox-toggle:focus {
+  background: rgba(238, 136, 0, 0.44);
+  outline: none;
+}
+
+button.gbif-infoBox-toggle:hover {
+  background: #888;
+  color: #000;
+}
+
+.gbif-infoBox-collapsed .cesium-infoBox-iframe {
+  display: none !important;
+}
+
+.gbif-infoBox-collapsed .cesium-infoBox-title {
+  border-bottom-left-radius: 7px;
+}
+
+/* Mobile/tablet: slightly narrower inset from the right edge */
 @media (max-width: 900px) {
   .cesium-infoBox {
-    width: calc(100vw - 16px);
-    max-width: calc(100vw - 16px);
-    margin-top: max(56px, calc(48px + env(safe-area-inset-top)));
+    width: min(420px, calc(100vw - 24px));
+    max-width: min(420px, calc(100vw - 24px));
   }
   .cesium-infoBox-iframe {
     width: 100% !important;

@@ -3,6 +3,7 @@
 import { useEffect, useRef } from 'react';
 import { useCesium } from 'resium';
 import * as Cesium from 'cesium';
+import { computeGlobeFlyAxes } from './fly-camera';
 
 function isTypingTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
@@ -183,12 +184,13 @@ export function FlyModeHandler({
         const base = Math.min(Math.max(height * 0.015, 2), 2500);
         const speed = keys.has('ShiftLeft') || keys.has('ShiftRight') ? base * 3.5 : base;
 
-        if (keys.has('KeyW')) camera.moveForward(speed);
-        if (keys.has('KeyS')) camera.moveBackward(speed);
-        if (keys.has('KeyA')) camera.moveLeft(speed);
-        if (keys.has('KeyD')) camera.moveRight(speed);
-        if (keys.has('KeyQ') || keys.has('KeyR')) camera.moveUp(speed);
-        if (keys.has('KeyE') || keys.has('KeyF')) camera.moveDown(speed);
+        const axes = computeGlobeFlyAxes(camera);
+        if (keys.has('KeyW')) camera.move(axes.forward, speed);
+        if (keys.has('KeyS')) camera.move(axes.forward, -speed);
+        if (keys.has('KeyA')) camera.move(axes.right, -speed);
+        if (keys.has('KeyD')) camera.move(axes.right, speed);
+        if (keys.has('KeyQ') || keys.has('KeyR')) camera.move(axes.up, speed);
+        if (keys.has('KeyE') || keys.has('KeyF')) camera.move(axes.up, -speed);
       } catch {
         // ignore
       }

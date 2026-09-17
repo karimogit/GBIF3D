@@ -137,6 +137,7 @@ export default function MapPageContent() {
           </div>
         </div>
         <MapCornerControls
+          onShare={handleShare}
           onResetHome={app.handleResetHome}
           onResetNorth={app.handleResetNorth}
           flyMode={app.flyMode}
@@ -188,7 +189,7 @@ export default function MapPageContent() {
             onExportCSV: app.handleExportCSV,
             onExportPDF: app.handleExportPDF,
             occurrenceCount: app.allOccurrences.length,
-            visibleOccurrenceCount: app.displayedOccurrences.length,
+            visibleOccurrenceCount: app.visibleOnMapOccurrences.length,
           }}
           saved={{
             savedOccurrences: app.savedOccurrences,
@@ -203,7 +204,6 @@ export default function MapPageContent() {
             photorealistic3D: app.photorealistic3D,
             onPhotorealistic3DChange: app.setPhotorealistic3D,
           }}
-          onShare={handleShare}
           onStartTour={() => setTourOpen(true)}
           githubUrl={process.env.NEXT_PUBLIC_GITHUB_REPO_URL}
         />

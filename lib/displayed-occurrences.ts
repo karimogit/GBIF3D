@@ -47,3 +47,17 @@ export function getDisplayedOccurrences(
     return month === timeFilterMonth;
   });
 }
+
+/** Occurrences whose coordinates fall inside the current map viewport. */
+export function filterOccurrencesInBounds(
+  occurrences: GBIFOccurrence[],
+  bounds: Bounds | null | undefined
+): GBIFOccurrence[] {
+  if (!bounds) return occurrences;
+  return occurrences.filter((o) => {
+    const lon = o.decimalLongitude;
+    const lat = o.decimalLatitude;
+    if (lon == null || lat == null || !Number.isFinite(lon) || !Number.isFinite(lat)) return false;
+    return pointInBounds(lon, lat, bounds);
+  });
+}

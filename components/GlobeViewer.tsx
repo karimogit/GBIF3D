@@ -164,7 +164,7 @@ export default function GlobeViewer({
             maxWidth: 'min(420px, calc(100vw - 32px))',
           }}
         >
-          Fly mode — WASD move, Q/E up/down, Shift faster, drag to look. Esc or toggle to exit.
+          Fly mode — WASD fly over the map, Q/E up/down, Shift faster, drag to look. Esc or toggle to exit.
           {photorealistic3D ? ' Photorealistic 3D is on.' : ' Tip: enable Photorealistic 3D in View.'}
         </div>
       )}
@@ -240,7 +240,7 @@ export default function GlobeViewer({
             textAlign: 'center',
           }}
         >
-          Open <strong>Filters</strong> and pick a species or taxonomic group to load occurrences for this region.
+          Open <strong>Species</strong> and pick a species or taxonomic group to load occurrences for this region.
         </div>
       )}
       {!loading && hasTaxonFilter && occurrences.length === 0 && !error && (

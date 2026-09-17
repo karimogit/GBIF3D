@@ -15,7 +15,7 @@ export const TOUR_STEPS = [
   {
     target: '[data-tour="filters"]',
     title: 'Filter by species',
-    body: 'Open Filters to search species, set taxonomic groups, dates, and IUCN status.',
+    body: 'Open Species to search by name, set taxonomic groups, dates, and IUCN status.',
   },
   {
     target: '[data-tour="timeline"]',
@@ -24,8 +24,13 @@ export const TOUR_STEPS = [
   },
   {
     target: '[data-tour="export"]',
-    title: 'Export & share',
-    body: 'Export maps and data, or copy a shareable link with your current filters.',
+    title: 'Export data',
+    body: 'Export the current view as an image, or download occurrences as GeoJSON, CSV, or PDF.',
+  },
+  {
+    target: '[data-tour="share"]',
+    title: 'Share your view',
+    body: 'Use the share button on the map (bottom-right) to copy a link with your region, filters, and timeline.',
   },
   {
     target: '[data-tour="help"]',
