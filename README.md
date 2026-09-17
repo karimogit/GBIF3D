@@ -8,7 +8,7 @@
 
 Explore where species have been recorded on an interactive 3D globe. Data comes from GBIF: millions of observations from museums, surveys, and citizen science.
 
-Pick a region or search for a place, import your own GBIF-style datasets, filter by species or year, and draw your own area. Each dot is an occurrence; colors show IUCN status. Use the **timeline** at the bottom to filter by year (or press **Play** to animate through years). **Share** copies a link with your current region and filters. Use **View** for 3D/2D, base maps, and optional Photorealistic 3D. Export current data as image, GeoJSON, CSV, or PDF.
+Pick a region or search for a place, import your own GBIF-style datasets, filter by species or year, and draw your own area. Each dot is an occurrence; colors show IUCN status. Use the **timeline** at the bottom to filter by year (or press **Play** to animate month by month). **Share** copies a link with your current region and filters. Use **View** for 3D/2D, base maps, and optional Photorealistic 3D. Export current data as image, GeoJSON, CSV, or PDF.
 
 Built with Next.js, Cesium (Resium), and the GBIF API.
 
@@ -27,7 +27,7 @@ Built with Next.js, Cesium (Resium), and the GBIF API.
 - **Filters** — Species/taxon search (autocomplete), taxonomic group, date range, IUCN Red List status; advanced: Basis of Record, Continent, Country (ISO 2-letter code), Dataset key, Institution code
 - **Filter presets** — Save and reload named filter combinations from the Filters panel (stored in browser)
 - **Shareable URLs** — Copy a link that restores region, filters, timeline year/month, and view options (place search bounds are encoded in the URL)
-- **Timeline animation** — Play through years on the timeline at ~700 ms per year
+- **Timeline animation** — Play through months on the timeline at ~250 ms per month
 - **Guided tour** — First visit shows a short walkthrough; reopen from **Help → Take a guided tour**
 - **Offline mode** — Last successful occurrence load is cached in IndexedDB; when offline, the app shows cached data with a banner (PWA app shell via service worker)
 - **Visualization** — Points on the globe, color-coded by IUCN threat level; large datasets (2,500+ points) are grid-clustered when zoomed out for smoother rendering
@@ -117,7 +117,7 @@ Click **Filters** in the top bar to refine your search:
 ### Step 3: Explore Occurrences
 - **View points** — Each occurrence appears as a colored dot on the globe (colors indicate IUCN status; palette is colour-blind friendly: black / brown / orange / gold / blue / green / grey)
 - **Click a point** — Opens an info box with species name, date, location, photos (if available), and a link to the full GBIF record
-- **Timeline** — Use the timeline at the bottom to filter by year and month; click a year bar to see only occurrences from that year. Press **Play** to animate through years; **Pause** or click **All** to stop
+- **Timeline** — Use the timeline at the bottom to filter by year and month; click a year bar to see only occurrences from that year. Press **Play** to animate month by month; **Pause** or click **All** to stop
 - **Navigate** — Pan, zoom, and rotate the globe with your mouse or touch gestures. Use **arrow keys** to pan. Bottom-right controls: fly mode, reset view (home), or point north.
 
 ### Step 4: Draw a Custom Region (Optional)

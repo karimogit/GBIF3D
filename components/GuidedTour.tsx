@@ -20,7 +20,7 @@ export const TOUR_STEPS = [
   {
     target: '[data-tour="timeline"]',
     title: 'Timeline',
-    body: 'Click a year bar to focus on that period. Use Play to animate through years.',
+    body: 'Click a year bar to focus on that period. Use Play to animate month by month.',
   },
   {
     target: '[data-tour="export"]',
