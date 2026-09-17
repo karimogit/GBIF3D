@@ -188,7 +188,7 @@ export default function MapPageContent() {
             onExportCSV: app.handleExportCSV,
             onExportPDF: app.handleExportPDF,
             occurrenceCount: app.allOccurrences.length,
-            visibleOccurrenceCount: app.displayedOccurrences.length,
+            visibleOccurrenceCount: app.visibleOnMapOccurrences.length,
           }}
           saved={{
             savedOccurrences: app.savedOccurrences,
