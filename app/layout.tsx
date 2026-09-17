@@ -32,6 +32,8 @@ export default function RootLayout({
     <html lang="en" className={roboto.variable}>
       <head>
         <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+        <link rel="manifest" href="/manifest.json" />
+        <meta name="theme-color" content="#4caf50" />
         {/* Cesium widget styles are static assets copied by scripts/postinstall-cesium.js, not a CSS module. */}
         {/* eslint-disable-next-line @next/next/no-css-tags */}
         <link

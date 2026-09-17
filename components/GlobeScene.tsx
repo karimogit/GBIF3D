@@ -34,6 +34,7 @@ import {
 import {
   BaseMapSync,
   CameraBoundsReporter,
+  CameraHeightReporter,
   CameraTiltConstraints,
   CameraTiltReporter,
   DrawRegionHandler,
@@ -229,6 +230,7 @@ export default function GlobeScene({
   const [isClient, setIsClient] = useState(false);
   const [ionEnabled, setIonEnabled] = useState(false);
   const [pointsHidden, setPointsHidden] = useState(false);
+  const [cameraHeightMeters, setCameraHeightMeters] = useState(2_000_000);
   const [terrain, setTerrain] = useState<Cesium.TerrainProvider | null>(null);
   const [imageUrlsByKey, setImageUrlsByKey] = useState<Record<number, string[]>>({});
   const [pickedOccurrenceKey, setPickedOccurrenceKey] = useState<number | null>(null);
@@ -342,6 +344,7 @@ export default function GlobeScene({
       <GlobeCommands register={registerCommands} drawFinishRef={drawFinishRef} />
       <CameraTiltConstraints sceneMode={sceneMode} />
       <CameraTiltReporter onPointsHiddenChange={setPointsHidden} />
+      <CameraHeightReporter onHeightChange={setCameraHeightMeters} />
       <SceneModeSync sceneMode={sceneMode} />
       <EnsureBaseImagery provider={baseImageryProvider} />
       <BaseMapSync baseMap={baseMap} ionEnabled={ionEnabled} />
@@ -385,6 +388,7 @@ export default function GlobeScene({
         sceneMode={sceneMode}
         pointsHidden={pointsHidden}
         selectedOccurrenceKey={displayedOccurrenceKey ?? undefined}
+        cameraHeightMeters={cameraHeightMeters}
         onPickedKey={handlePickedKey}
       />
       <SelectedOccurrenceInfoSync

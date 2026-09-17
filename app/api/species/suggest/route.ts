@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { guardApiRoute } from '@/lib/api-guard';
 
 const GBIF_SPECIES_SUGGEST = 'https://api.gbif.org/v1/species/suggest';
 const MAX_QUERY_LENGTH = 120;
@@ -11,6 +12,9 @@ function clampLimit(raw: string | null, fallback: number): string {
 }
 
 export async function GET(request: NextRequest) {
+  const blocked = guardApiRoute(request, 'species-suggest', { limit: 40, windowMs: 60_000 });
+  if (blocked) return blocked;
+
   const q = request.nextUrl.searchParams.get('q')?.trim().slice(0, MAX_QUERY_LENGTH);
   const limit = clampLimit(request.nextUrl.searchParams.get('limit'), 20);
 

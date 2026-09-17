@@ -51,6 +51,45 @@ const POINTS_HIDDEN_PITCH_THRESHOLD = -0.5;
  * Reports whether the camera is tilted past the threshold where dots should be hidden.
  * Only fires when the boolean flips, so camera movement doesn't re-render the scene every frame.
  */
+/** Reports camera height above ellipsoid (meters) when it changes meaningfully. */
+export function CameraHeightReporter({
+  onHeightChange,
+}: {
+  onHeightChange: (heightMeters: number) => void;
+}) {
+  const cesium = useCesium();
+  useEffect(() => {
+    const viewer = cesium?.viewer;
+    if (!viewer?.camera) return;
+
+    let lastHeight = -1;
+    const update = () => {
+      try {
+        const carto = viewer.camera.positionCartographic;
+        const height = carto.height;
+        if (!Number.isFinite(height)) return;
+        const rounded = Math.round(height / 500) * 500;
+        if (rounded !== lastHeight) {
+          lastHeight = rounded;
+          onHeightChange(height);
+        }
+      } catch {
+        // viewer may be destroyed
+      }
+    };
+    update();
+    viewer.camera.changed.addEventListener(update);
+    return () => {
+      try {
+        viewer.camera.changed.removeEventListener(update);
+      } catch {
+        // ignore
+      }
+    };
+  }, [cesium?.viewer, onHeightChange]);
+  return null;
+}
+
 export function CameraTiltReporter({
   onPointsHiddenChange,
 }: {

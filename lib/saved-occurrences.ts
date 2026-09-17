@@ -4,6 +4,7 @@
 import type { GBIFOccurrence } from '@/types/gbif';
 
 const STORAGE_KEY = 'gbif-globe-saved-occurrences';
+export const MAX_SAVED_OCCURRENCES = 500;
 
 function load(): GBIFOccurrence[] {
   if (typeof window === 'undefined') return [];
@@ -27,7 +28,7 @@ function load(): GBIFOccurrence[] {
 function save(items: GBIFOccurrence[]): void {
   if (typeof window === 'undefined') return;
   try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(items.slice(0, MAX_SAVED_OCCURRENCES)));
   } catch {
     // ignore
   }
@@ -37,11 +38,13 @@ export function getSavedOccurrences(): GBIFOccurrence[] {
   return load();
 }
 
-export function addSavedOccurrence(occ: GBIFOccurrence): void {
+export function addSavedOccurrence(occ: GBIFOccurrence): boolean {
   const list = load();
-  if (list.some((o) => o.key === occ.key)) return;
+  if (list.some((o) => o.key === occ.key)) return true;
+  if (list.length >= MAX_SAVED_OCCURRENCES) return false;
   list.push(occ);
   save(list);
+  return true;
 }
 
 export function removeSavedOccurrence(key: number): void {

@@ -10,8 +10,17 @@ import TextField from '@mui/material/TextField';
 import Button from '@mui/material/Button';
 import Collapse from '@mui/material/Collapse';
 import Typography from '@mui/material/Typography';
+import IconButton from '@mui/material/IconButton';
 import ExpandMore from '@mui/icons-material/ExpandMore';
 import ExpandLess from '@mui/icons-material/ExpandLess';
+import DeleteOutline from '@mui/icons-material/DeleteOutline';
+import BookmarkAdd from '@mui/icons-material/BookmarkAdd';
+import {
+  addFilterPreset,
+  getFilterPresets,
+  removeFilterPreset,
+  type FilterPreset,
+} from '@/lib/filter-presets';
 import SpeciesSearch, { type SpeciesOption } from './SpeciesSearch';
 import type { OccurrenceFilters, SelectedSpeciesOption } from '@/types/gbif';
 import {
@@ -88,6 +97,13 @@ export default function FilterForm({
   speciesSearchId = 'filter-form-species-search',
 }: FilterFormProps) {
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [presetsOpen, setPresetsOpen] = useState(false);
+  const [presetName, setPresetName] = useState('');
+  const [presets, setPresets] = useState<FilterPreset[]>([]);
+
+  useEffect(() => {
+    setPresets(getFilterPresets());
+  }, []);
   /** Selected species for display (synced from filters so selection persists when popover closes). Use stable empty ref so MUI Autocomplete doesn't reset inputValue on every keystroke. */
   const selectedSpecies: SpeciesOption[] = filters.selectedSpeciesOptions ?? EMPTY_SPECIES_OPTIONS;
   // GBIF eventDate range uses slash: YYYY-MM-DD/YYYY-MM-DD (accept comma for backward compatibility)
@@ -179,8 +195,90 @@ export default function FilterForm({
     }
   };
 
+  const handleSavePreset = () => {
+    const name = presetName.trim();
+    if (!name) return;
+    addFilterPreset(name, filters);
+    setPresetName('');
+    setPresets(getFilterPresets());
+  };
+
+  const handleLoadPreset = (preset: FilterPreset) => {
+    onFiltersChange({ ...filters, ...preset.filters });
+  };
+
+  const handleDeletePreset = (id: string) => {
+    removeFilterPreset(id);
+    setPresets(getFilterPresets());
+  };
+
   return (
     <Box sx={{ minWidth: { xs: 0, sm: 280 }, maxWidth: { xs: '100%', sm: 360 }, width: '100%', p: 0 }}>
+      <Box sx={{ mt: 0 }}>
+        <Button
+          fullWidth
+          size="small"
+          onClick={() => setPresetsOpen((o) => !o)}
+          endIcon={presetsOpen ? <ExpandLess /> : <ExpandMore />}
+          aria-expanded={presetsOpen}
+          sx={{ justifyContent: 'space-between', textTransform: 'none' }}
+        >
+          Saved filter presets ({presets.length})
+        </Button>
+        <Collapse in={presetsOpen}>
+          <Box sx={{ mt: 1, display: 'flex', gap: 1 }}>
+            <TextField
+              size="small"
+              placeholder="Preset name"
+              value={presetName}
+              onChange={(e) => setPresetName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleSavePreset();
+              }}
+              sx={{ flex: 1 }}
+            />
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={<BookmarkAdd />}
+              onClick={handleSavePreset}
+              disabled={!presetName.trim()}
+            >
+              Save
+            </Button>
+          </Box>
+          {presets.length > 0 ? (
+            <Box sx={{ mt: 1, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+              {presets.map((p) => (
+                <Box
+                  key={p.id}
+                  sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}
+                >
+                  <Button
+                    size="small"
+                    fullWidth
+                    onClick={() => handleLoadPreset(p)}
+                    sx={{ justifyContent: 'flex-start', textTransform: 'none' }}
+                  >
+                    {p.name}
+                  </Button>
+                  <IconButton
+                    size="small"
+                    aria-label={`Delete preset ${p.name}`}
+                    onClick={() => handleDeletePreset(p.id)}
+                  >
+                    <DeleteOutline fontSize="small" />
+                  </IconButton>
+                </Box>
+              ))}
+            </Box>
+          ) : (
+            <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+              Save your current filters as a preset for quick access later.
+            </Typography>
+          )}
+        </Collapse>
+      </Box>
       <Box sx={{ mt: 1.5 }}>
         <SpeciesSearch
           multiple

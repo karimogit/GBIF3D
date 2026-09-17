@@ -29,6 +29,7 @@ import CropSquare from '@mui/icons-material/CropSquare';
 import CircleOutlined from '@mui/icons-material/CircleOutlined';
 import Public from '@mui/icons-material/Public';
 import HelpOutline from '@mui/icons-material/HelpOutline';
+import ShareOutlined from '@mui/icons-material/ShareOutlined';
 import MenuIcon from '@mui/icons-material/Menu';
 import Check from '@mui/icons-material/Check';
 import BookmarkAdd from '@mui/icons-material/BookmarkAdd';
@@ -116,6 +117,8 @@ export default function MapTopBar(rawProps: MapTopBarProps | MapTopBarFlatProps)
     onPhotorealistic3DChange,
   } = props.viewOptions ?? {};
   const githubUrl = props.githubUrl ?? GITHUB_REPO_DEFAULT;
+  const onShare = props.onShare;
+  const onStartTour = props.onStartTour;
   const [placeQuery, setPlaceQuery] = useState('');
   const [placeResults, setPlaceResults] = useState<RegionOption[]>([]);
   const [placeLoading, setPlaceLoading] = useState(false);
@@ -416,6 +419,15 @@ export default function MapTopBar(rawProps: MapTopBarProps | MapTopBarFlatProps)
         onActivate: (anchor) => setSavedOccurrencesAnchor(anchor),
       },
       {
+        id: 'share',
+        label: 'Share',
+        ariaLabel: 'Copy shareable link',
+        icon: <ShareOutlined fontSize="small" />,
+        visible: Boolean(onShare),
+        desktopVariant: 'icon',
+        onActivate: () => onShare?.(),
+      },
+      {
         id: 'export',
         label: 'Export',
         ariaLabel: 'Export',
@@ -488,6 +500,7 @@ export default function MapTopBar(rawProps: MapTopBarProps | MapTopBarFlatProps)
     viewMenuAnchor,
     aboutMenuAnchor,
     githubUrl,
+    onShare,
   ]);
 
   const visibleToolbarActions = toolbarActions.filter((a) => a.visible);
@@ -563,6 +576,7 @@ export default function MapTopBar(rawProps: MapTopBarProps | MapTopBarFlatProps)
         </Box>
         <Divider orientation="vertical" flexItem sx={{ mx: 0.5, display: { xs: 'none', sm: 'block' } }} />
         <Box
+          data-tour="region"
           sx={{
             display: 'flex',
             alignItems: 'center',
@@ -865,6 +879,7 @@ export default function MapTopBar(rawProps: MapTopBarProps | MapTopBarFlatProps)
               <IconButton
                 size="small"
                 aria-label={action.ariaLabel}
+                data-tour={action.id === 'help' ? 'help' : action.id === 'share' ? 'export' : undefined}
                 onClick={() => action.onActivate(null)}
                 sx={{
                   color: 'rgba(255,255,255,0.9)',
@@ -886,6 +901,9 @@ export default function MapTopBar(rawProps: MapTopBarProps | MapTopBarFlatProps)
               size="small"
               startIcon={action.icon}
               endIcon={action.endIcon}
+              data-tour={
+                action.id === 'filters' ? 'filters' : action.id === 'export' ? 'export' : undefined
+              }
               onClick={(e) => action.onActivate(e.currentTarget)}
               aria-label={action.ariaLabel}
               aria-haspopup={
@@ -1244,7 +1262,18 @@ export default function MapTopBar(rawProps: MapTopBarProps | MapTopBarFlatProps)
           onClose={() => setExportDialogFormat(null)}
           onConfirm={handleExportConfirm}
         />
-        <HelpDialog open={helpOpen} onClose={() => setHelpOpen(false)} />
+        <HelpDialog
+          open={helpOpen}
+          onClose={() => setHelpOpen(false)}
+          onStartTour={
+            onStartTour
+              ? () => {
+                  setHelpOpen(false);
+                  onStartTour();
+                }
+              : undefined
+          }
+        />
         <Menu
           anchorEl={aboutMenuAnchor}
           open={Boolean(aboutMenuAnchor)}

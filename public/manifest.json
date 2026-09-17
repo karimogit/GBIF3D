@@ -1,0 +1,17 @@
+{
+  "name": "GBIF 3D",
+  "short_name": "GBIF 3D",
+  "description": "Interactive 3D globe visualization of GBIF biodiversity occurrence data",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a0a0f",
+  "theme_color": "#4caf50",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
