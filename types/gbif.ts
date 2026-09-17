@@ -31,6 +31,8 @@ export interface GBIFOccurrence {
   day?: number;
   eventDate?: string;
   basisOfRecord?: string;
+  /** Full country name from GBIF (e.g. Sweden). */
+  country?: string;
   countryCode?: string;
   locality?: string;
   iucnRedListCategory?: string;
