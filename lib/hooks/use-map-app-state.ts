@@ -9,7 +9,6 @@ import {
   boundsToWktPolygon,
   coordsToWktPolygon,
   formatAreaHectares,
-  padBounds,
 } from '@/lib/geometry';
 import type { DrawShapeMode } from '@/lib/draw-shapes';
 import { DEFAULT_OCCURRENCE_LIMIT } from '@/lib/gbif';
