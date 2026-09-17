@@ -15,7 +15,7 @@ export const TOUR_STEPS = [
   {
     target: '[data-tour="filters"]',
     title: 'Filter by species',
-    body: 'Open Filters to search species, set taxonomic groups, dates, and IUCN status.',
+    body: 'Open Species to search by name, set taxonomic groups, dates, and IUCN status.',
   },
   {
     target: '[data-tour="timeline"]',
