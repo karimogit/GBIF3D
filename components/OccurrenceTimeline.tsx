@@ -64,13 +64,25 @@ export default function OccurrenceTimeline({
   const [playing, setPlaying] = useState(false);
   const playIndexRef = useRef(0);
 
-  const { years, counts, maxCount, yearMonthCountsMap } = useMemo(() => {
+  const { years, counts, maxCount, yearMonthCountsMap, yearMonthSteps } = useMemo(() => {
     const countsMap = yearCounts(occurrences);
     const ymMap = yearMonthCounts(occurrences);
-    if (countsMap.size === 0) return { years: [] as number[], counts: countsMap, maxCount: 0, yearMonthCountsMap: ymMap };
+    if (countsMap.size === 0) {
+      return {
+        years: [] as number[],
+        counts: countsMap,
+        maxCount: 0,
+        yearMonthCountsMap: ymMap,
+        yearMonthSteps: [] as Array<{ year: number; month: number }>,
+      };
+    }
     const sorted = Array.from(countsMap.keys()).sort((a, b) => a - b);
     const max = maxValue(countsMap.values(), 1);
-    return { years: sorted, counts: countsMap, maxCount: max, yearMonthCountsMap: ymMap };
+    const steps: Array<{ year: number; month: number }> = [];
+    for (const year of sorted) {
+      for (let month = 1; month <= 12; month++) steps.push({ year, month });
+    }
+    return { years: sorted, counts: countsMap, maxCount: max, yearMonthCountsMap: ymMap, yearMonthSteps: steps };
   }, [occurrences]);
 
   const monthMaxCount =
@@ -84,28 +96,31 @@ export default function OccurrenceTimeline({
   const stopPlay = useCallback(() => setPlaying(false), []);
 
   useEffect(() => {
-    if (!playing || years.length === 0) return;
+    if (!playing || yearMonthSteps.length === 0) return;
     let startIdx = 0;
     if (selectedYear != null) {
-      const found = years.indexOf(selectedYear);
-      if (found >= 0) startIdx = found;
+      const yearIdx = years.indexOf(selectedYear);
+      if (yearIdx >= 0) {
+        startIdx = yearIdx * 12 + (selectedMonth != null ? selectedMonth - 1 : 0);
+      }
     }
     playIndexRef.current = startIdx;
-    const intervalMs = 700;
+    const intervalMs = 250;
     const id = window.setInterval(() => {
       const idx = playIndexRef.current;
-      if (idx >= years.length) {
+      if (idx >= yearMonthSteps.length) {
         setPlaying(false);
         return;
       }
-      onYearChange(years[idx]);
-      onMonthChange(null);
+      const step = yearMonthSteps[idx];
+      onYearChange(step.year);
+      onMonthChange(step.month);
       playIndexRef.current = idx + 1;
     }, intervalMs);
     return () => window.clearInterval(id);
-    // selectedYear read only when play starts
+    // selectedYear/selectedMonth read only when play starts
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [playing, years, onYearChange, onMonthChange]);
+  }, [playing, yearMonthSteps, years, onYearChange, onMonthChange]);
 
   if (years.length === 0) return null;
 
@@ -153,7 +168,7 @@ export default function OccurrenceTimeline({
             type="button"
             onClick={() => setPlaying((p) => !p)}
             aria-pressed={playing}
-            title={playing ? 'Pause year animation' : 'Play through years'}
+            title={playing ? 'Pause month animation' : 'Play through months'}
             style={{
               flexShrink: 0,
               padding: '4px 10px',
