@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import { AppRouterCacheProvider } from '@mui/material-nextjs/v15-appRouter';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 
@@ -36,12 +37,14 @@ export function Providers({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
-  // Skipped AppRouterCacheProvider (@mui/material-nextjs): MUI 5 package pulls in
-  // @emotion/cache/@emotion/server peers; keep providers lean without that dep.
+  // AppRouterCacheProvider streams Emotion styles with the server HTML so the
+  // first paint isn't unstyled (FOUC) before the client bundle hydrates.
   return (
-    <ThemeProvider theme={theme}>
-      <CssBaseline />
-      {children}
-    </ThemeProvider>
+    <AppRouterCacheProvider options={{ key: 'mui' }}>
+      <ThemeProvider theme={theme}>
+        <CssBaseline />
+        {children}
+      </ThemeProvider>
+    </AppRouterCacheProvider>
   );
 }
