@@ -137,7 +137,7 @@ export default function SpeciesSearch({
               ? error ?? undefined
               : error ??
                 ((multiple ? (valueArray?.length ?? 0) : valueSingle ? 1 : 0) === 0
-                  ? 'Pick a species from the list — typing alone does not search. Or choose a taxonomic group below.'
+                  ? 'Pick a species from the list — typing alone does not search. Or choose a taxonomic group in species options.'
                   : 'Scientific or common (English) name. Pick a genus or family for broader results.')
           }
           size={compact ? 'small' : undefined}

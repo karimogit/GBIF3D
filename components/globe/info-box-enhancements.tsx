@@ -3,33 +3,31 @@
 import { useEffect } from 'react';
 import { useCesium } from 'resium';
 import {
-  clampInfoBoxPosition,
   readInfoBoxLayoutState,
-  readPositionedLayout,
   toggleButtonAriaLabel,
   toggleButtonLabel,
   writeInfoBoxLayoutState,
 } from './info-box-layout';
 
-const POSITIONED_CLASS = 'gbif-infoBox-positioned';
 const COLLAPSED_CLASS = 'gbif-infoBox-collapsed';
 const TOGGLE_CLASS = 'gbif-infoBox-toggle';
 
-function applyPosition(infoBox: HTMLElement, left: number, top: number): void {
-  infoBox.classList.add(POSITIONED_CLASS);
-  infoBox.style.right = 'auto';
-  infoBox.style.left = `${left}px`;
-  infoBox.style.top = `${top}px`;
-  infoBox.style.transform = 'none';
-}
-
-function saveLayout(infoBox: HTMLElement): void {
-  writeInfoBoxLayoutState(readPositionedLayout(infoBox));
+function saveCollapsed(infoBox: HTMLElement): void {
+  writeInfoBoxLayoutState({
+    collapsed: infoBox.classList.contains(COLLAPSED_CLASS),
+  });
 }
 
 function setupInfoBoxEnhancements(infoBox: HTMLElement): () => void {
   const title = infoBox.querySelector('.cesium-infoBox-title');
   if (!(title instanceof HTMLElement)) return () => {};
+
+  // Keep Cesium's default right-aligned CSS; clear any stale left positioning.
+  infoBox.classList.remove('gbif-infoBox-positioned');
+  infoBox.style.left = '';
+  infoBox.style.right = '';
+  infoBox.style.top = '';
+  infoBox.style.transform = '';
 
   let toggleBtn: HTMLButtonElement;
   const existingToggle = title.querySelector(`.${TOGGLE_CLASS}`);
@@ -55,93 +53,22 @@ function setupInfoBoxEnhancements(infoBox: HTMLElement): () => void {
     e.stopPropagation();
     const collapsed = infoBox.classList.toggle(COLLAPSED_CLASS);
     updateToggle(collapsed);
-    saveLayout(infoBox);
+    saveCollapsed(infoBox);
   };
   toggleBtn.addEventListener('click', onToggleClick);
 
   const saved = readInfoBoxLayoutState();
-  if (saved?.left != null && saved?.top != null) {
-    applyPosition(infoBox, saved.left, saved.top);
-  }
   if (saved?.collapsed) {
     infoBox.classList.add(COLLAPSED_CLASS);
   }
   updateToggle(infoBox.classList.contains(COLLAPSED_CLASS));
 
-  let dragging = false;
-  let startX = 0;
-  let startY = 0;
-  let startLeft = 0;
-  let startTop = 0;
-
-  const onPointerDown = (e: PointerEvent) => {
-    const target = e.target;
-    if (!(target instanceof Element) || target.closest('button')) return;
-
-    dragging = true;
-    title.setPointerCapture(e.pointerId);
-
-    const rect = infoBox.getBoundingClientRect();
-    const parent = infoBox.offsetParent instanceof HTMLElement ? infoBox.offsetParent : infoBox.parentElement;
-    const parentRect = parent?.getBoundingClientRect() ?? { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight };
-
-    startLeft = rect.left - parentRect.left;
-    startTop = rect.top - parentRect.top;
-    startX = e.clientX;
-    startY = e.clientY;
-
-    applyPosition(infoBox, startLeft, startTop);
-    title.style.cursor = 'grabbing';
-    e.preventDefault();
-  };
-
-  const onPointerMove = (e: PointerEvent) => {
-    if (!dragging) return;
-    const parent = infoBox.offsetParent instanceof HTMLElement ? infoBox.offsetParent : infoBox.parentElement;
-    const parentRect = parent?.getBoundingClientRect() ?? { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight };
-    const parentWidth = parentRect.width;
-    const parentHeight = parentRect.height;
-
-    const nextLeft = startLeft + (e.clientX - startX);
-    const nextTop = startTop + (e.clientY - startY);
-    const clamped = clampInfoBoxPosition(
-      nextLeft,
-      nextTop,
-      infoBox.offsetWidth,
-      infoBox.offsetHeight,
-      parentWidth,
-      parentHeight
-    );
-    applyPosition(infoBox, clamped.left, clamped.top);
-  };
-
-  const endDrag = (e: PointerEvent) => {
-    if (!dragging) return;
-    dragging = false;
-    title.style.cursor = '';
-    try {
-      title.releasePointerCapture(e.pointerId);
-    } catch {
-      // ignore
-    }
-    saveLayout(infoBox);
-  };
-
-  title.addEventListener('pointerdown', onPointerDown);
-  title.addEventListener('pointermove', onPointerMove);
-  title.addEventListener('pointerup', endDrag);
-  title.addEventListener('pointercancel', endDrag);
-
   return () => {
     toggleBtn.removeEventListener('click', onToggleClick);
-    title.removeEventListener('pointerdown', onPointerDown);
-    title.removeEventListener('pointermove', onPointerMove);
-    title.removeEventListener('pointerup', endDrag);
-    title.removeEventListener('pointercancel', endDrag);
   };
 }
 
-/** Right-aligned, draggable, foldable species info box chrome for Cesium's InfoBox. */
+/** Right-aligned, foldable species info box chrome for Cesium's InfoBox. */
 export function InfoBoxEnhancements() {
   const cesium = useCesium();
 

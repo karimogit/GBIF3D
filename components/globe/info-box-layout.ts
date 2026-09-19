@@ -1,7 +1,5 @@
-/** Session-persisted species info box layout (position + collapsed). */
+/** Session-persisted species info box layout (collapsed only; position stays right-aligned). */
 export interface InfoBoxLayoutState {
-  left?: number;
-  top?: number;
   collapsed?: boolean;
 }
 
@@ -54,12 +52,8 @@ export function toggleButtonAriaLabel(collapsed: boolean): string {
   return collapsed ? 'Expand species info' : 'Collapse species info';
 }
 
-export function readPositionedLayout(infoBox: HTMLElement): InfoBoxLayoutState {
-  const left = Number.parseFloat(infoBox.style.left);
-  const top = Number.parseFloat(infoBox.style.top);
+export function readCollapsedLayout(infoBox: HTMLElement): InfoBoxLayoutState {
   return {
-    ...(Number.isFinite(left) ? { left } : {}),
-    ...(Number.isFinite(top) ? { top } : {}),
     collapsed: infoBox.classList.contains('gbif-infoBox-collapsed'),
   };
 }

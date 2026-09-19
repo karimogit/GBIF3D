@@ -263,19 +263,26 @@ function dispatchLightboxFromPhoto(photo: Element): boolean {
   const img = photo instanceof HTMLImageElement ? photo : photo.querySelector('img');
   const fullUrl = el.dataset?.fullurl ?? img?.src ?? '';
   if (!fullUrl) return false;
-  const win = window.top ?? window;
+  const detail: { url?: string; urls?: string[]; index?: number } = {};
   try {
     const allurlsRaw = el.dataset?.allurls;
     const indexRaw = el.dataset?.index;
     if (allurlsRaw != null && indexRaw != null) {
       const urls = JSON.parse(allurlsRaw) as string[];
       const index = Math.max(0, Math.min(parseInt(indexRaw, 10), urls.length - 1));
-      win.dispatchEvent(new CustomEvent(LIGHTBOX_EVENT, { detail: { urls, index } }));
+      detail.urls = urls;
+      detail.index = index;
     } else {
-      win.dispatchEvent(new CustomEvent(LIGHTBOX_EVENT, { detail: { url: fullUrl } }));
+      detail.url = fullUrl;
     }
   } catch {
-    win.dispatchEvent(new CustomEvent(LIGHTBOX_EVENT, { detail: { url: fullUrl } }));
+    detail.url = fullUrl;
+  }
+
+  const event = new CustomEvent(LIGHTBOX_EVENT, { detail });
+  window.dispatchEvent(event);
+  if (window.top != null && window.top !== window) {
+    window.top.dispatchEvent(new CustomEvent(LIGHTBOX_EVENT, { detail }));
   }
   return true;
 }
@@ -284,82 +291,111 @@ function dispatchLightboxFromPhoto(photo: Element): boolean {
 export function InfoBoxLinkFix() {
   const cesium = useCesium();
   useEffect(() => {
-    let v: (typeof cesium)['viewer'];
-    try {
-      v = cesium?.viewer;
-      if (v?.infoBox?.frame == null) return;
-    } catch {
-      return;
-    }
-    const frame = v.infoBox.frame;
-    // Dedupe touchend + synthesized click so the lightbox does not open twice.
-    let lastPhotoOpenAt = 0;
-    const openPhoto = (photo: Element): boolean => {
-      const now = Date.now();
-      if (now - lastPhotoOpenAt < 450) return false;
-      if (!dispatchLightboxFromPhoto(photo)) return false;
-      lastPhotoOpenAt = now;
-      return true;
-    };
+    const viewer = cesium?.viewer;
+    if (!viewer) return;
 
-    const handleClick = (e: MouseEvent) => {
-      const target = e.target as Element | null;
-      if (!target?.closest) return;
-      const photo = target.closest(`.${LIGHTBOX_PHOTO_CLASS}`);
-      if (photo) {
+    let cancelled = false;
+    let rafId = 0;
+    let detachFrame: (() => void) | undefined;
+
+    const attachToFrame = (frame: HTMLIFrameElement) => {
+      let lastPhotoOpenAt = 0;
+      let activeDoc: Document | null = null;
+
+      const openPhoto = (photo: Element): boolean => {
+        const now = Date.now();
+        if (now - lastPhotoOpenAt < 450) return false;
+        if (!dispatchLightboxFromPhoto(photo)) return false;
+        lastPhotoOpenAt = now;
+        return true;
+      };
+
+      const handleClick = (e: MouseEvent) => {
+        const target = e.target as Element | null;
+        if (!target?.closest) return;
+        const photo = target.closest(`.${LIGHTBOX_PHOTO_CLASS}`);
+        if (photo) {
+          e.preventDefault();
+          e.stopPropagation();
+          openPhoto(photo);
+          return;
+        }
+        const saveBtn = target.closest(`.${SAVE_BUTTON_CLASS}`);
+        if (saveBtn) {
+          e.preventDefault();
+          e.stopPropagation();
+          const key = parseInt((saveBtn as HTMLElement).dataset?.key ?? '', 10);
+          const action = (saveBtn as HTMLElement).dataset?.action as 'add' | 'remove' | undefined;
+          if (Number.isInteger(key) && (action === 'add' || action === 'remove')) {
+            (window.top ?? window).dispatchEvent(
+              new CustomEvent(SAVE_OCCURRENCE_EVENT, { detail: { key, action } })
+            );
+          }
+          return;
+        }
+        const a = target.closest('a');
+        if (!a || !a.href) return;
+        e.preventDefault();
+        e.stopPropagation();
+        (window.top ?? window).open(a.href, '_blank', 'noopener,noreferrer');
+      };
+
+      // iOS / some Android WebViews often skip a reliable click for iframe controls;
+      // touchend opens the lightbox immediately on tap.
+      const handleTouchEnd = (e: TouchEvent) => {
+        const target = e.target as Element | null;
+        if (!target?.closest) return;
+        const photo = target.closest(`.${LIGHTBOX_PHOTO_CLASS}`);
+        if (!photo) return;
         e.preventDefault();
         e.stopPropagation();
         openPhoto(photo);
-        return;
-      }
-      const saveBtn = target.closest(`.${SAVE_BUTTON_CLASS}`);
-      if (saveBtn) {
-        e.preventDefault();
-        e.stopPropagation();
-        const key = parseInt((saveBtn as HTMLElement).dataset?.key ?? '', 10);
-        const action = (saveBtn as HTMLElement).dataset?.action as 'add' | 'remove' | undefined;
-        if (Number.isInteger(key) && (action === 'add' || action === 'remove')) {
-          (window.top ?? window).dispatchEvent(
-            new CustomEvent(SAVE_OCCURRENCE_EVENT, { detail: { key, action } })
-          );
+      };
+
+      const bindDocument = (doc: Document) => {
+        if (activeDoc && activeDoc !== doc) {
+          activeDoc.removeEventListener('click', handleClick);
+          activeDoc.removeEventListener('touchend', handleTouchEnd);
         }
+        activeDoc = doc;
+        doc.addEventListener('click', handleClick);
+        doc.addEventListener('touchend', handleTouchEnd, { passive: false });
+      };
+
+      const onLoad = () => {
+        const doc = frame.contentDocument;
+        if (doc) bindDocument(doc);
+      };
+
+      frame.addEventListener('load', onLoad);
+      if (frame.contentDocument?.body) onLoad();
+
+      return () => {
+        frame.removeEventListener('load', onLoad);
+        if (activeDoc) {
+          activeDoc.removeEventListener('click', handleClick);
+          activeDoc.removeEventListener('touchend', handleTouchEnd);
+        }
+      };
+    };
+
+    const tryAttach = () => {
+      if (cancelled) return;
+      const frame = viewer.infoBox?.frame;
+      if (!(frame instanceof HTMLIFrameElement)) {
+        rafId = requestAnimationFrame(tryAttach);
         return;
       }
-      const a = target.closest('a');
-      if (!a || !a.href) return;
-      e.preventDefault();
-      e.stopPropagation();
-      (window.top ?? window).open(a.href, '_blank', 'noopener,noreferrer');
+      detachFrame?.();
+      detachFrame = attachToFrame(frame);
     };
 
-    // iOS / some Android WebViews often skip a reliable click for iframe controls;
-    // touchend opens the lightbox immediately on tap.
-    const handleTouchEnd = (e: TouchEvent) => {
-      const target = e.target as Element | null;
-      if (!target?.closest) return;
-      const photo = target.closest(`.${LIGHTBOX_PHOTO_CLASS}`);
-      if (!photo) return;
-      e.preventDefault();
-      e.stopPropagation();
-      openPhoto(photo);
-    };
+    tryAttach();
 
-    const onLoad = () => {
-      const doc = frame.contentDocument;
-      if (!doc) return;
-      doc.addEventListener('click', handleClick);
-      doc.addEventListener('touchend', handleTouchEnd, { passive: false });
-    };
-    if (frame.contentDocument?.body) onLoad();
-    else frame.addEventListener('load', onLoad);
     return () => {
-      frame.removeEventListener('load', onLoad);
-      try {
-        frame.contentDocument?.removeEventListener('click', handleClick);
-        frame.contentDocument?.removeEventListener('touchend', handleTouchEnd);
-      } catch {
-        // ignore
-      }
+      cancelled = true;
+      cancelAnimationFrame(rafId);
+      detachFrame?.();
     };
   }, [cesium?.viewer]);
   return null;
