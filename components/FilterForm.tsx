@@ -21,17 +21,12 @@ import {
   removeFilterPreset,
   type FilterPreset,
 } from '@/lib/filter-presets';
-import SpeciesSearch, { type SpeciesOption } from './SpeciesSearch';
-import type { OccurrenceFilters, SelectedSpeciesOption } from '@/types/gbif';
+import type { OccurrenceFilters } from '@/types/gbif';
 import {
-  TAXON_CLASS_KEYS,
   OCCURRENCE_MAX_TOTAL,
   OCCURRENCE_MIN_TOTAL,
   DEFAULT_OCCURRENCE_LIMIT,
 } from '@/lib/gbif';
-
-/** Stable empty array so Autocomplete value reference doesn't change every render (fixes "can't type" in species field). */
-const EMPTY_SPECIES_OPTIONS: SpeciesOption[] = [];
 
 const IUCN_ANY = 'any';
 /** GBIF `iucnRedListCategory` values. */
@@ -87,14 +82,11 @@ const CONTINENT_OPTIONS = [
 export interface FilterFormProps {
   filters: OccurrenceFilters;
   onFiltersChange: (f: OccurrenceFilters) => void;
-  /** Optional id for the species search input (for a11y when used inside popover) */
-  speciesSearchId?: string;
 }
 
 export default function FilterForm({
   filters,
   onFiltersChange,
-  speciesSearchId = 'filter-form-species-search',
 }: FilterFormProps) {
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [presetsOpen, setPresetsOpen] = useState(false);
@@ -104,8 +96,6 @@ export default function FilterForm({
   useEffect(() => {
     setPresets(getFilterPresets());
   }, []);
-  /** Selected species for display (synced from filters so selection persists when popover closes). Use stable empty ref so MUI Autocomplete doesn't reset inputValue on every keystroke. */
-  const selectedSpecies: SpeciesOption[] = filters.selectedSpeciesOptions ?? EMPTY_SPECIES_OPTIONS;
   // GBIF eventDate range uses slash: YYYY-MM-DD/YYYY-MM-DD (accept comma for backward compatibility)
   const parseEventDateRange = (s: string | undefined): [string, string] => {
     if (!s?.trim()) return ['', ''];
@@ -138,17 +128,6 @@ export default function FilterForm({
     if (next !== filters.limit) updateFilter('limit', next);
   };
 
-  const handleSpeciesChange = (options: SpeciesOption[] | SpeciesOption | null) => {
-    const list = Array.isArray(options) ? options : options ? [options] : [];
-    const selected: SelectedSpeciesOption[] = list.map((o) => ({ key: o.key, label: o.label }));
-    onFiltersChange({
-      ...filters,
-      selectedSpeciesOptions: selected,
-      taxonKeys: selected.length ? selected.map((o) => o.key) : undefined,
-      taxonKey: selected.length ? undefined : filters.taxonKey,
-    });
-  };
-
   const handleDateBlur = () => {
     const from = dateFrom.trim();
     const to = dateTo.trim();
@@ -172,27 +151,6 @@ export default function FilterForm({
     }
     const next = `${start}/${end}`;
     if (next !== filters.eventDate) updateFilter('eventDate', next);
-  };
-
-  const handleTaxonClass = (classKey: string) => {
-    if (!classKey) {
-      onFiltersChange({
-        ...filters,
-        taxonKey: undefined,
-        selectedSpeciesOptions: undefined,
-        taxonKeys: undefined,
-      });
-      return;
-    }
-    const key = TAXON_CLASS_KEYS[classKey];
-    if (key != null) {
-      onFiltersChange({
-        ...filters,
-        taxonKey: key,
-        selectedSpeciesOptions: undefined,
-        taxonKeys: undefined,
-      });
-    }
   };
 
   const handleSavePreset = () => {
@@ -279,36 +237,6 @@ export default function FilterForm({
           )}
         </Collapse>
       </Box>
-      <Box sx={{ mt: 1.5 }}>
-        <SpeciesSearch
-          multiple
-          value={selectedSpecies}
-          onChange={handleSpeciesChange}
-          id={speciesSearchId}
-          placeholder="Search by scientific or common name (e.g. bee, Apis, house cat). Add multiple species."
-        />
-      </Box>
-      <FormControl fullWidth size="small" sx={{ mt: 2 }}>
-        <InputLabel id="filter-taxon-class-label">Taxonomic group</InputLabel>
-        <Select
-          labelId="filter-taxon-class-label"
-          label="Taxonomic group"
-          value={
-            Object.entries(TAXON_CLASS_KEYS).find(
-              ([, v]) => v === filters.taxonKey
-            )?.[0] ?? ''
-          }
-          disabled={selectedSpecies.length > 0}
-          onChange={(e) => handleTaxonClass(e.target.value)}
-        >
-          <MenuItem value="">Any</MenuItem>
-          {Object.keys(TAXON_CLASS_KEYS).map((k) => (
-            <MenuItem key={k} value={k}>
-              {k.charAt(0).toUpperCase() + k.slice(1)}
-            </MenuItem>
-          ))}
-        </Select>
-      </FormControl>
       <Box sx={{ mt: 2, width: '100%' }}>
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.5, flexWrap: 'wrap', gap: 0.5 }}>
           <Typography variant="caption" sx={{ color: 'text.secondary' }}>

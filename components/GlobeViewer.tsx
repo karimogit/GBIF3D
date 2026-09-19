@@ -240,7 +240,7 @@ export default function GlobeViewer({
             textAlign: 'center',
           }}
         >
-          Open <strong>Species</strong> and pick a species or taxonomic group to load occurrences for this region.
+          Search for a species in the top bar, or open <strong>species options</strong> for a taxonomic group, to load occurrences for this region.
         </div>
       )}
       {!loading && hasTaxonFilter && occurrences.length === 0 && !error && (
