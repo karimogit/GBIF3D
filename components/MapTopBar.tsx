@@ -16,6 +16,8 @@ import FilterList from '@mui/icons-material/FilterList';
 import Search from '@mui/icons-material/Search';
 import PlaceOutlined from '@mui/icons-material/PlaceOutlined';
 import Download from '@mui/icons-material/Download';
+import SpeciesSearch, { type SpeciesOption } from './SpeciesSearch';
+import type { SelectedSpeciesOption } from '@/types/gbif';
 import UploadFile from '@mui/icons-material/UploadFile';
 import ArrowDropDown from '@mui/icons-material/ArrowDropDown';
 import ImageOutlined from '@mui/icons-material/ImageOutlined';
@@ -51,13 +53,11 @@ import type { Bounds } from '@/lib/geometry';
 import { formatAreaHectares } from '@/lib/geometry';
 import type { DrawShapeMode } from '@/lib/draw-shapes';
 import FilterForm from './FilterForm';
-import SpeciesSearch, { type SpeciesOption } from './SpeciesSearch';
 import ImportSummaryContent from './map-top-bar/ImportSummaryContent';
 import HelpDialog from './map-top-bar/HelpDialog';
 import AboutMenuContent from './map-top-bar/AboutMenuContent';
 import ExportDataDialog from './map-top-bar/ExportDataDialog';
 import type { ExportDataFormat, ExportDataOptions } from '@/lib/export-data';
-import type { SelectedSpeciesOption } from '@/types/gbif';
 import {
   type MapTopBarProps,
   type MapTopBarFlatProps,
@@ -67,10 +67,10 @@ import {
   normalizeMapTopBarProps,
 } from './map-top-bar/types';
 
+export type { MapTopBarProps, MapTopBarFlatProps } from './map-top-bar/types';
+
 /** Stable empty array so Autocomplete value reference doesn't change every render. */
 const EMPTY_SPECIES_OPTIONS: SpeciesOption[] = [];
-
-export type { MapTopBarProps, MapTopBarFlatProps } from './map-top-bar/types';
 
 export default function MapTopBar(rawProps: MapTopBarProps | MapTopBarFlatProps) {
   const props = normalizeMapTopBarProps(rawProps);
@@ -126,27 +126,10 @@ export default function MapTopBar(rawProps: MapTopBarProps | MapTopBarFlatProps)
   const [placeQuery, setPlaceQuery] = useState('');
   const [placeResults, setPlaceResults] = useState<RegionOption[]>([]);
   const [placeLoading, setPlaceLoading] = useState(false);
-  const [placeSearchAnchor, setPlaceSearchAnchor] = useState<null | HTMLElement>(null);
   const [filterOpen, setFilterOpen] = useState(false);
   const [filterAnchor, setFilterAnchor] = useState<null | HTMLElement>(null);
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
-
-  const selectedSpecies: SpeciesOption[] = filters.selectedSpeciesOptions ?? EMPTY_SPECIES_OPTIONS;
-
-  const handleSpeciesChange = useCallback(
-    (options: SpeciesOption[] | SpeciesOption | null) => {
-      const list = Array.isArray(options) ? options : options ? [options] : [];
-      const selected: SelectedSpeciesOption[] = list.map((o) => ({ key: o.key, label: o.label }));
-      onFiltersChange({
-        ...filters,
-        selectedSpeciesOptions: selected,
-        taxonKeys: selected.length ? selected.map((o) => o.key) : undefined,
-        taxonKey: selected.length ? undefined : filters.taxonKey,
-      });
-    },
-    [filters, onFiltersChange]
-  );
 
   const openFilters = useCallback((anchor?: HTMLElement | null) => {
     if (anchor) setFilterAnchor(anchor);
@@ -169,9 +152,26 @@ export default function MapTopBar(rawProps: MapTopBarProps | MapTopBarFlatProps)
   const [savedMenuAnchor, setSavedMenuAnchor] = useState<null | HTMLElement>(null);
   const [moreMenuAnchor, setMoreMenuAnchor] = useState<null | HTMLElement>(null);
   const [drawMenuAnchor, setDrawMenuAnchor] = useState<null | HTMLElement>(null);
+  const [locationAnchor, setLocationAnchor] = useState<null | HTMLElement>(null);
   // Out-of-order responses must not overwrite results for the latest query.
   const placeRequestSeqRef = useRef(0);
   const moreButtonAnchorRef = useRef<HTMLElement | null>(null);
+
+  const selectedSpecies: SpeciesOption[] = filters.selectedSpeciesOptions ?? EMPTY_SPECIES_OPTIONS;
+
+  const handleSpeciesChange = useCallback(
+    (options: SpeciesOption[] | SpeciesOption | null) => {
+      const list = Array.isArray(options) ? options : options ? [options] : [];
+      const selected: SelectedSpeciesOption[] = list.map((o) => ({ key: o.key, label: o.label }));
+      onFiltersChange({
+        ...filters,
+        selectedSpeciesOptions: selected,
+        taxonKeys: selected.length ? selected.map((o) => o.key) : undefined,
+        taxonKey: selected.length ? undefined : filters.taxonKey,
+      });
+    },
+    [filters, onFiltersChange]
+  );
 
   const drawTools: Array<{
     mode: DrawShapeMode;
@@ -350,6 +350,14 @@ export default function MapTopBar(rawProps: MapTopBarProps | MapTopBarFlatProps)
     return options.find((o) => o.id === selectedRegionId) ?? null;
   }, [selectedRegionId, placeSearchResult, options]);
 
+  const locationLabel =
+    selectedRegionId === 'place' && placeSearchResult
+      ? placeSearchResult.name
+      : value?.label
+        ? value.label
+        : 'Search location';
+  const hasActiveLocation = Boolean(value);
+
   const handleChange = useCallback(
     (_: unknown, newValue: RegionOption | null) => {
       if (!newValue) {
@@ -358,24 +366,16 @@ export default function MapTopBar(rawProps: MapTopBarProps | MapTopBarFlatProps)
       }
       if (newValue.bounds) {
         onPlaceSelect(newValue.bounds, newValue.label, newValue.countryCode);
-        setPlaceSearchAnchor(null);
+        setLocationAnchor(null);
       } else {
         // When choosing a predefined region (not a searched place), clear any place search
         setPlaceQuery('');
         onRegionChange(newValue.id);
-        setPlaceSearchAnchor(null);
+        setLocationAnchor(null);
       }
     },
     [onRegionChange, onPlaceSelect, setPlaceQuery]
   );
-
-  const placeSearchOpen = Boolean(placeSearchAnchor);
-  const placeTooltip =
-    value?.label ??
-    (selectedRegionId && selectedRegionId !== ''
-      ? REGIONS.find((r) => r.id === selectedRegionId)?.name
-      : undefined) ??
-    'Search places or pick a region';
 
   /** Top-level toolbar entries shared by desktop buttons and the mobile overflow menu. */
   type ToolbarAction = {
@@ -511,8 +511,14 @@ export default function MapTopBar(rawProps: MapTopBarProps | MapTopBarFlatProps)
       },
     ];
   }, [
-    filters.taxonKeys,
     filters.taxonKey,
+    filters.eventDate,
+    filters.iucnRedListCategory,
+    filters.basisOfRecord,
+    filters.continent,
+    filters.country,
+    filters.datasetKey,
+    filters.institutionCode,
     filterOpen,
     openFilters,
     favorites.length,
@@ -614,7 +620,7 @@ export default function MapTopBar(rawProps: MapTopBarProps | MapTopBarFlatProps)
             backgroundColor: 'rgba(255, 255, 255, 0.92)',
             borderRadius: 1,
             border: '1px solid rgba(0, 0, 0, 0.12)',
-            pl: 1,
+            pl: 0.5,
             pr: 0.5,
             py: 0.25,
             '& .MuiOutlinedInput-root': {
@@ -623,13 +629,9 @@ export default function MapTopBar(rawProps: MapTopBarProps | MapTopBarFlatProps)
               '&:hover fieldset': { border: 'none' },
               '&.Mui-focused fieldset': { border: 'none', boxShadow: 'none' },
             },
-            '& .MuiButton-root': {
-              backgroundColor: 'transparent',
-              '&:hover': { backgroundColor: 'rgba(0, 0, 0, 0.06)' },
-            },
-            '& .MuiChip-root': { maxWidth: 140 },
           }}
         >
+          <Search sx={{ color: 'action.active', ml: 0.5, fontSize: 20, flexShrink: 0 }} />
           <SpeciesSearch
             multiple
             compact
@@ -638,47 +640,111 @@ export default function MapTopBar(rawProps: MapTopBarProps | MapTopBarFlatProps)
             id="topbar-species-search"
             placeholder="Search species…"
           />
-          <Tooltip title={placeTooltip}>
-            <IconButton
-              data-tour="region"
+        </Box>
+        <Tooltip title={hasActiveLocation ? locationLabel : 'Search location'}>
+          <IconButton
+            data-tour="region"
+            size="small"
+            onClick={(e) => setLocationAnchor(locationAnchor ? null : e.currentTarget)}
+            aria-label={hasActiveLocation ? `Location: ${locationLabel}` : 'Search location'}
+            aria-haspopup="true"
+            aria-expanded={Boolean(locationAnchor)}
+            sx={{
+              flexShrink: 0,
+              backgroundColor: hasActiveLocation ? 'rgba(76, 175, 80, 0.18)' : 'rgba(255, 255, 255, 0.92)',
+              border: '1px solid',
+              borderColor: hasActiveLocation ? 'success.main' : 'rgba(0, 0, 0, 0.12)',
+              borderRadius: 1,
+              color: hasActiveLocation ? 'success.dark' : 'text.primary',
+            }}
+          >
+            <PlaceOutlined fontSize="small" />
+          </IconButton>
+        </Tooltip>
+        {drawRegionMode && onCancelDrawRegion && (
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 0.25,
+              flexShrink: 0,
+              backgroundColor: 'rgba(255, 255, 255, 0.92)',
+              borderRadius: 1,
+              border: '1px solid rgba(0, 0, 0, 0.12)',
+              px: 0.5,
+            }}
+          >
+            {drawShapeMode === 'polygon' && onFinishDrawRegion && (
+              <Button
+                variant="text"
+                size="small"
+                color="primary"
+                onClick={onFinishDrawRegion}
+                aria-label="Finish drawing polygon"
+                sx={{ minWidth: 0 }}
+              >
+                Done
+              </Button>
+            )}
+            <Button
+              variant="text"
               size="small"
-              onClick={(e) => setPlaceSearchAnchor(placeSearchOpen ? null : e.currentTarget)}
-              aria-label="Search places or pick a region"
-              aria-haspopup="true"
-              aria-expanded={placeSearchOpen}
-              color={value ? 'primary' : 'default'}
-              sx={{ flexShrink: 0 }}
+              color="secondary"
+              onClick={onCancelDrawRegion}
+              aria-label="Cancel drawing"
+              sx={{ minWidth: 0 }}
             >
-              <PlaceOutlined fontSize="small" />
-            </IconButton>
-          </Tooltip>
-          <Popover
-            open={placeSearchOpen}
-            anchorEl={placeSearchAnchor}
-            onClose={() => setPlaceSearchAnchor(null)}
-            anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-            transformOrigin={{ vertical: 'top', horizontal: 'right' }}
-            slotProps={{
-              paper: {
-                sx: {
-                  mt: 1,
-                  p: 1.5,
-                  width: 'min(420px, calc(100vw - 24px))',
-                  maxWidth: 'calc(100vw - 24px)',
-                },
+              Cancel
+            </Button>
+          </Box>
+        )}
+        <Popover
+          open={Boolean(locationAnchor)}
+          anchorEl={locationAnchor}
+          onClose={() => setLocationAnchor(null)}
+          anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+          transformOrigin={{ vertical: 'top', horizontal: 'left' }}
+          slotProps={{
+            paper: {
+              sx: {
+                mt: 1,
+                p: 1.5,
+                width: 'min(360px, calc(100vw - 24px))',
+                maxWidth: 'calc(100vw - 24px)',
+              },
+            },
+          }}
+        >
+          <Typography variant="subtitle2" sx={{ mb: 1, px: 0.5 }}>
+            Location
+          </Typography>
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 0.5,
+              backgroundColor: 'action.hover',
+              borderRadius: 1,
+              border: '1px solid',
+              borderColor: 'divider',
+              pl: 0.5,
+              pr: 0.5,
+              py: 0.25,
+              mb: onStartDrawRegion ? 1 : 0,
+              '& .MuiOutlinedInput-root': {
+                backgroundColor: 'transparent',
+                '& fieldset': { border: 'none' },
+                '&:hover fieldset': { border: 'none' },
+                '&.Mui-focused fieldset': { border: 'none', boxShadow: 'none' },
               },
             }}
           >
-            <Typography variant="subtitle2" sx={{ mb: 1, px: 0.5 }}>
-              Place / region
-            </Typography>
             <Autocomplete
               value={value}
               onChange={handleChange}
               onInputChange={(_, v) => setPlaceQuery(v)}
               options={options}
               clearOnEscape
-              openOnFocus
               getOptionLabel={(o) => o.label}
               isOptionEqualToValue={(a, b) => a.id === b.id && a.label === b.label}
               groupBy={(o) => o.group ?? ''}
@@ -695,7 +761,7 @@ export default function MapTopBar(rawProps: MapTopBarProps | MapTopBarFlatProps)
                 </li>
               )}
               size="small"
-              sx={{ width: '100%' }}
+              sx={{ flex: 1, minWidth: 0, width: '100%' }}
               loading={placeLoading}
               renderInput={(params) => (
                 <TextField
@@ -722,49 +788,27 @@ export default function MapTopBar(rawProps: MapTopBarProps | MapTopBarFlatProps)
                 />
               )}
             />
-          </Popover>
+          </Box>
           {onStartDrawRegion != null && (
-            <>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap' }}>
               {drawRegionMode && onCancelDrawRegion ? (
-                <>
-                  {drawShapeMode === 'polygon' && onFinishDrawRegion && (
-                    <Button
-                      variant="text"
-                      size="small"
-                      color="primary"
-                      onClick={onFinishDrawRegion}
-                      aria-label="Finish drawing polygon"
-                      sx={{ minWidth: 0, flexShrink: 0 }}
-                    >
-                      Done
-                    </Button>
-                  )}
-                  <Button
-                    variant="text"
-                    size="small"
-                    color="secondary"
-                    onClick={onCancelDrawRegion}
-                    aria-label="Cancel drawing"
-                    sx={{ minWidth: 0, flexShrink: 0 }}
-                  >
-                    Cancel
-                  </Button>
-                </>
+                <Typography variant="caption" color="text.secondary" sx={{ px: 0.5 }}>
+                  Drawing on the map — use Done / Cancel in the top bar.
+                </Typography>
               ) : (
                 <>
-                  <Tooltip title="Draw region">
-                    <IconButton
-                      size="small"
-                      onClick={(e) => setDrawMenuAnchor(e.currentTarget)}
-                      disabled={drawRegionMode}
-                      aria-label="Draw a region on the globe"
-                      aria-haspopup="true"
-                      aria-expanded={Boolean(drawMenuAnchor)}
-                      sx={{ flexShrink: 0 }}
-                    >
-                      <EditOutlined fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    startIcon={<EditOutlined fontSize="small" />}
+                    onClick={(e) => setDrawMenuAnchor(e.currentTarget)}
+                    disabled={drawRegionMode}
+                    aria-label="Draw a region on the globe"
+                    aria-haspopup="true"
+                    aria-expanded={Boolean(drawMenuAnchor)}
+                  >
+                    Draw
+                  </Button>
                   <Menu
                     anchorEl={drawMenuAnchor}
                     open={Boolean(drawMenuAnchor)}
@@ -775,7 +819,13 @@ export default function MapTopBar(rawProps: MapTopBarProps | MapTopBarFlatProps)
                   >
                     <ListSubheader sx={{ lineHeight: 2 }}>Draw region</ListSubheader>
                     {drawTools.map((tool) => (
-                      <MenuItem key={tool.mode} onClick={() => startDraw(tool.mode)}>
+                      <MenuItem
+                        key={tool.mode}
+                        onClick={() => {
+                          startDraw(tool.mode);
+                          setLocationAnchor(null);
+                        }}
+                      >
                         <ListItemIcon>{tool.icon}</ListItemIcon>
                         <ListItemText primary={tool.label} secondary={tool.secondary} />
                       </MenuItem>
@@ -792,7 +842,7 @@ export default function MapTopBar(rawProps: MapTopBarProps | MapTopBarFlatProps)
                       startIcon={<BookmarkAdd />}
                       onClick={onSaveDrawnRegion}
                       aria-label="Save drawn region as favorite"
-                      sx={{ minWidth: 0, flexShrink: 0, display: { xs: 'none', sm: 'inline-flex' } }}
+                      sx={{ minWidth: 0 }}
                     >
                       Save
                     </Button>
@@ -805,16 +855,16 @@ export default function MapTopBar(rawProps: MapTopBarProps | MapTopBarFlatProps)
                       startIcon={<DeleteOutline />}
                       onClick={onClearDrawnRegion}
                       aria-label="Clear drawn region"
-                      sx={{ minWidth: 0, flexShrink: 0, display: { xs: 'none', sm: 'inline-flex' } }}
+                      sx={{ minWidth: 0 }}
                     >
                       Clear
                     </Button>
                   )}
                 </>
               )}
-            </>
+            </Box>
           )}
-        </Box>
+        </Popover>
         <IconButton
           size="small"
           onClick={(e) => {

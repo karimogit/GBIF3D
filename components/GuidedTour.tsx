@@ -9,38 +9,18 @@ const TOUR_STORAGE_KEY = 'gbif-globe-tour-done';
 export const TOUR_STEPS = [
   {
     target: '[data-tour="species"]',
-    title: 'Search species',
-    body: 'Type a scientific or common name here to filter occurrences. You can add more than one species.',
+    title: 'Search for a species',
+    body: 'Type a scientific or common name in the top bar to load occurrences on the globe.',
   },
   {
     target: '[data-tour="region"]',
-    title: 'Pick a region',
-    body: 'Tap the place icon to search for a location, choose a continent, or use the draw tool for your own area.',
-  },
-  {
-    target: '[data-tour="filters"]',
-    title: 'More filters',
-    body: 'Open Filters for taxonomic groups, date range, IUCN status, and other advanced options.',
+    title: 'Pick a location',
+    body: 'Tap the location icon to search for a place, choose a continent, or draw your own area.',
   },
   {
     target: '[data-tour="timeline"]',
-    title: 'Timeline',
+    title: 'Explore the timeline',
     body: 'Click a year bar to focus on that period. Use Play to animate month by month.',
-  },
-  {
-    target: '[data-tour="export"]',
-    title: 'Export data',
-    body: 'Export the current view as an image, or download occurrences as GeoJSON, CSV, or PDF.',
-  },
-  {
-    target: '[data-tour="share"]',
-    title: 'Share your view',
-    body: 'Use the share button on the map (bottom-right) to copy a link with your region, filters, and timeline.',
-  },
-  {
-    target: '[data-tour="help"]',
-    title: 'Help anytime',
-    body: 'Reopen this guide from the ? icon whenever you need a refresher.',
   },
 ] as const;
 

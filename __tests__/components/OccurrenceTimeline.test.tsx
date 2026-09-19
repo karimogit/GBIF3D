@@ -119,14 +119,14 @@ describe('OccurrenceTimeline', () => {
     expect(screen.getByRole('button', { name: 'Pause' })).toHaveAttribute('aria-pressed', 'true');
 
     act(() => {
-      jest.advanceTimersByTime(250 * 2);
+      jest.advanceTimersByTime(700 * 2);
     });
     expect(onYearChange).toHaveBeenCalledWith(2020);
     expect(onMonthChange.mock.calls.map((c) => c[0])).toEqual([1, 2]);
 
     // 12 months for a single year, then one more tick stops playback.
     act(() => {
-      jest.advanceTimersByTime(250 * 11);
+      jest.advanceTimersByTime(700 * 11);
     });
     expect(onMonthChange).toHaveBeenLastCalledWith(12);
     expect(screen.getByRole('button', { name: 'Play' })).toHaveAttribute('aria-pressed', 'false');
