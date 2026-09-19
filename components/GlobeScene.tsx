@@ -242,7 +242,9 @@ export default function GlobeScene({
   const commandsRef = useRef<GlobeSceneHandle | null>(null);
   const drawFinishRef = useRef<(() => void) | null>(null);
   const onGlobeHandleRef = useRef(onGlobeHandle);
-  onGlobeHandleRef.current = onGlobeHandle;
+  useEffect(() => {
+    onGlobeHandleRef.current = onGlobeHandle;
+  }, [onGlobeHandle]);
 
   const registerCommands = useCallback((api: GlobeSceneHandle) => {
     commandsRef.current = api;
