@@ -8,7 +8,7 @@
 
 Explore where species have been recorded on an interactive 3D globe. Data comes from GBIF: millions of observations from museums, surveys, and citizen science.
 
-Pick a region or search for a place, import your own GBIF-style datasets, filter by species or year, and draw your own area. Each dot is an occurrence; colors show IUCN status. Use the **timeline** at the bottom to filter by year or month, or press **Play** to animate month by month. Use the **share** icon on the bottom-right map controls to copy a link with your current view. Use **View** for 3D/2D, base maps, and optional Photorealistic 3D. Export the current view or data as image, GeoJSON, CSV, or PDF.
+Pick a region or search for a place (place icon), search species in the top bar, import your own GBIF-style datasets, filter by year, and draw your own area. Each dot is an occurrence; colors show IUCN status. Use the **timeline** at the bottom to filter by year or month, or press **Play** to animate month by month. Use the **share** icon on the bottom-right map controls to copy a link with your current view. Use **View** for 3D/2D, base maps, and optional Photorealistic 3D. Export the current view or data as image, GeoJSON, CSV, or PDF.
 
 Built with Next.js, Cesium (Resium), and the GBIF API.
 
@@ -17,17 +17,17 @@ Built with Next.js, Cesium (Resium), and the GBIF API.
 ## Features
 
 - **3D interactive globe** — Pan, zoom, tilt, and rotate using CesiumJS
-- **Region selection** — In the top bar: choose World or a continent, search places by name (Photon / komoot), or pick a saved favorite. With no region selected, camera bounds at filter-apply time are used; panning alone does not refetch
+- **Region selection** — Place icon in the top bar: choose World or a continent, search places by name (Photon / komoot), or pick a saved favorite. With no region selected, camera bounds at filter-apply time are used; panning alone does not refetch
 - **Draw region** — Pencil menu: draw a **polygon** (click points, Done to finish), **rectangle**, or **circle** on the globe and fetch occurrences for that area; area size is shown in hectares (ha) while drawing and on the selected region. Save it as a favorite or clear it. Regions crossing the antimeridian are handled (sent to GBIF as a `MULTIPOLYGON`)
 - **Keyboard navigation** — Arrow keys (and WASD when not flying) pan the map; Page Up/Down zoom
 - **Fly mode** — Airplane control (bottom right): free-look flight with WASD / Q·E / mouse look — great with Photorealistic 3D; Esc exits
-- **Saved favorites** — Save a drawn polygon (or region bounds) as a named favorite (stored in browser); quick access from the Region dropdown
+- **Saved favorites** — Save a drawn polygon (or region bounds) as a named favorite (stored in browser); quick access from the place/region popover
 - **GBIF data** — Occurrences fetched for the selected region (or camera bounds when filters are applied), plus filters
 - **Import your own data** — Load GBIF-style CSV/TSV, JSON, or a Darwin Core Archive (`.zip`) and explore it on the globe alongside live API results and saved occurrences
-- **Species filters** — Search species/taxon (autocomplete), taxonomic group, date range, IUCN Red List status; advanced: Basis of Record, Continent, Country (ISO 2-letter code), Dataset key, Institution code
-- **Filter presets** — Save and reload named filter combinations from the Species panel (stored in browser)
+- **Species filters** — Search species/taxon in the top bar (autocomplete), plus taxonomic group, date range, IUCN Red List status from Filters; advanced: Basis of Record, Continent, Country (ISO 2-letter code), Dataset key, Institution code
+- **Filter presets** — Save and reload named filter combinations from the Filters panel (stored in browser)
 - **Shareable URLs** — Use the share icon (bottom-right) to copy a link that restores region, filters, timeline year/month, and view options (place search bounds are encoded in the URL)
-- **Timeline animation** — Press Play on the timeline to step through months (~250 ms per month)
+- **Timeline animation** — Press Play on the timeline to step through months (~700 ms per month)
 - **Guided tour** — First visit shows a short walkthrough; reopen from **Help → Take a guided tour**
 - **Offline mode** — Last successful occurrence load is cached in IndexedDB; when offline, the app shows cached data with a banner (PWA app shell via service worker)
 - **Visualization** — Points on the globe, color-coded by IUCN threat level; large datasets (2,500+ points) are grid-clustered when zoomed out for smoother rendering
@@ -93,7 +93,7 @@ Favorite regions saved only in your browser are not included in share links unle
 ## How to Use (Operating Instructions)
 
 ### Step 1: Select a Region
-- Use the region field in the top bar to:
+- Tap the **place** icon in the top bar to:
   - Choose a predefined region (World or a continent)
   - Search for a place by name (e.g., "Paris", "New York") via Photon
   - Pick a saved favorite region
@@ -101,7 +101,7 @@ Favorite regions saved only in your browser are not included in share links unle
 - Choosing a region flies the camera there and loads occurrences for that area
 
 ### Step 2: Filter Occurrences
-Click **Species** in the top bar to refine your search:
+Search species in the top bar, or open **Filters** for more options:
 - **Species/Taxon** — Search by scientific or common name (e.g., "bee", "Apis", "house cat"); you can add multiple species
 - **Taxonomic group** — Choose a broad category (Mammals, Birds, Plants, etc.)
 - **Date range** — Enter start and end dates (YYYY-MM-DD format); dates in the future are clamped to today
@@ -121,12 +121,12 @@ Click **Species** in the top bar to refine your search:
 - **Navigate** — Pan, zoom, and rotate the globe with your mouse or touch gestures. Use **arrow keys** to pan. Bottom-right controls: share link, fly mode, reset view (home), and point north.
 
 ### Step 4: Draw a Custom Region (Optional)
-- Click the **pencil** icon next to place search and choose **Polygon**, **Rectangle**, or **Circle**
+- Click the **pencil** icon next to the place icon and choose **Polygon**, **Rectangle**, or **Circle**
 - **Polygon** — Click points on the globe; double-click or **Done** to close
 - **Rectangle / Circle** — Click and drag (or click two points) to set the shape
 - The **area in hectares (ha)** updates live while you draw and stays on the selected region label
 - Occurrences will load for that area
-- Save it as a favorite from the Region dropdown for quick access later
+- Save it as a favorite from the place/region popover for quick access later
 
 ### Step 5: Fly over the globe (Optional)
 - Toggle the **airplane** icon (bottom right) to enter fly mode
@@ -258,7 +258,7 @@ The **default** base map is [OpenTopoMap](https://opentopomap.org/) (`*.tile.ope
 │   ├── GlobeViewerDynamic.tsx # Dynamic import (no SSR) for globe
 │   ├── GlobeScene.tsx     # Resium Viewer wiring (terrain, base layer, handlers)
 │   ├── globe/             # Scene handlers, occurrence layer (entities/primitives), InfoBox HTML, imagery, export helpers
-│   ├── MapTopBar.tsx      # Top bar: Region/place search, Species, Import, Export, View, Saved, About, Help
+│   ├── MapTopBar.tsx      # Top bar: Species search, place icon, Filters, Import, Export, View, Saved, About, Help
 │   ├── map-top-bar/       # Dialogs and menu contents used by MapTopBar
 │   ├── FilterForm.tsx     # Filters popover content
 │   ├── OccurrenceTimeline.tsx # Year/month timeline filter

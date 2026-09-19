@@ -94,12 +94,15 @@ describe('occurrence-infobox', () => {
       expect(html).not.toContain('javascript:');
       expect(html).not.toContain('http://insecure.example');
       expect(html).toContain('https://images.example/ok.jpg');
-      expect(html).toMatch(/<img class=/);
+      expect(html).toMatch(/<button type="button" class=/);
+      expect(html).toMatch(/<img src=/);
     });
 
-    it('renders a normal https image', () => {
+    it('renders a normal https image inside a tappable button', () => {
       const html = occurrenceToDescription(base, ['https://cdn.example/photo.jpg']);
       expect(html).toContain('src="https://cdn.example/photo.jpg"');
+      expect(html).toContain('type="button"');
+      expect(html).toContain('aria-label="Open photo 1"');
     });
   });
 });
