@@ -15,7 +15,7 @@ export const TOUR_STEPS = [
   {
     target: '[data-tour="region"]',
     title: 'Pick a location',
-    body: 'Tap the location icon to search for a place, choose a continent, or draw your own area.',
+    body: 'Open Location in the toolbar to search for a place, choose a continent, or draw your own area.',
   },
   {
     target: '[data-tour="timeline"]',

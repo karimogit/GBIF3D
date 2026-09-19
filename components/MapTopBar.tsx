@@ -130,6 +130,8 @@ export default function MapTopBar(rawProps: MapTopBarProps | MapTopBarFlatProps)
   const [placeLoading, setPlaceLoading] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
   const [filterAnchor, setFilterAnchor] = useState<null | HTMLElement>(null);
+  const [locationOpen, setLocationOpen] = useState(false);
+  const [locationAnchor, setLocationAnchor] = useState<null | HTMLElement>(null);
   const [speciesOpen, setSpeciesOpen] = useState(false);
   const [speciesAnchor, setSpeciesAnchor] = useState<null | HTMLElement>(null);
   const theme = useTheme();
@@ -143,6 +145,16 @@ export default function MapTopBar(rawProps: MapTopBarProps | MapTopBarFlatProps)
   const closeFilters = useCallback(() => {
     setFilterOpen(false);
     setFilterAnchor(null);
+  }, []);
+
+  const openLocation = useCallback((anchor?: HTMLElement | null) => {
+    if (anchor) setLocationAnchor(anchor);
+    setLocationOpen(true);
+  }, []);
+
+  const closeLocation = useCallback(() => {
+    setLocationOpen(false);
+    setLocationAnchor(null);
   }, []);
 
   const closeSpeciesOptions = useCallback(() => {
@@ -161,7 +173,6 @@ export default function MapTopBar(rawProps: MapTopBarProps | MapTopBarFlatProps)
   const [savedMenuAnchor, setSavedMenuAnchor] = useState<null | HTMLElement>(null);
   const [moreMenuAnchor, setMoreMenuAnchor] = useState<null | HTMLElement>(null);
   const [drawMenuAnchor, setDrawMenuAnchor] = useState<null | HTMLElement>(null);
-  const [locationAnchor, setLocationAnchor] = useState<null | HTMLElement>(null);
   // Out-of-order responses must not overwrite results for the latest query.
   const placeRequestSeqRef = useRef(0);
   const moreButtonAnchorRef = useRef<HTMLElement | null>(null);
@@ -376,15 +387,15 @@ export default function MapTopBar(rawProps: MapTopBarProps | MapTopBarFlatProps)
       }
       if (newValue.bounds) {
         onPlaceSelect(newValue.bounds, newValue.label, newValue.countryCode);
-        setLocationAnchor(null);
+        closeLocation();
       } else {
         // When choosing a predefined region (not a searched place), clear any place search
         setPlaceQuery('');
         onRegionChange(newValue.id);
-        setLocationAnchor(null);
+        closeLocation();
       }
     },
-    [onRegionChange, onPlaceSelect, setPlaceQuery]
+    [onRegionChange, onPlaceSelect, closeLocation]
   );
 
   /** Top-level toolbar entries shared by desktop buttons and the mobile overflow menu. */
@@ -414,6 +425,19 @@ export default function MapTopBar(rawProps: MapTopBarProps | MapTopBarFlatProps)
       Boolean(filters.datasetKey) ||
       Boolean(filters.institutionCode);
     return [
+      {
+        id: 'location',
+        label: `Location${hasActiveLocation ? ' • active' : ''}`,
+        menuLabel: hasActiveLocation ? `Location (${locationLabel})` : 'Location',
+        ariaLabel: hasActiveLocation ? `Location: ${locationLabel}` : 'Location',
+        icon: <PlaceOutlined fontSize="small" />,
+        endIcon: <ArrowDropDown />,
+        visible: true,
+        desktopVariant: 'button',
+        expanded: locationOpen,
+        selected: locationOpen,
+        onActivate: (anchor) => openLocation(anchor),
+      },
       {
         id: 'filters',
         label: `Filters${filterActive ? ' • active' : ''}`,
@@ -520,6 +544,10 @@ export default function MapTopBar(rawProps: MapTopBarProps | MapTopBarFlatProps)
       },
     ];
   }, [
+    hasActiveLocation,
+    locationLabel,
+    locationOpen,
+    openLocation,
     filters.eventDate,
     filters.iucnRedListCategory,
     filters.basisOfRecord,
@@ -546,6 +574,157 @@ export default function MapTopBar(rawProps: MapTopBarProps | MapTopBarFlatProps)
   ]);
 
   const visibleToolbarActions = toolbarActions.filter((a) => a.visible);
+
+  const locationPanel = (
+    <>
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 0.5,
+          backgroundColor: 'action.hover',
+          borderRadius: 1,
+          border: '1px solid',
+          borderColor: 'divider',
+          pl: 0.5,
+          pr: 0.5,
+          py: 0.25,
+          mb: onStartDrawRegion ? 1 : 0,
+          '& .MuiOutlinedInput-root': {
+            backgroundColor: 'transparent',
+            '& fieldset': { border: 'none' },
+            '&:hover fieldset': { border: 'none' },
+            '&.Mui-focused fieldset': { border: 'none', boxShadow: 'none' },
+          },
+        }}
+      >
+        <Autocomplete
+          value={value}
+          onChange={handleChange}
+          onInputChange={(_, v) => setPlaceQuery(v)}
+          options={options}
+          clearOnEscape
+          getOptionLabel={(o) => o.label}
+          isOptionEqualToValue={(a, b) => a.id === b.id && a.label === b.label}
+          groupBy={(o) => o.group ?? ''}
+          renderGroup={(params) => (
+            <li key={params.key}>
+              {params.group ? (
+                <ListSubheader component="div" sx={{ lineHeight: 2 }}>
+                  {params.group}
+                </ListSubheader>
+              ) : null}
+              <Box component="ul" sx={{ m: 0, p: 0 }}>
+                {params.children}
+              </Box>
+            </li>
+          )}
+          size="small"
+          sx={{ flex: 1, minWidth: 0, width: '100%' }}
+          loading={placeLoading}
+          renderInput={(params) => (
+            <TextField
+              {...params}
+              placeholder="Search places…"
+              size="small"
+              variant="outlined"
+              autoFocus
+              InputProps={{
+                ...params.InputProps,
+                startAdornment: (
+                  <>
+                    <Search sx={{ color: 'action.active', mr: 0.5, fontSize: 20 }} />
+                    {params.InputProps.startAdornment}
+                  </>
+                ),
+                endAdornment: (
+                  <>
+                    {placeLoading ? <CircularProgress color="inherit" size={18} /> : null}
+                    {params.InputProps.endAdornment}
+                  </>
+                ),
+              }}
+            />
+          )}
+        />
+      </Box>
+      {onStartDrawRegion != null && (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap' }}>
+          {drawRegionMode && onCancelDrawRegion ? (
+            <Typography variant="caption" color="text.secondary" sx={{ px: 0.5 }}>
+              Drawing on the map — use Done / Cancel in the top bar.
+            </Typography>
+          ) : (
+            <>
+              <Button
+                variant="outlined"
+                size="small"
+                startIcon={<EditOutlined fontSize="small" />}
+                onClick={(e) => setDrawMenuAnchor(e.currentTarget)}
+                disabled={drawRegionMode}
+                aria-label="Draw a region on the globe"
+                aria-haspopup="true"
+                aria-expanded={Boolean(drawMenuAnchor)}
+              >
+                Draw
+              </Button>
+              <Menu
+                anchorEl={drawMenuAnchor}
+                open={Boolean(drawMenuAnchor)}
+                onClose={() => setDrawMenuAnchor(null)}
+                anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+                transformOrigin={{ vertical: 'top', horizontal: 'left' }}
+                slotProps={{ paper: { sx: { minWidth: 220, maxWidth: 'calc(100vw - 24px)' } } }}
+              >
+                <ListSubheader sx={{ lineHeight: 2 }}>Draw region</ListSubheader>
+                {drawTools.map((tool) => (
+                  <MenuItem
+                    key={tool.mode}
+                    onClick={() => {
+                      startDraw(tool.mode);
+                      closeLocation();
+                    }}
+                  >
+                    <ListItemIcon>{tool.icon}</ListItemIcon>
+                    <ListItemText primary={tool.label} secondary={tool.secondary} />
+                  </MenuItem>
+                ))}
+              </Menu>
+            </>
+          )}
+          {drawnBounds != null && selectedRegionId === 'drawn' && (
+            <>
+              {onSaveDrawnRegion && (
+                <Button
+                  variant="text"
+                  size="small"
+                  startIcon={<BookmarkAdd />}
+                  onClick={onSaveDrawnRegion}
+                  aria-label="Save drawn region as favorite"
+                  sx={{ minWidth: 0 }}
+                >
+                  Save
+                </Button>
+              )}
+              {onClearDrawnRegion && (
+                <Button
+                  variant="text"
+                  size="small"
+                  color="secondary"
+                  startIcon={<DeleteOutline />}
+                  onClick={onClearDrawnRegion}
+                  aria-label="Clear drawn region"
+                  sx={{ minWidth: 0 }}
+                >
+                  Clear
+                </Button>
+              )}
+            </>
+          )}
+        </Box>
+      )}
+    </>
+  );
 
   return (
     <Box
@@ -625,7 +804,7 @@ export default function MapTopBar(rawProps: MapTopBarProps | MapTopBarFlatProps)
             gap: 0.25,
             flex: { xs: '1 1 auto', md: '0 1 auto' },
             minWidth: 0,
-            maxWidth: { xs: 'min(100%, 260px)', sm: 300, md: 340 },
+            maxWidth: { xs: 'min(100%, 100%)', sm: 360, md: 420 },
           }}
         >
           <Box
@@ -692,26 +871,6 @@ export default function MapTopBar(rawProps: MapTopBarProps | MapTopBarFlatProps)
             </IconButton>
           </Tooltip>
         </Box>
-        <Tooltip title={hasActiveLocation ? locationLabel : 'Search location'}>
-          <IconButton
-            data-tour="region"
-            size="small"
-            onClick={(e) => setLocationAnchor(locationAnchor ? null : e.currentTarget)}
-            aria-label={hasActiveLocation ? `Location: ${locationLabel}` : 'Search location'}
-            aria-haspopup="true"
-            aria-expanded={Boolean(locationAnchor)}
-            sx={{
-              flexShrink: 0,
-              backgroundColor: hasActiveLocation ? 'rgba(76, 175, 80, 0.18)' : 'rgba(255, 255, 255, 0.92)',
-              border: '1px solid',
-              borderColor: hasActiveLocation ? 'success.main' : 'rgba(0, 0, 0, 0.12)',
-              borderRadius: 1,
-              color: hasActiveLocation ? 'success.dark' : 'text.primary',
-            }}
-          >
-            <PlaceOutlined fontSize="small" />
-          </IconButton>
-        </Tooltip>
         {drawRegionMode && onCancelDrawRegion && (
           <Box
             sx={{
@@ -749,173 +908,6 @@ export default function MapTopBar(rawProps: MapTopBarProps | MapTopBarFlatProps)
             </Button>
           </Box>
         )}
-        <Popover
-          open={Boolean(locationAnchor)}
-          anchorEl={locationAnchor}
-          onClose={() => setLocationAnchor(null)}
-          anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
-          transformOrigin={{ vertical: 'top', horizontal: 'left' }}
-          slotProps={{
-            paper: {
-              sx: {
-                mt: 1,
-                p: 1.5,
-                width: 'min(360px, calc(100vw - 24px))',
-                maxWidth: 'calc(100vw - 24px)',
-              },
-            },
-          }}
-        >
-          <Typography variant="subtitle2" sx={{ mb: 1, px: 0.5 }}>
-            Location
-          </Typography>
-          <Box
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 0.5,
-              backgroundColor: 'action.hover',
-              borderRadius: 1,
-              border: '1px solid',
-              borderColor: 'divider',
-              pl: 0.5,
-              pr: 0.5,
-              py: 0.25,
-              mb: onStartDrawRegion ? 1 : 0,
-              '& .MuiOutlinedInput-root': {
-                backgroundColor: 'transparent',
-                '& fieldset': { border: 'none' },
-                '&:hover fieldset': { border: 'none' },
-                '&.Mui-focused fieldset': { border: 'none', boxShadow: 'none' },
-              },
-            }}
-          >
-            <Autocomplete
-              value={value}
-              onChange={handleChange}
-              onInputChange={(_, v) => setPlaceQuery(v)}
-              options={options}
-              clearOnEscape
-              getOptionLabel={(o) => o.label}
-              isOptionEqualToValue={(a, b) => a.id === b.id && a.label === b.label}
-              groupBy={(o) => o.group ?? ''}
-              renderGroup={(params) => (
-                <li key={params.key}>
-                  {params.group ? (
-                    <ListSubheader component="div" sx={{ lineHeight: 2 }}>
-                      {params.group}
-                    </ListSubheader>
-                  ) : null}
-                  <Box component="ul" sx={{ m: 0, p: 0 }}>
-                    {params.children}
-                  </Box>
-                </li>
-              )}
-              size="small"
-              sx={{ flex: 1, minWidth: 0, width: '100%' }}
-              loading={placeLoading}
-              renderInput={(params) => (
-                <TextField
-                  {...params}
-                  placeholder="Search places…"
-                  size="small"
-                  variant="outlined"
-                  autoFocus
-                  InputProps={{
-                    ...params.InputProps,
-                    startAdornment: (
-                      <>
-                        <Search sx={{ color: 'action.active', mr: 0.5, fontSize: 20 }} />
-                        {params.InputProps.startAdornment}
-                      </>
-                    ),
-                    endAdornment: (
-                      <>
-                        {placeLoading ? <CircularProgress color="inherit" size={18} /> : null}
-                        {params.InputProps.endAdornment}
-                      </>
-                    ),
-                  }}
-                />
-              )}
-            />
-          </Box>
-          {onStartDrawRegion != null && (
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap' }}>
-              {drawRegionMode && onCancelDrawRegion ? (
-                <Typography variant="caption" color="text.secondary" sx={{ px: 0.5 }}>
-                  Drawing on the map — use Done / Cancel in the top bar.
-                </Typography>
-              ) : (
-                <>
-                  <Button
-                    variant="outlined"
-                    size="small"
-                    startIcon={<EditOutlined fontSize="small" />}
-                    onClick={(e) => setDrawMenuAnchor(e.currentTarget)}
-                    disabled={drawRegionMode}
-                    aria-label="Draw a region on the globe"
-                    aria-haspopup="true"
-                    aria-expanded={Boolean(drawMenuAnchor)}
-                  >
-                    Draw
-                  </Button>
-                  <Menu
-                    anchorEl={drawMenuAnchor}
-                    open={Boolean(drawMenuAnchor)}
-                    onClose={() => setDrawMenuAnchor(null)}
-                    anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
-                    transformOrigin={{ vertical: 'top', horizontal: 'left' }}
-                    slotProps={{ paper: { sx: { minWidth: 220, maxWidth: 'calc(100vw - 24px)' } } }}
-                  >
-                    <ListSubheader sx={{ lineHeight: 2 }}>Draw region</ListSubheader>
-                    {drawTools.map((tool) => (
-                      <MenuItem
-                        key={tool.mode}
-                        onClick={() => {
-                          startDraw(tool.mode);
-                          setLocationAnchor(null);
-                        }}
-                      >
-                        <ListItemIcon>{tool.icon}</ListItemIcon>
-                        <ListItemText primary={tool.label} secondary={tool.secondary} />
-                      </MenuItem>
-                    ))}
-                  </Menu>
-                </>
-              )}
-              {drawnBounds != null && selectedRegionId === 'drawn' && (
-                <>
-                  {onSaveDrawnRegion && (
-                    <Button
-                      variant="text"
-                      size="small"
-                      startIcon={<BookmarkAdd />}
-                      onClick={onSaveDrawnRegion}
-                      aria-label="Save drawn region as favorite"
-                      sx={{ minWidth: 0 }}
-                    >
-                      Save
-                    </Button>
-                  )}
-                  {onClearDrawnRegion && (
-                    <Button
-                      variant="text"
-                      size="small"
-                      color="secondary"
-                      startIcon={<DeleteOutline />}
-                      onClick={onClearDrawnRegion}
-                      aria-label="Clear drawn region"
-                      sx={{ minWidth: 0 }}
-                    >
-                      Clear
-                    </Button>
-                  )}
-                </>
-              )}
-            </Box>
-          )}
-        </Popover>
         <IconButton
           size="small"
           onClick={(e) => {
@@ -1067,12 +1059,19 @@ export default function MapTopBar(rawProps: MapTopBarProps | MapTopBarFlatProps)
               startIcon={action.icon}
               endIcon={action.endIcon}
               data-tour={
-                action.id === 'filters' ? 'filters' : action.id === 'export' ? 'export' : undefined
+                action.id === 'location'
+                  ? 'region'
+                  : action.id === 'filters'
+                    ? 'filters'
+                    : action.id === 'export'
+                      ? 'export'
+                      : undefined
               }
               onClick={(e) => action.onActivate(e.currentTarget)}
               aria-label={action.ariaLabel}
               aria-haspopup={
                 action.endIcon ||
+                action.id === 'location' ||
                 action.id === 'saved-regions' ||
                 action.id === 'saved-occurrences' ||
                 action.id === 'import' ||
@@ -1106,6 +1105,42 @@ export default function MapTopBar(rawProps: MapTopBarProps | MapTopBarFlatProps)
           </span>
         );
       })}
+
+      <Dialog
+        open={locationOpen && isMobile}
+        onClose={closeLocation}
+        fullWidth
+        maxWidth="sm"
+        PaperProps={{ sx: { borderRadius: 2, m: 1, maxWidth: 'min(420px, calc(100vw - 16px))' } }}
+      >
+        <DialogTitle>Location</DialogTitle>
+        <DialogContent dividers>{locationPanel}</DialogContent>
+        <DialogActions>
+          <Button onClick={closeLocation}>Done</Button>
+        </DialogActions>
+      </Dialog>
+      <Popover
+        open={locationOpen && !isMobile && Boolean(locationAnchor)}
+        anchorEl={locationAnchor}
+        onClose={closeLocation}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+        transformOrigin={{ vertical: 'top', horizontal: 'left' }}
+        slotProps={{
+          paper: {
+            sx: {
+              mt: 1,
+              p: 1.5,
+              width: 'min(360px, calc(100vw - 24px))',
+              maxWidth: 'calc(100vw - 24px)',
+            },
+          },
+        }}
+      >
+        <Typography variant="subtitle2" sx={{ mb: 1, px: 0.5 }}>
+          Location
+        </Typography>
+        {locationPanel}
+      </Popover>
 
       <Dialog
         open={speciesOpen && isMobile}
