@@ -396,7 +396,14 @@ export default function MapTopBar(rawProps: MapTopBarProps | MapTopBarFlatProps)
 
   const toolbarActions = useMemo((): ToolbarAction[] => {
     const filterActive =
-      (filters.taxonKeys?.length ?? 0) > 0 || filters.taxonKey != null;
+      filters.taxonKey != null ||
+      Boolean(filters.eventDate) ||
+      Boolean(filters.iucnRedListCategory) ||
+      Boolean(filters.basisOfRecord) ||
+      Boolean(filters.continent) ||
+      Boolean(filters.country) ||
+      Boolean(filters.datasetKey) ||
+      Boolean(filters.institutionCode);
     return [
       {
         id: 'filters',
