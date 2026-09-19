@@ -7,6 +7,7 @@ import {
   GBIFApiError,
   type ChunkProgress,
 } from '@/lib/gbif';
+import { cacheKey } from '@/lib/cache';
 import { boundsToWktPolygon, coordsToWktPolygon, type Bounds, type LonLat } from '@/lib/geometry';
 import type { GBIFOccurrence, OccurrenceFilters } from '@/types/gbif';
 
@@ -70,39 +71,12 @@ export function useOccurrences({
   const hasTaxonFilter =
     (filters.taxonKeys?.length ?? 0) > 0 || filters.taxonKey != null;
 
-  const filterFetchKey = useMemo(
-    () =>
-      JSON.stringify({
-        taxonKey: filters.taxonKey ?? null,
-        taxonKeys: filters.taxonKeys ?? null,
-        year: filters.year ?? null,
-        eventDate: filters.eventDate ?? null,
-        iucnRedListCategory: filters.iucnRedListCategory ?? null,
-        basisOfRecord: filters.basisOfRecord ?? null,
-        continent: filters.continent ?? null,
-        country: filters.country ?? null,
-        datasetKey: filters.datasetKey ?? null,
-        institutionCode: filters.institutionCode ?? null,
-        limit: filters.limit ?? null,
-        offset: filters.offset ?? null,
-        selectedCountryCode: selectedCountryCode ?? null,
-      }),
-    [
-      filters.taxonKey,
-      filters.taxonKeys,
-      filters.year,
-      filters.eventDate,
-      filters.iucnRedListCategory,
-      filters.basisOfRecord,
-      filters.continent,
-      filters.country,
-      filters.datasetKey,
-      filters.institutionCode,
-      filters.limit,
-      filters.offset,
-      selectedCountryCode,
-    ]
-  );
+  // Any filter field sent to GBIF should trigger a refetch; only UI-only fields are excluded
+  // so a new API filter can't be added without also being picked up here.
+  const filterFetchKey = useMemo(() => {
+    const { selectedSpeciesOptions: _ui, geometry: _geom, ...apiFilters } = filters;
+    return cacheKey('fetch', { ...apiFilters, selectedCountryCode: selectedCountryCode ?? null });
+  }, [filters, selectedCountryCode]);
 
   const geometryFetchKey = useMemo(() => {
     if (drawnPolygon && drawnPolygon.length >= 3) {

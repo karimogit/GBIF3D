@@ -126,7 +126,6 @@ function filterSummary(filters: OccurrenceFilters): string[] {
   } else if (filters.taxonKey != null) {
     lines.push(`Taxon key: ${filters.taxonKey}`);
   }
-  if (filters.year?.trim()) lines.push(`Year: ${filters.year}`);
   if (filters.eventDate?.trim()) lines.push(`Date range: ${filters.eventDate.replace('/', ' – ')}`);
   if (filters.continent?.trim()) lines.push(`Continent: ${filters.continent.replace(/_/g, ' ')}`);
   if (filters.country?.trim()) {

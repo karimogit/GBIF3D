@@ -113,7 +113,6 @@ export interface OccurrenceFilters {
   taxonKeys?: number[];
   /** Selected species options for filter UI display (persists when popover closes) */
   selectedSpeciesOptions?: SelectedSpeciesOption[];
-  year?: string; // single year or range "2010,2020"
   /** Optional occurrence date range "YYYY-MM-DD/YYYY-MM-DD" (GBIF eventDate parameter). */
   eventDate?: string;
   iucnRedListCategory?: IUCNCategory | string;
@@ -128,6 +127,4 @@ export interface OccurrenceFilters {
   institutionCode?: string;
   limit?: number;
   offset?: number;
-  facet?: string[]; // e.g. ['speciesKey', 'year']
-  facetLimit?: number;
 }

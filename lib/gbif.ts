@@ -107,7 +107,6 @@ function buildOccurrenceParams(
   } else if (filters.taxonKey) {
     params.taxonKey = filters.taxonKey;
   }
-  if (filters.year) params.year = filters.year;
   // GBIF occurrence search API expects date range with COMMA (see techdocs "Searching dates")
   const rawDate = filters.eventDate && String(filters.eventDate).trim();
   if (rawDate) {
