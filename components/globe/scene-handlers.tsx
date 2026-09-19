@@ -270,14 +270,21 @@ export function InfoBoxLinkFix() {
       return;
     }
     const frame = v.infoBox.frame;
-    const handleClick = (e: MouseEvent) => {
-      const target = e.target as Element;
-      const photo = target?.closest?.(`.${LIGHTBOX_PHOTO_CLASS}`);
+    // Deduplicate click + touchend so one tap does not open the lightbox twice.
+    let lastActivateAt = 0;
+    const handleActivate = (e: Event) => {
+      const target = e.target as Element | null;
+      if (!target?.closest) return;
+      const photo = target.closest(`.${LIGHTBOX_PHOTO_CLASS}`);
       if (photo) {
         e.preventDefault();
         e.stopPropagation();
+        const now = Date.now();
+        if (now - lastActivateAt < 400) return;
+        lastActivateAt = now;
         const el = photo as HTMLElement;
-        const fullUrl = el.dataset?.fullurl ?? (photo as HTMLImageElement).src ?? '';
+        const img = el.tagName === 'IMG' ? (el as HTMLImageElement) : el.querySelector('img');
+        const fullUrl = el.dataset?.fullurl ?? img?.src ?? '';
         if (!fullUrl) return;
         try {
           const allurlsRaw = el.dataset?.allurls;
@@ -294,10 +301,13 @@ export function InfoBoxLinkFix() {
         }
         return;
       }
-      const saveBtn = target?.closest?.(`.${SAVE_BUTTON_CLASS}`);
+      const saveBtn = target.closest(`.${SAVE_BUTTON_CLASS}`);
       if (saveBtn) {
         e.preventDefault();
         e.stopPropagation();
+        const now = Date.now();
+        if (now - lastActivateAt < 400) return;
+        lastActivateAt = now;
         const key = parseInt((saveBtn as HTMLElement).dataset?.key ?? '', 10);
         const action = (saveBtn as HTMLElement).dataset?.action as 'add' | 'remove' | undefined;
         if (Number.isInteger(key) && (action === 'add' || action === 'remove')) {
@@ -307,8 +317,10 @@ export function InfoBoxLinkFix() {
         }
         return;
       }
-      const a = target?.closest?.('a');
-      if (!a || !a.href) return;
+      // Only rewrite link clicks (not touchend) so we do not fight with native link behavior twice.
+      if (e.type !== 'click') return;
+      const a = target.closest('a');
+      if (!a || !(a instanceof HTMLAnchorElement) || !a.href) return;
       e.preventDefault();
       e.stopPropagation();
       (window.top ?? window).open(a.href, '_blank', 'noopener,noreferrer');
@@ -316,14 +328,17 @@ export function InfoBoxLinkFix() {
     const onLoad = () => {
       const doc = frame.contentDocument;
       if (!doc) return;
-      doc.addEventListener('click', handleClick);
+      doc.addEventListener('click', handleActivate);
+      // iOS/Safari often needs touchend on iframe content; click alone can miss photo taps.
+      doc.addEventListener('touchend', handleActivate, { passive: false });
     };
     if (frame.contentDocument?.body) onLoad();
     else frame.addEventListener('load', onLoad);
     return () => {
       frame.removeEventListener('load', onLoad);
       try {
-        frame.contentDocument?.removeEventListener('click', handleClick);
+        frame.contentDocument?.removeEventListener('click', handleActivate);
+        frame.contentDocument?.removeEventListener('touchend', handleActivate);
       } catch {
         // ignore
       }

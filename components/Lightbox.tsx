@@ -33,6 +33,8 @@ export default function Lightbox() {
   const currentUrl = urls[currentIndex] ?? null;
   const containerRef = useRef<HTMLDivElement | null>(null);
   const previouslyFocusedRef = useRef<HTMLElement | null>(null);
+  /** Ignore backdrop closes from the same tap that opened the lightbox (common on mobile). */
+  const openedAtRef = useRef(0);
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -41,9 +43,11 @@ export default function Lightbox() {
       if (!d) return;
       if (d.urls != null && isAllowedUrlList(d.urls) && d.urls.length > 0) {
         const index = Math.max(0, Math.min(d.index ?? 0, d.urls.length - 1));
+        openedAtRef.current = Date.now();
         setUrls(d.urls);
         setCurrentIndex(index);
       } else if (d.url != null && isAllowedImageUrl(d.url)) {
+        openedAtRef.current = Date.now();
         setUrls([d.url]);
         setCurrentIndex(0);
       }
@@ -52,10 +56,13 @@ export default function Lightbox() {
     return () => window.removeEventListener(LIGHTBOX_EVENT, handler);
   }, []);
 
-  const close = useCallback(() => {
+  const close = useCallback((force = false) => {
+    if (!force && Date.now() - openedAtRef.current < 400) return;
     setUrls([]);
     setCurrentIndex(0);
   }, []);
+
+  const forceClose = useCallback(() => close(true), [close]);
 
   const goPrev = useCallback(() => {
     setCurrentIndex((i) => (i <= 0 ? urls.length - 1 : i - 1));
@@ -92,7 +99,7 @@ export default function Lightbox() {
       if (e.key === 'Escape') {
         e.preventDefault();
         e.stopPropagation();
-        close();
+        forceClose();
       } else if (e.key === 'ArrowLeft') {
         e.preventDefault();
         e.stopPropagation();
@@ -125,7 +132,7 @@ export default function Lightbox() {
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, [isOpen, close, goPrev, goNext]);
+  }, [isOpen, forceClose, goPrev, goNext]);
 
   if (!isOpen || !currentUrl) return null;
 
@@ -153,7 +160,7 @@ export default function Lightbox() {
         type="button"
         onClick={(e) => {
           e.stopPropagation();
-          close();
+          forceClose();
         }}
         aria-label="Close"
         style={{
@@ -268,7 +275,7 @@ export default function Lightbox() {
           } else if (e.key === 'Escape') {
             e.preventDefault();
             e.stopPropagation();
-            close();
+            forceClose();
           }
         }}
       />

@@ -8,14 +8,19 @@ const TOUR_STORAGE_KEY = 'gbif-globe-tour-done';
 
 export const TOUR_STEPS = [
   {
+    target: '[data-tour="species"]',
+    title: 'Search for a species',
+    body: 'Type a scientific or common name in the top bar to load occurrences on the globe.',
+  },
+  {
     target: '[data-tour="region"]',
-    title: 'Pick a region',
-    body: 'Search for a place, choose a continent, or draw your own area on the globe.',
+    title: 'Pick a location',
+    body: 'Tap the location icon to search for a place, choose a continent, or draw your own area.',
   },
   {
     target: '[data-tour="filters"]',
-    title: 'Filter by species',
-    body: 'Open Species to search by name, set taxonomic groups, dates, and IUCN status.',
+    title: 'More filters',
+    body: 'Open Filters for taxonomic groups, date range, IUCN status, and other advanced options.',
   },
   {
     target: '[data-tour="timeline"]',
