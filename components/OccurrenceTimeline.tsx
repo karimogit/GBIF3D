@@ -105,7 +105,8 @@ export default function OccurrenceTimeline({
       }
     }
     playIndexRef.current = startIdx;
-    const intervalMs = 250;
+    /** ~700 ms per month — 250 ms felt too fast to follow on the map. */
+    const intervalMs = 700;
     const id = window.setInterval(() => {
       const idx = playIndexRef.current;
       if (idx >= yearMonthSteps.length) {

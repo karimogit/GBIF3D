@@ -258,7 +258,29 @@ export function OccurrenceSpeciesLoader({
   return null;
 }
 
-/** Ensures links in the InfoBox popup open correctly (sandboxed iframe can block them). Handles photo click for lightbox. */
+function dispatchLightboxFromPhoto(photo: Element): boolean {
+  const el = photo as HTMLElement;
+  const img = photo instanceof HTMLImageElement ? photo : photo.querySelector('img');
+  const fullUrl = el.dataset?.fullurl ?? img?.src ?? '';
+  if (!fullUrl) return false;
+  const win = window.top ?? window;
+  try {
+    const allurlsRaw = el.dataset?.allurls;
+    const indexRaw = el.dataset?.index;
+    if (allurlsRaw != null && indexRaw != null) {
+      const urls = JSON.parse(allurlsRaw) as string[];
+      const index = Math.max(0, Math.min(parseInt(indexRaw, 10), urls.length - 1));
+      win.dispatchEvent(new CustomEvent(LIGHTBOX_EVENT, { detail: { urls, index } }));
+    } else {
+      win.dispatchEvent(new CustomEvent(LIGHTBOX_EVENT, { detail: { url: fullUrl } }));
+    }
+  } catch {
+    win.dispatchEvent(new CustomEvent(LIGHTBOX_EVENT, { detail: { url: fullUrl } }));
+  }
+  return true;
+}
+
+/** Ensures links in the InfoBox popup open correctly (sandboxed iframe can block them). Handles photo tap/click for lightbox. */
 export function InfoBoxLinkFix() {
   const cesium = useCesium();
   useEffect(() => {
@@ -270,31 +292,27 @@ export function InfoBoxLinkFix() {
       return;
     }
     const frame = v.infoBox.frame;
+    // Dedupe touchend + synthesized click so the lightbox does not open twice.
+    let lastPhotoOpenAt = 0;
+    const openPhoto = (photo: Element): boolean => {
+      const now = Date.now();
+      if (now - lastPhotoOpenAt < 450) return false;
+      if (!dispatchLightboxFromPhoto(photo)) return false;
+      lastPhotoOpenAt = now;
+      return true;
+    };
+
     const handleClick = (e: MouseEvent) => {
-      const target = e.target as Element;
-      const photo = target?.closest?.(`.${LIGHTBOX_PHOTO_CLASS}`);
+      const target = e.target as Element | null;
+      if (!target?.closest) return;
+      const photo = target.closest(`.${LIGHTBOX_PHOTO_CLASS}`);
       if (photo) {
         e.preventDefault();
         e.stopPropagation();
-        const el = photo as HTMLElement;
-        const fullUrl = el.dataset?.fullurl ?? (photo as HTMLImageElement).src ?? '';
-        if (!fullUrl) return;
-        try {
-          const allurlsRaw = el.dataset?.allurls;
-          const indexRaw = el.dataset?.index;
-          if (allurlsRaw != null && indexRaw != null) {
-            const urls = JSON.parse(allurlsRaw) as string[];
-            const index = Math.max(0, Math.min(parseInt(indexRaw, 10), urls.length - 1));
-            (window.top ?? window).dispatchEvent(new CustomEvent(LIGHTBOX_EVENT, { detail: { urls, index } }));
-          } else {
-            (window.top ?? window).dispatchEvent(new CustomEvent(LIGHTBOX_EVENT, { detail: { url: fullUrl } }));
-          }
-        } catch {
-          (window.top ?? window).dispatchEvent(new CustomEvent(LIGHTBOX_EVENT, { detail: { url: fullUrl } }));
-        }
+        openPhoto(photo);
         return;
       }
-      const saveBtn = target?.closest?.(`.${SAVE_BUTTON_CLASS}`);
+      const saveBtn = target.closest(`.${SAVE_BUTTON_CLASS}`);
       if (saveBtn) {
         e.preventDefault();
         e.stopPropagation();
@@ -307,16 +325,30 @@ export function InfoBoxLinkFix() {
         }
         return;
       }
-      const a = target?.closest?.('a');
+      const a = target.closest('a');
       if (!a || !a.href) return;
       e.preventDefault();
       e.stopPropagation();
       (window.top ?? window).open(a.href, '_blank', 'noopener,noreferrer');
     };
+
+    // iOS / some Android WebViews often skip a reliable click for iframe controls;
+    // touchend opens the lightbox immediately on tap.
+    const handleTouchEnd = (e: TouchEvent) => {
+      const target = e.target as Element | null;
+      if (!target?.closest) return;
+      const photo = target.closest(`.${LIGHTBOX_PHOTO_CLASS}`);
+      if (!photo) return;
+      e.preventDefault();
+      e.stopPropagation();
+      openPhoto(photo);
+    };
+
     const onLoad = () => {
       const doc = frame.contentDocument;
       if (!doc) return;
       doc.addEventListener('click', handleClick);
+      doc.addEventListener('touchend', handleTouchEnd, { passive: false });
     };
     if (frame.contentDocument?.body) onLoad();
     else frame.addEventListener('load', onLoad);
@@ -324,6 +356,7 @@ export function InfoBoxLinkFix() {
       frame.removeEventListener('load', onLoad);
       try {
         frame.contentDocument?.removeEventListener('click', handleClick);
+        frame.contentDocument?.removeEventListener('touchend', handleTouchEnd);
       } catch {
         // ignore
       }

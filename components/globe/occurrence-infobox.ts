@@ -116,13 +116,15 @@ export function occurrenceToDescription(
   const gbifUrl = gbifKey != null && gbifKey > 0 ? `https://www.gbif.org/occurrence/${gbifKey}` : null;
   const validUrls = (imageUrls ?? []).filter((u) => typeof u === 'string' && /^https:\/\//.test(u)).slice(0, 4);
   const fullUrls = validUrls.map(toFullSizeUrl);
+  // Wrap photos in <button> so mobile browsers treat them as real controls (bare <img>
+  // often never receives a synthesized click inside Cesium's InfoBox iframe).
   const photoBox =
     validUrls.length > 0
       ? `<div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 10px; width: 100%; max-width: 100%;">
 ${validUrls
   .map(
     (u, i) =>
-      `<img class="${LIGHTBOX_PHOTO_CLASS}" src="${escapeHtml(u)}" data-fullurl="${escapeHtml(toFullSizeUrl(u))}" data-allurls="${escapeHtml(JSON.stringify(fullUrls))}" data-index="${i}" alt="" style="width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; cursor: pointer;" loading="lazy" />`
+      `<button type="button" class="${LIGHTBOX_PHOTO_CLASS}" data-fullurl="${escapeHtml(toFullSizeUrl(u))}" data-allurls="${escapeHtml(JSON.stringify(fullUrls))}" data-index="${i}" aria-label="Open photo ${i + 1}" style="display: block; width: 100%; padding: 0; margin: 0; border: none; background: transparent; border-radius: 8px; cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation;"><img src="${escapeHtml(u)}" alt="" style="display: block; width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; pointer-events: none;" loading="lazy" /></button>`
   )
   .join('\n')}
 </div>`

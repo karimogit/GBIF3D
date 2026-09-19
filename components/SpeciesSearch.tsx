@@ -23,6 +23,8 @@ interface SpeciesSearchProps {
   label?: string;
   placeholder?: string;
   id?: string;
+  /** Compact toolbar style: no label / helper text, denser input. */
+  compact?: boolean;
 }
 
 export default function SpeciesSearch({
@@ -32,6 +34,7 @@ export default function SpeciesSearch({
   label = 'Species / taxon',
   placeholder = 'Search by scientific or common name (e.g. bee, Apis, house cat)',
   id = 'species-search',
+  compact = false,
 }: SpeciesSearchProps) {
   const valueArray = multiple
     ? (Array.isArray(value) ? value : value ? [value] : [])
@@ -121,24 +124,30 @@ export default function SpeciesSearch({
       getOptionKey={(o) => o.key}
       isOptionEqualToValue={(a, b) => a.key === b.key}
       loading={loading}
+      size={compact ? 'small' : undefined}
+      sx={compact ? { flex: 1, minWidth: 0, width: '100%' } : undefined}
       renderInput={(params) => (
         <TextField
           {...params}
-          label={label}
+          label={compact ? undefined : label}
           placeholder={placeholder}
           error={!!error}
           helperText={
-            error ??
-            ((multiple ? (valueArray?.length ?? 0) : valueSingle ? 1 : 0) === 0
-              ? 'Pick a species from the list — typing alone does not search. Or choose a taxonomic group below.'
-              : 'Scientific or common (English) name. Pick a genus or family for broader results.')
+            compact
+              ? error ?? undefined
+              : error ??
+                ((multiple ? (valueArray?.length ?? 0) : valueSingle ? 1 : 0) === 0
+                  ? 'Pick a species from the list — typing alone does not search. Or choose a taxonomic group below.'
+                  : 'Scientific or common (English) name. Pick a genus or family for broader results.')
           }
+          size={compact ? 'small' : undefined}
+          variant={compact ? 'outlined' : undefined}
           InputProps={{
             ...params.InputProps,
             endAdornment: (
               <>
                 {loading ? (
-                  <CircularProgress color="inherit" size={20} />
+                  <CircularProgress color="inherit" size={compact ? 18 : 20} />
                 ) : null}
                 {params.InputProps.endAdornment}
               </>
