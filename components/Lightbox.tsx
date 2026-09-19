@@ -154,7 +154,7 @@ export default function Lightbox() {
       }}
       ref={containerRef}
       tabIndex={-1}
-      onClick={close}
+      onClick={() => close()}
     >
       <button
         type="button"
