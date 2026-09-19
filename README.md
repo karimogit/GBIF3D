@@ -199,7 +199,7 @@ npm run build
 npm start
 ```
 
-**Build note:** Keep `next` and related tooling (e.g. `eslint-config-next`, SWC) on matching versions when upgrading Next.js.
+**Build note:** Keep `next` and related tooling (e.g. `eslint-config-next`, SWC) on matching versions when upgrading Next.js. `package.json` pins `postcss` via npm `overrides` to a patched 8.5.x release because Next 15 still resolves an older version; drop the override once you move to a Next release that ships it natively.
 
 ### Lint and type-check
 
@@ -225,7 +225,7 @@ npm run typecheck  # tsc --noEmit
 
 The app uses:
 
-- **Occurrence search:** `GET https://api.gbif.org/v1/occurrence/search` with `geometry` (WKT polygon from view bounds), `taxonKey`, `year`, `eventDate`, `iucnRedListCategory`, `basisOfRecord`, `continent`, `country`, `datasetKey`, `institutionCode`, `limit`, etc.
+- **Occurrence search:** `GET https://api.gbif.org/v1/occurrence/search` with `geometry` (WKT polygon from view bounds), `taxonKey`, `eventDate`, `iucnRedListCategory`, `basisOfRecord`, `continent`, `country`, `datasetKey`, `institutionCode`, `limit`, etc.
 - **Species suggest:** `GET https://api.gbif.org/v1/species/suggest?q=...` for autocomplete.
 - **Places (Photon):** `/api/places/search?q=...` — server proxy to [Photon](https://photon.komoot.io/) (komoot) for place search; returns bounding boxes for the Region field. Results are cached for 60 minutes.
 - **Occurrence images:** `/api/occurrence/[key]/image` — returns image URLs for an occurrence (from GBIF cache) for the InfoBox photo strip.
@@ -243,7 +243,7 @@ The **default** base map is [OpenTopoMap](https://opentopomap.org/) (`*.tile.ope
 │   ├── layout.tsx         # Root layout, Cesium CSS, providers
 │   ├── page.tsx           # Main page shell (Suspense wrapper)
 │   ├── globals.css        # Global styles, accessibility
-│   ├── providers.tsx      # MUI ThemeProvider, service worker registration
+│   ├── providers.tsx      # MUI ThemeProvider + Emotion SSR cache, service worker registration
 │   └── api/
 │       ├── places/search/ # Photon (komoot) proxy for place search (cached 60 min)
 │       ├── species/suggest/ # GBIF species suggest proxy (CORS)
@@ -254,7 +254,7 @@ The **default** base map is [OpenTopoMap](https://opentopomap.org/) (`*.tile.ope
 │   ├── MapAppDialogs.tsx  # Export/favorite/import dialogs
 │   ├── GuidedTour.tsx     # First-run and help-triggered tour
 │   ├── OfflineBanner.tsx
-│   ├── GlobeViewer.tsx    # Fetches occurrences by bounds/filters, renders GlobeScene + legend
+│   ├── GlobeViewer.tsx    # Presentational globe wrapper: GlobeScene + legend, loading/progress/error overlays
 │   ├── GlobeViewerDynamic.tsx # Dynamic import (no SSR) for globe
 │   ├── GlobeScene.tsx     # Resium Viewer wiring (terrain, base layer, handlers)
 │   ├── globe/             # Scene handlers, occurrence layer (entities/primitives), InfoBox HTML, imagery, export helpers
@@ -266,6 +266,8 @@ The **default** base map is [OpenTopoMap](https://opentopomap.org/) (`*.tile.ope
 │   ├── ErrorBoundary.tsx  # Error boundary around globe
 │   └── Lightbox.tsx       # Photo lightbox from InfoBox
 ├── lib/
+│   ├── hooks/use-map-app-state.ts # All page state and actions (filters, region, exports, saved, share URL)
+│   ├── use-occurrences.ts # Debounced GBIF fetch for the current filters/region; progress + cancel
 │   ├── gbif.ts            # GBIF API client (occurrence search, chunked fetching, species suggest)
 │   ├── geometry.ts        # Bounds/polygons ↔ WKT (antimeridian-aware), point-in-polygon, area (ha)
 │   ├── regions.ts         # Predefined regions for Region dropdown
@@ -281,7 +283,11 @@ The **default** base map is [OpenTopoMap](https://opentopomap.org/) (`*.tile.ope
 ├── types/
 │   └── gbif.ts            # TypeScript types for GBIF responses
 ├── __tests__/
-│   └── lib/               # Unit tests for gbif, geometry, cache, regions, import, export
+│   ├── lib/               # Unit tests for gbif, geometry, cache, regions, import, export, ...
+│   ├── components/        # Testing Library tests for Cesium-free components
+│   ├── hooks/             # useMapAppState behaviour
+│   └── api/               # Route handler tests (Node environment, mocked fetch)
+├── jest.config.js / jest.setup.ts # Jest (jsdom default) + jest-dom matchers
 ├── eslint.config.mjs      # ESLint 9 flat config
 ├── next.config.js         # Security headers, Resium ESM alias, CESIUM_BASE_URL
 ├── package.json           # postinstall: link Cesium Build to public/cesium
@@ -301,6 +307,12 @@ Tests include:
 - **Cache:** TTL expiry, LRU eviction, weight budget
 - **Import:** CSV/TSV/JSON detection, DwC-A entry selection, header matching, date parsing, synthetic keys
 - **Export:** CSV formula-injection guard, region columns, GeoJSON winding and `MultiPolygon` output
+- **InfoBox HTML:** escaping of GBIF-supplied text and URLs (XSS guard)
+- **Components:** `Lightbox` (https-only image URLs, keyboard navigation, focus trap), `OccurrenceTimeline` (year/month selection, play), `IucnLegend`, `ErrorBoundary`
+- **Hooks:** `useMapAppState` timeline reset on taxon change; share-URL hydration keeps year/month
+- **API routes:** query clamping and whitelisting, upstream error mapping, per-IP rate limiting, Photon bilingual lookup and caching
+
+Component and hook tests use [Testing Library](https://testing-library.com/) under jsdom; route tests run in the Node environment (`@jest-environment node`) with a mocked `fetch`. Cesium-dependent components (`GlobeScene`, `globe/*`) are not rendered in Jest; the globe is verified manually.
 
 ## Accessibility
 

@@ -115,6 +115,11 @@ function getRegionDisplayName(
   return selectedRegionId;
 }
 
+/** Stable identity for the taxon part of a filter set (order-sensitive, like the API call). */
+function taxonSelectionKey(f: OccurrenceFilters): string {
+  return JSON.stringify([f.taxonKeys ?? null, f.taxonKey ?? null]);
+}
+
 export function useMapAppState() {
   const [filters, setFilters] = useState<OccurrenceFilters>({ limit: DEFAULT_OCCURRENCE_LIMIT });
   const [selectedRegionId, setSelectedRegionId] = useState('');
@@ -208,7 +213,9 @@ export function useMapAppState() {
     }
     return Array.from(byKey.values());
   }, [liveOccurrences, importedOccurrences, savedOccurrences]);
-  allOccurrencesRef.current = allOccurrences;
+  useEffect(() => {
+    allOccurrencesRef.current = allOccurrences;
+  }, [allOccurrences]);
 
   const displayedOccurrences = useMemo(
     () =>
@@ -252,22 +259,26 @@ export function useMapAppState() {
 
   const flyToBoundsKey = `${selectedRegionId}:${flyNonce}`;
 
-  const prevTaxonKeysRef = useRef<number[] | undefined>(filters.taxonKeys);
-  const prevTaxonKeyRef = useRef<number | undefined>(filters.taxonKey);
+  const filtersRef = useRef(filters);
   useEffect(() => {
-    const taxonChanged =
-      prevTaxonKeysRef.current !== filters.taxonKeys ||
-      prevTaxonKeyRef.current !== filters.taxonKey;
-    const hasTaxon = (filters.taxonKeys?.length ?? 0) > 0 || filters.taxonKey != null;
-    if (taxonChanged) {
-      if (hasTaxon) {
-        setSelectedYear(null);
-        setSelectedMonth(null);
-      }
-      prevTaxonKeysRef.current = filters.taxonKeys;
-      prevTaxonKeyRef.current = filters.taxonKey;
+    filtersRef.current = filters;
+  }, [filters]);
+
+  /**
+   * User-driven filter change. Resets the timeline when the taxon selection changes so a
+   * year/month picked for one species doesn't silently hide another's data. Programmatic
+   * hydration (share URL, offline snapshot) uses setFilters directly and keeps its own timeline.
+   */
+  const updateFilters = useCallback((next: OccurrenceFilters) => {
+    const prev = filtersRef.current;
+    const taxonChanged = taxonSelectionKey(prev) !== taxonSelectionKey(next);
+    const hasTaxon = (next.taxonKeys?.length ?? 0) > 0 || next.taxonKey != null;
+    if (taxonChanged && hasTaxon) {
+      setSelectedYear(null);
+      setSelectedMonth(null);
     }
-  }, [filters.taxonKeys, filters.taxonKey]);
+    setFilters(next);
+  }, []);
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -576,7 +587,7 @@ export function useMapAppState() {
 
   return {
     filters,
-    setFilters,
+    setFilters: updateFilters,
     selectedRegionId,
     setSelectedRegionId,
     favorites,

@@ -98,7 +98,9 @@ export function DrawRegionHandler({
   const draggingRef = useRef(false);
   const previewEntitiesRef = useRef<Cesium.Entity[]>([]);
   const onPreviewRef = useRef(onPreviewVerticesChange);
-  onPreviewRef.current = onPreviewVerticesChange;
+  useEffect(() => {
+    onPreviewRef.current = onPreviewVerticesChange;
+  }, [onPreviewVerticesChange]);
 
   useEffect(() => {
     if (!active) {
