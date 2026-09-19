@@ -105,7 +105,7 @@ html, body {
   font-size: 22px;
 }
 
-/* Species info box: default right side below the top bar; draggable via title bar */
+/* Species info box: default right side below the top bar; foldable via title bar */
 .cesium-infoBox {
   top: max(56px, calc(48px + env(safe-area-inset-top))) !important;
   right: max(16px, env(safe-area-inset-right)) !important;
@@ -130,14 +130,8 @@ html, body {
 }
 
 .cesium-infoBox-title {
-  cursor: grab;
   user-select: none;
-  touch-action: none;
   padding-right: 52px !important;
-}
-
-.cesium-infoBox-title:active {
-  cursor: grabbing;
 }
 
 button.gbif-infoBox-toggle {

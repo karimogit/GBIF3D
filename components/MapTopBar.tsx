@@ -614,24 +614,35 @@ export default function MapTopBar(rawProps: MapTopBarProps | MapTopBarFlatProps)
           sx={{
             display: 'flex',
             alignItems: 'center',
-            gap: 0.5,
-            flex: 1,
+            gap: 0.25,
+            flex: { xs: '1 1 auto', md: '0 1 auto' },
             minWidth: 0,
+            maxWidth: { xs: 'min(100%, 220px)', sm: 260, md: 300 },
             backgroundColor: 'rgba(255, 255, 255, 0.92)',
             borderRadius: 1,
             border: '1px solid rgba(0, 0, 0, 0.12)',
             pl: 0.5,
             pr: 0.5,
-            py: 0.25,
+            py: 0.125,
             '& .MuiOutlinedInput-root': {
               backgroundColor: 'transparent',
+              minHeight: 32,
+              py: 0,
               '& fieldset': { border: 'none' },
               '&:hover fieldset': { border: 'none' },
               '&.Mui-focused fieldset': { border: 'none', boxShadow: 'none' },
             },
+            '& .MuiInputBase-input': {
+              py: 0.375,
+              fontSize: '0.875rem',
+            },
+            '& .MuiChip-root': {
+              height: 22,
+              fontSize: '0.75rem',
+            },
           }}
         >
-          <Search sx={{ color: 'action.active', ml: 0.5, fontSize: 20, flexShrink: 0 }} />
+          <Search sx={{ color: 'action.active', ml: 0.25, fontSize: 18, flexShrink: 0 }} />
           <SpeciesSearch
             multiple
             compact
