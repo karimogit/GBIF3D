@@ -8,12 +8,14 @@ import type { Bounds, LonLat } from '@/lib/geometry';
 import { rectangleToBounds } from '@/lib/geometry';
 import {
   BOUNDS_REPORT_THROTTLE_MS,
-  LIGHTBOX_EVENT,
-  LIGHTBOX_PHOTO_CLASS,
-  SAVE_BUTTON_CLASS,
-  SAVE_OCCURRENCE_EVENT,
   SELECTED_INFO_ENTITY_ID,
 } from './constants';
+import {
+  dispatchLightboxFromPhoto,
+  dispatchSaveFromButton,
+  eventTargetElement,
+  findInfoBoxInteractiveTarget,
+} from './info-box-actions';
 import {
   DEFAULT_BASE_MAP,
   type BaseMapType,
@@ -258,36 +260,11 @@ export function OccurrenceSpeciesLoader({
   return null;
 }
 
-function dispatchLightboxFromPhoto(photo: Element): boolean {
-  const el = photo as HTMLElement;
-  const img = photo instanceof HTMLImageElement ? photo : photo.querySelector('img');
-  const fullUrl = el.dataset?.fullurl ?? img?.src ?? '';
-  if (!fullUrl) return false;
-  const detail: { url?: string; urls?: string[]; index?: number } = {};
-  try {
-    const allurlsRaw = el.dataset?.allurls;
-    const indexRaw = el.dataset?.index;
-    if (allurlsRaw != null && indexRaw != null) {
-      const urls = JSON.parse(allurlsRaw) as string[];
-      const index = Math.max(0, Math.min(parseInt(indexRaw, 10), urls.length - 1));
-      detail.urls = urls;
-      detail.index = index;
-    } else {
-      detail.url = fullUrl;
-    }
-  } catch {
-    detail.url = fullUrl;
-  }
-
-  const event = new CustomEvent(LIGHTBOX_EVENT, { detail });
-  window.dispatchEvent(event);
-  if (window.top != null && window.top !== window) {
-    window.top.dispatchEvent(new CustomEvent(LIGHTBOX_EVENT, { detail }));
-  }
-  return true;
-}
-
-/** Ensures links in the InfoBox popup open correctly (sandboxed iframe can block them). Handles photo tap/click for lightbox. */
+/**
+ * Cesium InfoBox injects description HTML into a sandboxed iframe. Parent-page listeners on
+ * the iframe document/body receive clicks (inline scripts are blocked). Cesium only rewrites
+ * the description div's innerHTML after the first load — body listeners survive entity changes.
+ */
 export function InfoBoxLinkFix() {
   const cesium = useCesium();
   useEffect(() => {
@@ -296,11 +273,13 @@ export function InfoBoxLinkFix() {
 
     let cancelled = false;
     let rafId = 0;
+    let retryTimer: ReturnType<typeof setTimeout> | undefined;
     let detachFrame: (() => void) | undefined;
 
     const attachToFrame = (frame: HTMLIFrameElement) => {
       let lastPhotoOpenAt = 0;
-      let activeDoc: Document | null = null;
+      let lastSaveAt = 0;
+      let boundRoot: Document | HTMLElement | null = null;
 
       const openPhoto = (photo: Element): boolean => {
         const now = Date.now();
@@ -310,72 +289,94 @@ export function InfoBoxLinkFix() {
         return true;
       };
 
-      const handleClick = (e: MouseEvent) => {
-        const target = e.target as Element | null;
-        if (!target?.closest) return;
-        const photo = target.closest(`.${LIGHTBOX_PHOTO_CLASS}`);
+      const saveOccurrence = (button: Element): boolean => {
+        const now = Date.now();
+        if (now - lastSaveAt < 450) return false;
+        if (!dispatchSaveFromButton(button)) return false;
+        lastSaveAt = now;
+        return true;
+      };
+
+      const handleInteractiveEvent = (e: Event) => {
+        const target = eventTargetElement(e.target);
+        if (!target) return;
+        const { photo, saveBtn, link } = findInfoBoxInteractiveTarget(target);
         if (photo) {
           e.preventDefault();
           e.stopPropagation();
           openPhoto(photo);
           return;
         }
-        const saveBtn = target.closest(`.${SAVE_BUTTON_CLASS}`);
         if (saveBtn) {
           e.preventDefault();
           e.stopPropagation();
-          const key = parseInt((saveBtn as HTMLElement).dataset?.key ?? '', 10);
-          const action = (saveBtn as HTMLElement).dataset?.action as 'add' | 'remove' | undefined;
-          if (Number.isInteger(key) && (action === 'add' || action === 'remove')) {
-            (window.top ?? window).dispatchEvent(
-              new CustomEvent(SAVE_OCCURRENCE_EVENT, { detail: { key, action } })
-            );
-          }
+          saveOccurrence(saveBtn);
           return;
         }
-        const a = target.closest('a');
-        if (!a || !a.href) return;
-        e.preventDefault();
-        e.stopPropagation();
-        (window.top ?? window).open(a.href, '_blank', 'noopener,noreferrer');
-      };
-
-      // iOS / some Android WebViews often skip a reliable click for iframe controls;
-      // touchend opens the lightbox immediately on tap.
-      const handleTouchEnd = (e: TouchEvent) => {
-        const target = e.target as Element | null;
-        if (!target?.closest) return;
-        const photo = target.closest(`.${LIGHTBOX_PHOTO_CLASS}`);
-        if (!photo) return;
-        e.preventDefault();
-        e.stopPropagation();
-        openPhoto(photo);
-      };
-
-      const bindDocument = (doc: Document) => {
-        if (activeDoc && activeDoc !== doc) {
-          activeDoc.removeEventListener('click', handleClick);
-          activeDoc.removeEventListener('touchend', handleTouchEnd);
+        // Links: only on click (touch synthesizes click; avoid double-open).
+        if (e.type === 'click' && link?.href) {
+          e.preventDefault();
+          e.stopPropagation();
+          try {
+            (window.top ?? window).open(link.href, '_blank', 'noopener,noreferrer');
+          } catch {
+            window.open(link.href, '_blank', 'noopener,noreferrer');
+          }
         }
-        activeDoc = doc;
-        doc.addEventListener('click', handleClick);
-        doc.addEventListener('touchend', handleTouchEnd, { passive: false });
+      };
+
+      const unbind = () => {
+        if (!boundRoot) return;
+        boundRoot.removeEventListener('click', handleInteractiveEvent, true);
+        boundRoot.removeEventListener('touchend', handleInteractiveEvent, true);
+        boundRoot = null;
+      };
+
+      const bindRoot = (root: Document | HTMLElement) => {
+        if (boundRoot === root) return;
+        unbind();
+        boundRoot = root;
+        // Capture phase so we run even if something inside the description stops bubbling.
+        root.addEventListener('click', handleInteractiveEvent, true);
+        // iOS / some WebViews skip a reliable click inside sandboxed iframes.
+        root.addEventListener('touchend', handleInteractiveEvent, { capture: true, passive: false });
+      };
+
+      const tryBind = (): boolean => {
+        let doc: Document | null = null;
+        try {
+          doc = frame.contentDocument;
+        } catch {
+          return false;
+        }
+        if (!doc?.body) return false;
+        // Prefer body (Cesium's recommended target); fall back to document.
+        bindRoot(doc.body);
+        return true;
       };
 
       const onLoad = () => {
-        const doc = frame.contentDocument;
-        if (doc) bindDocument(doc);
+        tryBind();
       };
 
       frame.addEventListener('load', onLoad);
-      if (frame.contentDocument?.body) onLoad();
+      // Cesium sets src=about:blank after registering its own load handler. If that load already
+      // fired before we attached, bind immediately; otherwise wait for load.
+      if (!tryBind()) {
+        // Frame exists but document not ready yet — retry briefly.
+        let attempts = 0;
+        const poll = () => {
+          if (cancelled) return;
+          if (tryBind() || attempts++ > 60) return;
+          retryTimer = setTimeout(poll, 50);
+        };
+        poll();
+      }
 
       return () => {
         frame.removeEventListener('load', onLoad);
-        if (activeDoc) {
-          activeDoc.removeEventListener('click', handleClick);
-          activeDoc.removeEventListener('touchend', handleTouchEnd);
-        }
+        if (retryTimer) clearTimeout(retryTimer);
+        unbind();
       };
     };
 
@@ -395,6 +396,7 @@ export function InfoBoxLinkFix() {
     return () => {
       cancelled = true;
       cancelAnimationFrame(rafId);
+      if (retryTimer) clearTimeout(retryTimer);
       detachFrame?.();
     };
   }, [cesium?.viewer]);

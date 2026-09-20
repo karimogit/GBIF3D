@@ -283,14 +283,13 @@ export function useMapAppState() {
   useEffect(() => {
     const handler = (e: Event) => {
       const { key, action } = (e as CustomEvent<{ key: number; action: 'add' | 'remove' }>).detail ?? {};
-      if (!Number.isInteger(key) || !action) return;
+      if (!Number.isInteger(key) || (action !== 'add' && action !== 'remove')) return;
       if (action === 'add') {
         const occ = allOccurrencesRef.current.find((o) => o.key === key);
-        if (occ) {
-          const ok = addSavedOccurrence(occ);
-          if (!ok) setSavedOccurrenceLimitHit(true);
-          setSavedOccurrences(getSavedOccurrences());
-        }
+        if (!occ) return;
+        const ok = addSavedOccurrence(occ);
+        if (!ok) setSavedOccurrenceLimitHit(true);
+        setSavedOccurrences(getSavedOccurrences());
       } else {
         removeSavedOccurrence(key);
         setSavedOccurrences(getSavedOccurrences());

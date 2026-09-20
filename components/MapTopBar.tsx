@@ -785,7 +785,7 @@ export default function MapTopBar(rawProps: MapTopBarProps | MapTopBarFlatProps)
               flex: 1,
               minWidth: 0,
               backgroundColor: speciesMenuActive
-                ? 'rgba(76, 175, 80, 0.12)'
+                ? 'rgba(232, 245, 233, 0.98)'
                 : 'rgba(255, 255, 255, 0.92)',
               borderRadius: 1,
               border: '1px solid',
@@ -793,6 +793,11 @@ export default function MapTopBar(rawProps: MapTopBarProps | MapTopBarFlatProps)
               pl: 0.5,
               pr: 0.25,
               py: 0.125,
+              '& .MuiAutocomplete-root': {
+                flex: 1,
+                minWidth: 0,
+                backgroundColor: 'transparent',
+              },
               '& .MuiOutlinedInput-root': {
                 backgroundColor: 'transparent',
                 minHeight: 32,
