@@ -781,7 +781,7 @@ export default function MapTopBar(rawProps: MapTopBarProps | MapTopBarFlatProps)
             sx={{
               display: 'flex',
               alignItems: 'center',
-              gap: 0.25,
+              gap: 0,
               flex: 1,
               minWidth: 0,
               backgroundColor: speciesMenuActive
@@ -791,7 +791,7 @@ export default function MapTopBar(rawProps: MapTopBarProps | MapTopBarFlatProps)
               border: '1px solid',
               borderColor: speciesMenuActive ? 'success.main' : 'rgba(0, 0, 0, 0.12)',
               pl: 0.5,
-              pr: 0.25,
+              pr: 0,
               py: 0.125,
               '& .MuiOutlinedInput-root': {
                 backgroundColor: 'transparent',
@@ -812,14 +812,17 @@ export default function MapTopBar(rawProps: MapTopBarProps | MapTopBarFlatProps)
             }}
           >
             <Search sx={{ color: 'action.active', ml: 0.25, fontSize: 18, flexShrink: 0 }} />
-            <SpeciesSearch
-              multiple
-              compact
-              value={selectedSpecies}
-              onChange={handleSpeciesChange}
-              id="topbar-species-search"
-              placeholder="Search species…"
-            />
+            <Box sx={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
+              <SpeciesSearch
+                multiple
+                compact
+                value={selectedSpecies}
+                onChange={handleSpeciesChange}
+                id="topbar-species-search"
+                placeholder="Search species…"
+              />
+            </Box>
+            <Divider orientation="vertical" flexItem sx={{ my: 0.5, borderColor: 'rgba(0,0,0,0.12)' }} />
             <Tooltip title={speciesMenuActive ? 'Species & filters (active)' : 'Species & filters'}>
               <IconButton
                 size="small"
@@ -837,11 +840,14 @@ export default function MapTopBar(rawProps: MapTopBarProps | MapTopBarFlatProps)
                 sx={{
                   flexShrink: 0,
                   position: 'relative',
-                  zIndex: 1,
-                  p: 0.25,
-                  minWidth: 32,
-                  minHeight: 32,
+                  zIndex: 2,
+                  borderRadius: 0,
+                  px: 0.5,
+                  py: 0.25,
+                  minWidth: 36,
+                  minHeight: 36,
                   color: speciesMenuActive ? 'success.dark' : 'text.secondary',
+                  '&:hover': { backgroundColor: 'rgba(0, 0, 0, 0.04)' },
                 }}
               >
                 <ArrowDropDown fontSize="small" />
