@@ -824,6 +824,7 @@ export default function MapTopBar(rawProps: MapTopBarProps | MapTopBarFlatProps)
               <IconButton
                 size="small"
                 onClick={(e) => {
+                  e.stopPropagation();
                   if (speciesMenuOpen) {
                     closeSpeciesMenu();
                   } else {
@@ -835,7 +836,11 @@ export default function MapTopBar(rawProps: MapTopBarProps | MapTopBarFlatProps)
                 aria-expanded={speciesMenuOpen}
                 sx={{
                   flexShrink: 0,
+                  position: 'relative',
+                  zIndex: 1,
                   p: 0.25,
+                  minWidth: 32,
+                  minHeight: 32,
                   color: speciesMenuActive ? 'success.dark' : 'text.secondary',
                 }}
               >
