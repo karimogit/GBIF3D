@@ -124,6 +124,7 @@ export default function SpeciesSearch({
       getOptionKey={(o) => o.key}
       isOptionEqualToValue={(a, b) => a.key === b.key}
       loading={loading}
+      forcePopupIcon={!compact}
       size={compact ? 'small' : undefined}
       sx={compact ? { flex: 1, minWidth: 0, width: '100%' } : undefined}
       renderInput={(params) => (
@@ -137,7 +138,7 @@ export default function SpeciesSearch({
               ? error ?? undefined
               : error ??
                 ((multiple ? (valueArray?.length ?? 0) : valueSingle ? 1 : 0) === 0
-                  ? 'Pick a species from the list — typing alone does not search. Or choose a taxonomic group in species options.'
+                  ? 'Pick a species from the list — typing alone does not search. Or open the menu for a taxonomic group and filters.'
                   : 'Scientific or common (English) name. Pick a genus or family for broader results.')
           }
           size={compact ? 'small' : undefined}
