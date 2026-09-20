@@ -12,10 +12,8 @@ import MenuItem from '@mui/material/MenuItem';
 import ListSubheader from '@mui/material/ListSubheader';
 import ListItemIcon from '@mui/material/ListItemIcon';
 import ListItemText from '@mui/material/ListItemText';
-import FilterList from '@mui/icons-material/FilterList';
 import Search from '@mui/icons-material/Search';
 import PlaceOutlined from '@mui/icons-material/PlaceOutlined';
-import CategoryOutlined from '@mui/icons-material/CategoryOutlined';
 import Download from '@mui/icons-material/Download';
 import SpeciesSearch, { type SpeciesOption } from './SpeciesSearch';
 import type { SelectedSpeciesOption } from '@/types/gbif';
@@ -128,23 +126,21 @@ export default function MapTopBar(rawProps: MapTopBarProps | MapTopBarFlatProps)
   const [placeQuery, setPlaceQuery] = useState('');
   const [placeResults, setPlaceResults] = useState<RegionOption[]>([]);
   const [placeLoading, setPlaceLoading] = useState(false);
-  const [filterOpen, setFilterOpen] = useState(false);
-  const [filterAnchor, setFilterAnchor] = useState<null | HTMLElement>(null);
+  const [speciesMenuOpen, setSpeciesMenuOpen] = useState(false);
+  const [speciesMenuAnchor, setSpeciesMenuAnchor] = useState<null | HTMLElement>(null);
   const [locationOpen, setLocationOpen] = useState(false);
   const [locationAnchor, setLocationAnchor] = useState<null | HTMLElement>(null);
-  const [speciesOpen, setSpeciesOpen] = useState(false);
-  const [speciesAnchor, setSpeciesAnchor] = useState<null | HTMLElement>(null);
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
-  const openFilters = useCallback((anchor?: HTMLElement | null) => {
-    if (anchor) setFilterAnchor(anchor);
-    setFilterOpen(true);
+  const openSpeciesMenu = useCallback((anchor?: HTMLElement | null) => {
+    if (anchor) setSpeciesMenuAnchor(anchor);
+    setSpeciesMenuOpen(true);
   }, []);
 
-  const closeFilters = useCallback(() => {
-    setFilterOpen(false);
-    setFilterAnchor(null);
+  const closeSpeciesMenu = useCallback(() => {
+    setSpeciesMenuOpen(false);
+    setSpeciesMenuAnchor(null);
   }, []);
 
   const openLocation = useCallback((anchor?: HTMLElement | null) => {
@@ -155,11 +151,6 @@ export default function MapTopBar(rawProps: MapTopBarProps | MapTopBarFlatProps)
   const closeLocation = useCallback(() => {
     setLocationOpen(false);
     setLocationAnchor(null);
-  }, []);
-
-  const closeSpeciesOptions = useCallback(() => {
-    setSpeciesOpen(false);
-    setSpeciesAnchor(null);
   }, []);
   const [exportMenuAnchor, setExportMenuAnchor] = useState<null | HTMLElement>(null);
   const [exportDialogFormat, setExportDialogFormat] = useState<ExportDataFormat | null>(null);
@@ -178,7 +169,16 @@ export default function MapTopBar(rawProps: MapTopBarProps | MapTopBarFlatProps)
   const moreButtonAnchorRef = useRef<HTMLElement | null>(null);
 
   const selectedSpecies: SpeciesOption[] = filters.selectedSpeciesOptions ?? EMPTY_SPECIES_OPTIONS;
-  const speciesActive = selectedSpecies.length > 0 || filters.taxonKey != null;
+  const filterFieldsActive =
+    Boolean(filters.eventDate) ||
+    Boolean(filters.iucnRedListCategory) ||
+    Boolean(filters.basisOfRecord) ||
+    Boolean(filters.continent) ||
+    Boolean(filters.country) ||
+    Boolean(filters.datasetKey) ||
+    Boolean(filters.institutionCode);
+  const speciesMenuActive =
+    selectedSpecies.length > 0 || filters.taxonKey != null || filterFieldsActive;
 
   const handleSpeciesChange = useCallback(
     (options: SpeciesOption[] | SpeciesOption | null) => {
@@ -416,14 +416,6 @@ export default function MapTopBar(rawProps: MapTopBarProps | MapTopBarFlatProps)
   };
 
   const toolbarActions = useMemo((): ToolbarAction[] => {
-    const filterActive =
-      Boolean(filters.eventDate) ||
-      Boolean(filters.iucnRedListCategory) ||
-      Boolean(filters.basisOfRecord) ||
-      Boolean(filters.continent) ||
-      Boolean(filters.country) ||
-      Boolean(filters.datasetKey) ||
-      Boolean(filters.institutionCode);
     return [
       {
         id: 'location',
@@ -437,19 +429,6 @@ export default function MapTopBar(rawProps: MapTopBarProps | MapTopBarFlatProps)
         expanded: locationOpen,
         selected: locationOpen,
         onActivate: (anchor) => openLocation(anchor),
-      },
-      {
-        id: 'filters',
-        label: `Filters${filterActive ? ' • active' : ''}`,
-        menuLabel: 'Filters',
-        ariaLabel: 'Filters',
-        icon: <FilterList fontSize="small" />,
-        endIcon: <ArrowDropDown />,
-        visible: true,
-        desktopVariant: 'button',
-        expanded: filterOpen,
-        selected: filterOpen,
-        onActivate: (anchor) => openFilters(anchor),
       },
       {
         id: 'saved-regions',
@@ -548,15 +527,6 @@ export default function MapTopBar(rawProps: MapTopBarProps | MapTopBarFlatProps)
     locationLabel,
     locationOpen,
     openLocation,
-    filters.eventDate,
-    filters.iucnRedListCategory,
-    filters.basisOfRecord,
-    filters.continent,
-    filters.country,
-    filters.datasetKey,
-    filters.institutionCode,
-    filterOpen,
-    openFilters,
     favorites.length,
     onRemoveFavorite,
     savedMenuAnchor,
@@ -814,11 +784,14 @@ export default function MapTopBar(rawProps: MapTopBarProps | MapTopBarFlatProps)
               gap: 0.25,
               flex: 1,
               minWidth: 0,
-              backgroundColor: 'rgba(255, 255, 255, 0.92)',
+              backgroundColor: speciesMenuActive
+                ? 'rgba(76, 175, 80, 0.12)'
+                : 'rgba(255, 255, 255, 0.92)',
               borderRadius: 1,
-              border: '1px solid rgba(0, 0, 0, 0.12)',
+              border: '1px solid',
+              borderColor: speciesMenuActive ? 'success.main' : 'rgba(0, 0, 0, 0.12)',
               pl: 0.5,
-              pr: 0.5,
+              pr: 0.25,
               py: 0.125,
               '& .MuiOutlinedInput-root': {
                 backgroundColor: 'transparent',
@@ -847,29 +820,29 @@ export default function MapTopBar(rawProps: MapTopBarProps | MapTopBarFlatProps)
               id="topbar-species-search"
               placeholder="Search species…"
             />
+            <Tooltip title={speciesMenuActive ? 'Species & filters (active)' : 'Species & filters'}>
+              <IconButton
+                size="small"
+                onClick={(e) => {
+                  if (speciesMenuOpen) {
+                    closeSpeciesMenu();
+                  } else {
+                    openSpeciesMenu(e.currentTarget);
+                  }
+                }}
+                aria-label="Species and filters"
+                aria-haspopup="true"
+                aria-expanded={speciesMenuOpen}
+                sx={{
+                  flexShrink: 0,
+                  p: 0.25,
+                  color: speciesMenuActive ? 'success.dark' : 'text.secondary',
+                }}
+              >
+                <ArrowDropDown fontSize="small" />
+              </IconButton>
+            </Tooltip>
           </Box>
-          <Tooltip title={speciesActive ? 'Species options (active)' : 'Species options'}>
-            <IconButton
-              size="small"
-              onClick={(e) => {
-                setSpeciesAnchor(e.currentTarget);
-                setSpeciesOpen(true);
-              }}
-              aria-label="Species options"
-              aria-haspopup="true"
-              aria-expanded={speciesOpen}
-              sx={{
-                flexShrink: 0,
-                backgroundColor: speciesActive ? 'rgba(76, 175, 80, 0.18)' : 'rgba(255, 255, 255, 0.92)',
-                border: '1px solid',
-                borderColor: speciesActive ? 'success.main' : 'rgba(0, 0, 0, 0.12)',
-                borderRadius: 1,
-                color: speciesActive ? 'success.dark' : 'text.primary',
-              }}
-            >
-              <CategoryOutlined fontSize="small" />
-            </IconButton>
-          </Tooltip>
         </Box>
         {drawRegionMode && onCancelDrawRegion && (
           <Box
@@ -1143,24 +1116,32 @@ export default function MapTopBar(rawProps: MapTopBarProps | MapTopBarFlatProps)
       </Popover>
 
       <Dialog
-        open={speciesOpen && isMobile}
-        onClose={closeSpeciesOptions}
+        open={speciesMenuOpen && isMobile}
+        onClose={closeSpeciesMenu}
         fullWidth
         maxWidth="sm"
-        PaperProps={{ sx: { borderRadius: 2, m: 1, maxWidth: 'min(360px, calc(100vw - 16px))' } }}
+        PaperProps={{ sx: { borderRadius: 2, m: 1, maxWidth: 'min(420px, calc(100vw - 16px))' } }}
       >
-        <DialogTitle>Species</DialogTitle>
+        <DialogTitle>Species & filters</DialogTitle>
         <DialogContent dividers>
+          <Typography variant="subtitle2" sx={{ mb: 1 }}>
+            Species
+          </Typography>
           <SpeciesForm filters={filters} onFiltersChange={onFiltersChange} />
+          <Divider sx={{ my: 2 }} />
+          <Typography variant="subtitle2" sx={{ mb: 1 }}>
+            Filters
+          </Typography>
+          <FilterForm filters={filters} onFiltersChange={onFiltersChange} />
         </DialogContent>
         <DialogActions>
-          <Button onClick={closeSpeciesOptions}>Done</Button>
+          <Button onClick={closeSpeciesMenu}>Done</Button>
         </DialogActions>
       </Dialog>
       <Popover
-        open={speciesOpen && !isMobile && Boolean(speciesAnchor)}
-        anchorEl={speciesAnchor}
-        onClose={closeSpeciesOptions}
+        open={speciesMenuOpen && !isMobile && Boolean(speciesMenuAnchor)}
+        anchorEl={speciesMenuAnchor}
+        onClose={closeSpeciesMenu}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
         transformOrigin={{ vertical: 'top', horizontal: 'left' }}
         slotProps={{
@@ -1169,7 +1150,9 @@ export default function MapTopBar(rawProps: MapTopBarProps | MapTopBarFlatProps)
               borderRadius: 2,
               mt: 1,
               p: 2,
-              maxWidth: 'min(360px, calc(100vw - 24px))',
+              maxHeight: 'min(85vh, 560px)',
+              maxWidth: 'min(420px, calc(100vw - 24px))',
+              overflow: 'auto',
             },
           },
         }}
@@ -1178,42 +1161,10 @@ export default function MapTopBar(rawProps: MapTopBarProps | MapTopBarFlatProps)
           Species
         </Typography>
         <SpeciesForm filters={filters} onFiltersChange={onFiltersChange} />
-      </Popover>
-
-      <Dialog
-        open={filterOpen && isMobile}
-        onClose={closeFilters}
-        fullWidth
-        maxWidth="sm"
-        PaperProps={{ sx: { borderRadius: 2, m: 1, maxWidth: 'min(420px, calc(100vw - 16px))' } }}
-      >
-        <DialogTitle>Filters</DialogTitle>
-        <DialogContent dividers>
-          <FilterForm filters={filters} onFiltersChange={onFiltersChange} />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={closeFilters}>Done</Button>
-        </DialogActions>
-      </Dialog>
-      <Popover
-        open={filterOpen && !isMobile && Boolean(filterAnchor)}
-        anchorEl={filterAnchor}
-        onClose={closeFilters}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
-        transformOrigin={{ vertical: 'top', horizontal: 'left' }}
-        slotProps={{
-          paper: {
-            sx: {
-              borderRadius: 2,
-              mt: 2,
-              p: 2,
-              maxHeight: 'min(85vh, 520px)',
-              maxWidth: 'min(420px, calc(100vw - 24px))',
-              overflow: 'auto',
-            },
-          },
-        }}
-      >
+        <Divider sx={{ my: 2 }} />
+        <Typography variant="subtitle2" sx={{ mb: 1 }}>
+          Filters
+        </Typography>
         <FilterForm filters={filters} onFiltersChange={onFiltersChange} />
       </Popover>
 

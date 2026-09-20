@@ -10,7 +10,7 @@ export const TOUR_STEPS = [
   {
     target: '[data-tour="species"]',
     title: 'Search for a species',
-    body: 'Type a scientific or common name in the top bar, or tap the species options icon for a taxonomic group.',
+    body: 'Type a scientific or common name in the top bar, or open the down arrow for taxonomic group and filters.',
   },
   {
     target: '[data-tour="region"]',

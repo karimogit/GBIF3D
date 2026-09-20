@@ -17,16 +17,16 @@ Built with Next.js, Cesium (Resium), and the GBIF API.
 ## Features
 
 - **3D interactive globe** — Pan, zoom, tilt, and rotate using CesiumJS
-- **Species search** — Top-bar species box: search by scientific or common name (autocomplete) and select one or more taxa
-- **Region / location** — Location icon in the top bar: choose World or a continent, search places by name (Photon / komoot), or pick a saved favorite. With no region selected, camera bounds at filter-apply time are used; panning alone does not refetch
+- **Species search** — Top-bar species box: search by scientific or common name (autocomplete) and select one or more taxa; open the down arrow for taxonomic group and filters
+- **Region / location** — Location in the top bar: choose World or a continent, search places by name (Photon / komoot), or pick a saved favorite. With no region selected, camera bounds at filter-apply time are used; panning alone does not refetch
 - **Draw region** — From the location popover: draw a **polygon** (click points, Done to finish), **rectangle**, or **circle** on the globe and fetch occurrences for that area; area size is shown in hectares (ha) while drawing and on the selected region. Save it as a favorite or clear it. Regions crossing the antimeridian are handled (sent to GBIF as a `MULTIPOLYGON`)
 - **Keyboard navigation** — Arrow keys (and WASD when not flying) pan the map; Page Up/Down zoom
 - **Fly mode** — Airplane control (bottom right): free-look flight with WASD / Q·E / mouse look — great with Photorealistic 3D; Esc exits
 - **Saved favorites** — Save a drawn polygon (or region bounds) as a named favorite (stored in browser); quick access from the location popover
 - **GBIF data** — Occurrences fetched for the selected region (or camera bounds when filters are applied), plus filters
 - **Import your own data** — Load GBIF-style CSV/TSV, JSON, or a Darwin Core Archive (`.zip`) and explore it on the globe alongside live API results and saved occurrences
-- **Species filters** — Additional filters panel: taxonomic group, date range, IUCN Red List status; advanced: Basis of Record, Continent, Country (ISO 2-letter code), Dataset key, Institution code
-- **Filter presets** — Save and reload named filter combinations from the Filters panel (stored in browser)
+- **Species & filters** — From the species search down arrow: taxonomic group, date range, IUCN Red List status; advanced: Basis of Record, Continent, Country (ISO 2-letter code), Dataset key, Institution code
+- **Filter presets** — Save and reload named filter combinations from the species & filters menu (stored in browser)
 - **Shareable URLs** — Use the share icon (bottom-right) to copy a link that restores region, filters, timeline year/month, and view options (place search bounds are encoded in the URL)
 - **Timeline animation** — Press Play on the timeline to step through months (~700 ms per month)
 - **Guided tour** — First visit shows a short walkthrough; reopen from **Help → Take a guided tour**
@@ -96,6 +96,7 @@ Favorite regions saved only in your browser are not included in share links unle
 ### Step 1: Search for a Species
 - Use the **species box** in the top bar to search by scientific or common name (e.g., "bee", "Apis", "house cat")
 - Pick one or more taxa from the suggestions — typing alone does not search
+- Or open the **down arrow** for a taxonomic group and other filters (see Step 3)
 - Occurrences load for the selected species (within the current region or camera bounds)
 
 ### Step 2: Select a Location (Optional)
@@ -107,9 +108,8 @@ Favorite regions saved only in your browser are not included in share links unle
 - With **no region selected**, data uses the area visible on the globe **when you apply filters**. Panning alone does not refetch — re-apply a filter or pick a region.
 - Choosing a region flies the camera there and loads occurrences for that area
 
-### Step 3: More Filters
-Click **Filters** in the top bar to refine your search:
-- **Species/Taxon** — Same species search as the top bar (also available here)
+### Step 3: Species options & filters
+Open the **down arrow** on the species search bar to refine your search:
 - **Taxonomic group** — Choose a broad category (Mammals, Birds, Plants, etc.)
 - **Date range** — Enter start and end dates (YYYY-MM-DD format); dates in the future are clamped to today
 - **IUCN Red List** — Filter by threat status (Critically Endangered, Endangered, Extinct, Not Evaluated, etc.)
@@ -265,9 +265,10 @@ The **default** base map is [OpenTopoMap](https://opentopomap.org/) (`*.tile.ope
 │   ├── GlobeViewerDynamic.tsx # Dynamic import (no SSR) for globe
 │   ├── GlobeScene.tsx     # Resium Viewer wiring (terrain, base layer, handlers)
 │   ├── globe/             # Scene handlers, occurrence layer (entities/primitives), InfoBox HTML, imagery, export helpers
-│   ├── MapTopBar.tsx      # Top bar: Species search, location icon, Filters, Import, Export, View, Saved, About, Help
+│   ├── MapTopBar.tsx      # Top bar: Species search (+ filters menu), Location, Import, Export, View, Saved, About, Help
 │   ├── map-top-bar/       # Dialogs and menu contents used by MapTopBar
-│   ├── FilterForm.tsx     # Filters popover content
+│   ├── FilterForm.tsx     # Filters section of the species menu
+│   ├── SpeciesForm.tsx    # Taxonomic group section of the species menu
 │   ├── OccurrenceTimeline.tsx # Year/month timeline filter
 │   ├── SpeciesSearch.tsx  # GBIF species suggest autocomplete
 │   ├── ErrorBoundary.tsx  # Error boundary around globe
