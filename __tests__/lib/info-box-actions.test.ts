@@ -5,6 +5,7 @@ import {
   findInfoBoxInteractiveTarget,
   parseLightboxDetailFromPhoto,
   parseSaveDetailFromButton,
+  resolveInfoBoxFrameTarget,
 } from '@/components/globe/info-box-actions';
 import {
   LIGHTBOX_EVENT,
@@ -101,6 +102,36 @@ describe('info-box-actions', () => {
       btn.setAttribute('data-key', '7');
       btn.setAttribute('data-action', 'maybe');
       expect(parseSaveDetailFromButton(btn)).toBeNull();
+    });
+  });
+
+  describe('resolveInfoBoxFrameTarget', () => {
+    it('maps iframe client coordinates to the inner interactive element', () => {
+      const frame = document.createElement('iframe');
+      document.body.appendChild(frame);
+      const doc = frame.contentDocument!;
+      const photo = document.createElement('button');
+      photo.className = LIGHTBOX_PHOTO_CLASS;
+      photo.type = 'button';
+      doc.body.appendChild(photo);
+      doc.elementFromPoint = jest.fn(() => photo);
+      Object.defineProperty(frame, 'getBoundingClientRect', {
+        value: () => ({ left: 100, top: 50, width: 200, height: 80, right: 300, bottom: 130 }),
+      });
+      const target = resolveInfoBoxFrameTarget(frame, 130, 70);
+      expect(doc.elementFromPoint).toHaveBeenCalledWith(30, 20);
+      expect(target).toBe(photo);
+      document.body.removeChild(frame);
+    });
+
+    it('returns null for coordinates outside the iframe', () => {
+      const frame = document.createElement('iframe');
+      document.body.appendChild(frame);
+      Object.defineProperty(frame, 'getBoundingClientRect', {
+        value: () => ({ left: 0, top: 0, width: 100, height: 50, right: 100, bottom: 50 }),
+      });
+      expect(resolveInfoBoxFrameTarget(frame, 500, 500)).toBeNull();
+      document.body.removeChild(frame);
     });
   });
 

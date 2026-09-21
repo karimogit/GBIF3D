@@ -15,6 +15,7 @@ import {
   dispatchSaveFromButton,
   eventTargetElement,
   findInfoBoxInteractiveTarget,
+  resolveInfoBoxFrameTarget,
 } from './info-box-actions';
 import {
   DEFAULT_BASE_MAP,
@@ -297,9 +298,11 @@ export function InfoBoxLinkFix() {
         return true;
       };
 
-      const handleInteractiveEvent = (e: Event) => {
-        const target = eventTargetElement(e.target);
-        if (!target) return;
+      const handleInteractiveTarget = (
+        target: Element,
+        e: Event,
+        eventType: 'click' | 'pointer' | 'touch'
+      ) => {
         const { photo, saveBtn, link } = findInfoBoxInteractiveTarget(target);
         if (photo) {
           e.preventDefault();
@@ -314,7 +317,7 @@ export function InfoBoxLinkFix() {
           return;
         }
         // Links: only on click (touch synthesizes click; avoid double-open).
-        if (e.type === 'click' && link?.href) {
+        if (eventType === 'click' && link?.href) {
           e.preventDefault();
           e.stopPropagation();
           try {
@@ -323,6 +326,21 @@ export function InfoBoxLinkFix() {
             window.open(link.href, '_blank', 'noopener,noreferrer');
           }
         }
+      };
+
+      const handleInteractiveEvent = (e: Event) => {
+        const target = eventTargetElement(e.target);
+        if (!target) return;
+        const eventType = e.type === 'click' ? 'click' : e.type === 'touchend' ? 'touch' : 'pointer';
+        handleInteractiveTarget(target, e, eventType);
+      };
+
+      /** Parent-page hit test: clicks inside the sandboxed iframe target the frame, not inner nodes. */
+      const handleFramePointer = (e: PointerEvent | MouseEvent) => {
+        const inner = resolveInfoBoxFrameTarget(frame, e.clientX, e.clientY);
+        if (!inner) return;
+        const eventType = e.type === 'click' ? 'click' : 'pointer';
+        handleInteractiveTarget(inner, e, eventType);
       };
 
       const unbind = () => {
@@ -350,8 +368,8 @@ export function InfoBoxLinkFix() {
           return false;
         }
         if (!doc?.body) return false;
-        // Prefer body (Cesium's recommended target); fall back to document.
-        bindRoot(doc.body);
+        // Prefer document capture (covers body + description); keeps working if Cesium reshapes the tree.
+        bindRoot(doc);
         return true;
       };
 
@@ -360,6 +378,8 @@ export function InfoBoxLinkFix() {
       };
 
       frame.addEventListener('load', onLoad);
+      frame.addEventListener('pointerup', handleFramePointer);
+      frame.addEventListener('click', handleFramePointer);
       // Cesium sets src=about:blank after registering its own load handler. If that load already
       // fired before we attached, bind immediately; otherwise wait for load.
       if (!tryBind()) {
@@ -375,6 +395,8 @@ export function InfoBoxLinkFix() {
 
       return () => {
         frame.removeEventListener('load', onLoad);
+        frame.removeEventListener('pointerup', handleFramePointer);
+        frame.removeEventListener('click', handleFramePointer);
         if (retryTimer) clearTimeout(retryTimer);
         unbind();
       };
