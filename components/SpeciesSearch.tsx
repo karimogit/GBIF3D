@@ -126,7 +126,7 @@ export default function SpeciesSearch({
       loading={loading}
       forcePopupIcon={!compact}
       size={compact ? 'small' : undefined}
-      sx={compact ? { flex: 1, minWidth: 0, width: '100%' } : undefined}
+      sx={compact ? { flex: 1, minWidth: 0 } : undefined}
       renderInput={(params) => (
         <TextField
           {...params}
