@@ -101,3 +101,26 @@ export function findInfoBoxInteractiveTarget(target: Element): {
     link: target.closest('a'),
   };
 }
+
+/** Map a parent-page pointer/click on the InfoBox iframe to the inner element at that point. */
+export function resolveInfoBoxFrameTarget(
+  frame: HTMLIFrameElement,
+  clientX: number,
+  clientY: number
+): Element | null {
+  let doc: Document | null = null;
+  try {
+    doc = frame.contentDocument;
+  } catch {
+    return null;
+  }
+  if (!doc) return null;
+
+  const rect = frame.getBoundingClientRect();
+  const x = clientX - rect.left;
+  const y = clientY - rect.top;
+  if (x < 0 || y < 0 || x > rect.width || y > rect.height) return null;
+
+  const el = doc.elementFromPoint(x, y);
+  return el instanceof Element ? el : null;
+}
