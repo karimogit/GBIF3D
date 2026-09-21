@@ -772,9 +772,9 @@ export default function MapTopBar(rawProps: MapTopBarProps | MapTopBarFlatProps)
             display: 'flex',
             alignItems: 'center',
             gap: 0.25,
-            flex: { xs: '1 1 auto', md: '0 1 auto' },
+            flex: { xs: '1 1 auto', md: '1 1 auto' },
             minWidth: 0,
-            maxWidth: { xs: 'min(100%, 100%)', sm: 360, md: 420 },
+            maxWidth: { xs: 'min(100%, 100%)', sm: 360, md: 560, lg: 640 },
           }}
         >
           <Box
