@@ -33,6 +33,7 @@ export async function GET(request: NextRequest) {
   try {
     const res = await fetch(`${GBIF_SPECIES_SEARCH}?${params}`, {
       headers: { Accept: 'application/json' },
+      signal: AbortSignal.timeout(10_000),
       next: { revalidate: 120 },
     });
     if (!res.ok) {

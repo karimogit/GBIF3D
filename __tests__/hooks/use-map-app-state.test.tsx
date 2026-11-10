@@ -1,5 +1,6 @@
 import { act, renderHook } from '@testing-library/react';
 import { useMapAppState } from '@/lib/hooks/use-map-app-state';
+import { addSavedOccurrence } from '@/lib/saved-occurrences';
 
 jest.mock('@/lib/gbif', () => ({
   ...jest.requireActual('@/lib/gbif'),
@@ -77,5 +78,29 @@ describe('useMapAppState timeline reset', () => {
     expect(result.current.filters.taxonKeys).toEqual([212]);
     expect(result.current.selectedYear).toBe(2015);
     expect(result.current.selectedMonth).toBe(3);
+  });
+
+  it('moves the timeline onto a saved occurrence the current year would hide', () => {
+    addSavedOccurrence({
+      key: 42,
+      decimalLatitude: 10,
+      decimalLongitude: 20,
+      year: 2012,
+      month: 4,
+    });
+    const { result } = renderHook(() => useMapAppState());
+
+    act(() => {
+      result.current.setSelectedYear(2020);
+      result.current.setSelectedMonth(1);
+    });
+    act(() => {
+      result.current.handleSelectOccurrence(42);
+    });
+
+    expect(result.current.selectedYear).toBe(2012);
+    expect(result.current.selectedMonth).toBe(4);
+    expect(result.current.selectedOccurrenceKey).toBe(42);
+    expect(result.current.displayedOccurrences.map((o) => o.key)).toContain(42);
   });
 });

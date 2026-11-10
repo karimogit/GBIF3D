@@ -6,12 +6,14 @@ import type { FavoriteRegion } from '@/lib/favorites';
 import { getFavorites, addFavorite, removeFavorite } from '@/lib/favorites';
 import type { Bounds, DrawnRegion, LonLat } from '@/lib/geometry';
 import {
+  boundsFromCoords,
   boundsToWktPolygon,
   coordsToWktPolygon,
   formatAreaHectares,
 } from '@/lib/geometry';
 import type { DrawShapeMode } from '@/lib/draw-shapes';
-import { DEFAULT_OCCURRENCE_LIMIT } from '@/lib/gbif';
+import { clampOccurrenceLimit, DEFAULT_OCCURRENCE_LIMIT } from '@/lib/gbif';
+import { occurrenceMonth, occurrenceYear } from '@/lib/occurrence-date';
 import { ION_TOKEN_CONFIGURED } from '@/lib/ion';
 import { generateOccurrencePdf } from '@/lib/pdf-export';
 import { parseOccurrencesFile } from '@/lib/import-occurrences';
@@ -154,6 +156,8 @@ export function useMapAppState() {
   const [savedOccurrenceLimitHit, setSavedOccurrenceLimitHit] = useState(false);
 
   const allOccurrencesRef = useRef<GBIFOccurrence[]>([]);
+  const selectedYearRef = useRef(selectedYear);
+  const selectedMonthRef = useRef(selectedMonth);
   const globeHandleRef = useRef<GlobeSceneHandle | null>(null);
 
   const selectedRegionBounds = getSelectedRegionBounds(
@@ -216,6 +220,25 @@ export function useMapAppState() {
   useEffect(() => {
     allOccurrencesRef.current = allOccurrences;
   }, [allOccurrences]);
+  useEffect(() => {
+    selectedYearRef.current = selectedYear;
+    selectedMonthRef.current = selectedMonth;
+  }, [selectedYear, selectedMonth]);
+
+  /** Region-filtered occurrences before the timeline year/month filter. Drives the histogram. */
+  const timelineOccurrences = useMemo(
+    () =>
+      getDisplayedOccurrences(
+        liveOccurrences,
+        importedOccurrences,
+        selectedRegionBounds,
+        null,
+        null,
+        selectedRegionPolygon,
+        savedOccurrences
+      ),
+    [liveOccurrences, importedOccurrences, selectedRegionBounds, selectedRegionPolygon, savedOccurrences]
+  );
 
   const displayedOccurrences = useMemo(
     () =>
@@ -541,6 +564,20 @@ export function useMapAppState() {
   }, []);
 
   const handleSelectOccurrence = useCallback((key: number) => {
+    const occ = allOccurrencesRef.current.find((o) => o.key === key);
+    if (occ) {
+      const year = occurrenceYear(occ);
+      const month = occurrenceMonth(occ);
+      const filterYear = selectedYearRef.current;
+      const filterMonth = selectedMonthRef.current;
+      const hiddenByTimeline =
+        filterYear != null &&
+        (year == null || year !== filterYear || (filterMonth != null && month !== filterMonth));
+      if (hiddenByTimeline) {
+        setSelectedYear(year);
+        setSelectedMonth(year != null ? month : null);
+      }
+    }
     setSelectedOccurrenceKey(key);
     setSelectedOccurrenceRequestId((id) => id + 1);
   }, []);
@@ -555,13 +592,26 @@ export function useMapAppState() {
   }, []);
 
   const hydrateFromShareUrl = useCallback((decoded: ShareUrlState) => {
-    if (decoded.selectedRegionId) setSelectedRegionId(decoded.selectedRegionId);
+    if (decoded.drawnPolygon && decoded.drawnPolygon.length >= 3) {
+      setDrawnPolygon(decoded.drawnPolygon);
+      setDrawnBounds(decoded.drawnBounds ?? boundsFromCoords(decoded.drawnPolygon));
+      setSelectedRegionId(REGION_ID_DRAWN);
+    } else if (decoded.drawnBounds) {
+      setDrawnPolygon(null);
+      setDrawnBounds(decoded.drawnBounds);
+      setSelectedRegionId(REGION_ID_DRAWN);
+    } else if (decoded.selectedRegionId && decoded.selectedRegionId !== REGION_ID_DRAWN) {
+      setSelectedRegionId(decoded.selectedRegionId);
+    }
     if (decoded.placeSearchResult) setPlaceSearchResult(decoded.placeSearchResult);
     if (decoded.filters) {
       setFilters((prev) => ({
         ...prev,
         ...decoded.filters,
-        limit: decoded.filters?.limit ?? prev.limit ?? DEFAULT_OCCURRENCE_LIMIT,
+        limit:
+          decoded.filters?.limit != null
+            ? clampOccurrenceLimit(decoded.filters.limit)
+            : prev.limit ?? DEFAULT_OCCURRENCE_LIMIT,
       }));
     }
     setSelectedYear(decoded.selectedYear ?? null);
@@ -575,13 +625,25 @@ export function useMapAppState() {
     () => ({
       selectedRegionId: selectedRegionId || undefined,
       placeSearchResult,
+      drawnPolygon: selectedRegionId === REGION_ID_DRAWN ? drawnPolygon : undefined,
+      drawnBounds: selectedRegionId === REGION_ID_DRAWN ? drawnBounds : undefined,
       filters,
       selectedYear,
       selectedMonth,
       sceneMode,
       baseMap,
     }),
-    [selectedRegionId, placeSearchResult, filters, selectedYear, selectedMonth, sceneMode, baseMap]
+    [
+      selectedRegionId,
+      placeSearchResult,
+      drawnPolygon,
+      drawnBounds,
+      filters,
+      selectedYear,
+      selectedMonth,
+      sceneMode,
+      baseMap,
+    ]
   );
 
   return {
@@ -624,6 +686,7 @@ export function useMapAppState() {
     hasTaxonFilter,
     setViewBounds,
     displayedOccurrences,
+    timelineOccurrences,
     visibleOnMapOccurrences,
     allOccurrences,
     regionDisplayName,

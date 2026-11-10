@@ -1,4 +1,4 @@
-import { occurrenceYear, occurrenceMonth } from '@/lib/occurrence-date';
+import { occurrenceYear, occurrenceMonth, normalizeEventDateRange } from '@/lib/occurrence-date';
 import type { GBIFOccurrence } from '@/types/gbif';
 
 describe('occurrence-date', () => {
@@ -41,6 +41,18 @@ describe('occurrence-date', () => {
     it('returns null for invalid month segment in eventDate', () => {
       expect(occurrenceMonth({ key: 1, eventDate: '2020-13-01' } as GBIFOccurrence)).toBeNull();
       expect(occurrenceMonth({ key: 1, eventDate: '2020-00-01' } as GBIFOccurrence)).toBeNull();
+    });
+  });
+
+  describe('normalizeEventDateRange', () => {
+    it('rejects impossible calendar dates and clamps future ends', () => {
+      expect(normalizeEventDateRange('2024-02-30/2024-03-01', '2026-11-10')).toBeUndefined();
+      expect(normalizeEventDateRange('2020-05-01/2099-01-01', '2026-11-10')).toBe(
+        '2020-05-01/2026-11-10'
+      );
+      expect(normalizeEventDateRange('2024-03-02/2024-03-01', '2026-11-10')).toBe(
+        '2024-03-01/2024-03-02'
+      );
     });
   });
 });

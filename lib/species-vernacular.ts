@@ -14,6 +14,10 @@ interface GBIFVernacularResponse {
   results?: GBIFVernacularRecord[];
 }
 
+function isAbortError(err: unknown): boolean {
+  return err instanceof Error && err.name === 'AbortError';
+}
+
 /** Prefer an English vernacular name from GBIF backbone for a taxon key. */
 export async function fetchEnglishVernacularName(taxonKey: number, signal?: AbortSignal): Promise<string | null> {
   if (!Number.isInteger(taxonKey) || taxonKey < 1) return null;
@@ -28,19 +32,19 @@ export async function fetchEnglishVernacularName(taxonKey: number, signal?: Abor
       const english = (vernacularData.results ?? []).find((v) => v.language === 'eng' && v.vernacularName?.trim());
       if (english?.vernacularName?.trim()) return english.vernacularName.trim();
     }
-  } catch {
-    // fall through to species record
+  } catch (err) {
+    if (isAbortError(err)) throw err;
+    // fall through to the species record
   }
 
-  try {
-    const speciesRes = await fetch(`${GBIF_SPECIES_URL}/${taxonKey}`, {
-      headers: { Accept: 'application/json' },
-      signal,
-    });
-    if (!speciesRes.ok) return null;
-    const species = (await speciesRes.json()) as GBIFSpeciesRecord;
-    return species.vernacularName?.trim() || null;
-  } catch {
-    return null;
+  const speciesRes = await fetch(`${GBIF_SPECIES_URL}/${taxonKey}`, {
+    headers: { Accept: 'application/json' },
+    signal,
+  });
+  if (speciesRes.status === 404) return null;
+  if (!speciesRes.ok) {
+    throw new Error(`Species lookup failed (${speciesRes.status})`);
   }
+  const species = (await speciesRes.json()) as GBIFSpeciesRecord;
+  return species.vernacularName?.trim() || null;
 }

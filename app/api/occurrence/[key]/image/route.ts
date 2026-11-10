@@ -36,6 +36,7 @@ export async function GET(
   try {
     const res = await fetch(`${GBIF_OCCURRENCE_URL}/${occurrenceKey}`, {
       headers: { Accept: 'application/json' },
+      signal: AbortSignal.timeout(10_000),
       next: { revalidate: 3600 },
     });
     if (!res.ok) {

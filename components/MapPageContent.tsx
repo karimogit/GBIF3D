@@ -128,7 +128,7 @@ export default function MapPageContent() {
           </div>
           <div data-tour="timeline" style={{ pointerEvents: 'auto' }}>
             <OccurrenceTimeline
-              occurrences={app.allOccurrences}
+              occurrences={app.timelineOccurrences}
               selectedYear={app.selectedYear}
               selectedMonth={app.selectedMonth}
               onYearChange={app.setSelectedYear}
