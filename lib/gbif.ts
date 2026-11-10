@@ -14,6 +14,7 @@ import type {
   OccurrenceFilters,
 } from '@/types/gbif';
 import { getCached, setCache, cacheKey, OCCURRENCE_CACHE_TTL_MS } from './cache';
+import { normalizeEventDateRange } from './occurrence-date';
 
 const BASE_URL = 'https://api.gbif.org/v1';
 /** GBIF occurrence search API allows max 300 records per page (see techdocs.gbif.org). */
@@ -28,6 +29,63 @@ export const OCCURRENCE_MIN_TOTAL = 100;
 export const DEFAULT_OCCURRENCE_LIMIT = 1000;
 /** Chunk size per API request — must not exceed GBIF's 300 per page. */
 const OCCURRENCE_CHUNK_SIZE = OCCURRENCE_PAGE_MAX;
+/** Cap taxon keys accepted from the UI or a share link. */
+export const MAX_TAXON_FILTERS = 40;
+
+const IUCN_CATEGORIES = new Set(['EX', 'EW', 'CR', 'EN', 'VU', 'NT', 'LC', 'DD', 'NE']);
+const BASIS_OF_RECORD = new Set([
+  'HUMAN_OBSERVATION',
+  'PRESERVED_SPECIMEN',
+  'OBSERVATION',
+  'LIVING_SPECIMEN',
+  'FOSSIL_SPECIMEN',
+  'MACHINE_OBSERVATION',
+  'MATERIAL_SAMPLE',
+]);
+const CONTINENTS = new Set([
+  'AFRICA',
+  'ANTARCTICA',
+  'ASIA',
+  'EUROPE',
+  'NORTH_AMERICA',
+  'OCEANIA',
+  'SOUTH_AMERICA',
+]);
+const DATASET_KEY = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Clamp a "Max results" value into the range the UI and chunked fetcher allow. */
+export function clampOccurrenceLimit(raw: unknown): number {
+  const n = Math.floor(Number(raw));
+  if (!Number.isFinite(n)) return DEFAULT_OCCURRENCE_LIMIT;
+  return Math.min(OCCURRENCE_MAX_TOTAL, Math.max(OCCURRENCE_MIN_TOTAL, n));
+}
+
+export function isIucnCategory(value: string): boolean {
+  return IUCN_CATEGORIES.has(value);
+}
+
+export function isBasisOfRecord(value: string): boolean {
+  return BASIS_OF_RECORD.has(value);
+}
+
+export function isContinent(value: string): boolean {
+  return CONTINENTS.has(value);
+}
+
+export function isDatasetKey(value: string): boolean {
+  return DATASET_KEY.test(value);
+}
+
+function positiveTaxonKeys(keys: number[] | undefined): number[] {
+  if (!keys?.length) return [];
+  const out: number[] = [];
+  for (const key of keys) {
+    if (!Number.isSafeInteger(key) || key < 1) continue;
+    out.push(key);
+    if (out.length >= MAX_TAXON_FILTERS) break;
+  }
+  return out;
+}
 /** Delay between chunk requests (ms) to reduce rate-limit (429) risk. */
 const CHUNK_DELAY_MS = 400;
 const REQUEST_TIMEOUT_MS = 30000;
@@ -97,37 +155,43 @@ export function serializeOccurrenceParams(
 function buildOccurrenceParams(
   filters: OccurrenceFilters
 ): Record<string, string | number | number[] | undefined> {
+  const requestedLimit = Math.floor(Number(filters.limit ?? OCCURRENCE_PAGE_DEFAULT));
+  const limit = Number.isFinite(requestedLimit)
+    ? Math.min(OCCURRENCE_PAGE_MAX, Math.max(1, requestedLimit))
+    : OCCURRENCE_PAGE_DEFAULT;
   const params: Record<string, string | number | number[] | undefined> = {
-    limit: filters.limit ?? OCCURRENCE_PAGE_DEFAULT,
+    limit,
     offset: filters.offset ?? 0,
   };
   if (filters.geometry) params.geometry = filters.geometry;
-  if (filters.taxonKeys?.length) {
-    params.taxonKey = filters.taxonKeys;
-  } else if (filters.taxonKey) {
+  const taxonKeys = positiveTaxonKeys(filters.taxonKeys);
+  if (taxonKeys.length) {
+    params.taxonKey = taxonKeys;
+  } else if (Number.isSafeInteger(filters.taxonKey) && (filters.taxonKey as number) > 0) {
     params.taxonKey = filters.taxonKey;
   }
   // GBIF occurrence search API expects date range with COMMA (see techdocs "Searching dates")
   const rawDate = filters.eventDate && String(filters.eventDate).trim();
   if (rawDate) {
-    const normalized = rawDate.replace(',', '/');
-    const [from, to] = normalized.split('/').map((s) => s?.trim() ?? '');
-    const isoDate = /^\d{4}-\d{2}-\d{2}$/;
-    if (from && to && isoDate.test(from) && isoDate.test(to) && from <= to) {
-      const fromDate = new Date(from + 'T00:00:00Z');
-      const toDate = new Date(to + 'T00:00:00Z');
-      if (!isNaN(fromDate.getTime()) && !isNaN(toDate.getTime()) && fromDate <= toDate) {
-        params.eventDate = `${from},${to}`;
-      }
+    const normalized = normalizeEventDateRange(rawDate);
+    if (normalized) {
+      const [from, to] = normalized.split('/');
+      params.eventDate = `${from},${to}`;
     }
   }
-  if (filters.iucnRedListCategory) params.iucnRedListCategory = filters.iucnRedListCategory;
-  if (filters.basisOfRecord) params.basisOfRecord = filters.basisOfRecord;
-  if (filters.continent?.trim()) params.continent = filters.continent.trim().toUpperCase();
+  if (filters.iucnRedListCategory && isIucnCategory(filters.iucnRedListCategory)) {
+    params.iucnRedListCategory = filters.iucnRedListCategory;
+  }
+  if (filters.basisOfRecord && isBasisOfRecord(filters.basisOfRecord)) {
+    params.basisOfRecord = filters.basisOfRecord;
+  }
+  const continent = filters.continent?.trim().toUpperCase();
+  if (continent && isContinent(continent)) params.continent = continent;
   const countryVal = filters.country?.trim().toUpperCase();
   if (countryVal && /^[A-Z]{2}$/.test(countryVal)) params.country = countryVal;
-  if (filters.datasetKey) params.datasetKey = filters.datasetKey;
-  if (filters.institutionCode) params.institutionCode = filters.institutionCode;
+  if (filters.datasetKey && isDatasetKey(filters.datasetKey)) params.datasetKey = filters.datasetKey;
+  const institution = filters.institutionCode?.trim();
+  if (institution && /^[A-Za-z0-9._-]{1,64}$/.test(institution)) params.institutionCode = institution;
   return params;
 }
 
@@ -251,6 +315,7 @@ export async function searchOccurrencesChunked(
 
   const totalChunks = Math.ceil(maxTotal / OCCURRENCE_CHUNK_SIZE);
   const allResults: GBIFOccurrence[] = [];
+  const seenKeys = new Set<number>();
   let totalCount = 0;
   let endOfRecords = false;
   let offset = 0;
@@ -263,7 +328,13 @@ export async function searchOccurrencesChunked(
       { ...filters, limit, offset },
       { signal: options.signal, skipCacheWrite: true }
     );
-    for (const r of res.results) allResults.push(r);
+    let added = 0;
+    for (const r of res.results) {
+      if (seenKeys.has(r.key)) continue;
+      seenKeys.add(r.key);
+      allResults.push(r);
+      added += 1;
+    }
     totalCount = res.count;
     endOfRecords = res.endOfRecords;
     loadedChunks += 1;
@@ -273,7 +344,7 @@ export async function searchOccurrencesChunked(
       loadedRecords: allResults.length,
       maxRecords: maxTotal,
     });
-    if (res.results.length < limit || endOfRecords) break;
+    if (added === 0 || res.results.length < limit || endOfRecords) break;
     offset += limit;
     if (offset < maxTotal) await delay(CHUNK_DELAY_MS, options.signal);
   }

@@ -23,7 +23,7 @@ export async function GET(
   if (cached) return NextResponse.json(cached);
 
   try {
-    const vernacularName = await fetchEnglishVernacularName(taxonKey);
+    const vernacularName = await fetchEnglishVernacularName(taxonKey, AbortSignal.timeout(10_000));
     const payload = { vernacularName };
     setCache(cacheId, payload, RESULT_TTL_MS);
     return NextResponse.json(payload);

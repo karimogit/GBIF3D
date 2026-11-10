@@ -88,6 +88,24 @@ describe('searchOccurrencesChunked', () => {
     expect(res.endOfRecords).toBe(true);
   });
 
+  it('drops duplicate occurrence keys across chunks', async () => {
+    const first = Array.from({ length: 300 }, (_, i) => ({ key: i + 1 }));
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(page(first, { offset: 0, count: 600 })))
+      .mockResolvedValueOnce(jsonResponse(page(first, { offset: 300, count: 600 })));
+
+    const promise = searchOccurrencesChunked({
+      geometry: 'POLYGON((0 0,1 0,1 1,0 1,0 0))',
+      limit: 600,
+    });
+    await jest.runAllTimersAsync();
+    const res = await promise;
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(res.results).toHaveLength(300);
+    expect(new Set(res.results.map((row) => row.key)).size).toBe(300);
+  });
+
   it('aborts mid-loop when the signal is aborted', async () => {
     const controller = new AbortController();
     fetchMock.mockImplementation(async () => {

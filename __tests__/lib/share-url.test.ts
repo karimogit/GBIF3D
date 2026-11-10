@@ -4,6 +4,7 @@ import {
   encodeShareUrlState,
   hasShareParams,
 } from '@/lib/share-url';
+import { todayIsoDate } from '@/lib/occurrence-date';
 
 describe('share-url', () => {
   it('round-trips region, filters, and timeline state', () => {
@@ -58,5 +59,80 @@ describe('share-url', () => {
     expect(hasShareParams({})).toBe(false);
     expect(hasShareParams({ selectedYear: 2020 })).toBe(true);
     expect(hasShareParams({ filters: { taxonKey: 212 } })).toBe(true);
+  });
+
+  it('round-trips place names that contain the field delimiter', () => {
+    const params = encodeShareUrlState({
+      selectedRegionId: 'place',
+      placeSearchResult: {
+        name: 'A|B',
+        bounds: { west: 1, south: 2, east: 3, north: 4 },
+        countryCode: 'FR',
+      },
+    });
+    const decoded = decodeShareUrlState(params, 'opentopomap');
+    expect(decoded.placeSearchResult?.name).toBe('A|B');
+    expect(decoded.placeSearchResult?.bounds).toEqual({ west: 1, south: 2, east: 3, north: 4 });
+    expect(decoded.placeSearchResult?.countryCode).toBe('FR');
+    expect(decoded.selectedRegionId).toBe('place');
+  });
+
+  it('clamps limit, drops invalid timeline values, and caps taxon keys', () => {
+    const params = new URLSearchParams({
+      lim: '5',
+      y: '0',
+      m: '13',
+      tks: Array.from({ length: 50 }, (_, i) => String(i + 1)).join(','),
+      ed: '2024-02-30~2024-03-01',
+      iucn: 'NOT_REAL',
+      co: 'USA',
+    });
+    const decoded = decodeShareUrlState(params, 'opentopomap');
+    expect(decoded.filters?.limit).toBe(100);
+    expect(decoded.selectedYear).toBeUndefined();
+    expect(decoded.selectedMonth).toBeUndefined();
+    expect(decoded.filters?.taxonKeys).toHaveLength(40);
+    expect(decoded.filters?.eventDate).toBeUndefined();
+    expect(decoded.filters?.iucnRedListCategory).toBeUndefined();
+    expect(decoded.filters?.country).toBeUndefined();
+  });
+
+  it('clamps a future event date to today', () => {
+    const params = new URLSearchParams({ ed: '2020-01-01~2099-01-01' });
+    const decoded = decodeShareUrlState(params, 'opentopomap');
+    expect(decoded.filters?.eventDate).toBe(`2020-01-01/${todayIsoDate()}`);
+  });
+
+  it('round-trips a drawn polygon and ignores a drawn id with no geometry', () => {
+    const polygon: [number, number][] = [
+      [10, 50],
+      [11, 50],
+      [11, 51],
+    ];
+    const encoded = encodeShareUrlState({
+      selectedRegionId: 'drawn',
+      drawnPolygon: polygon,
+    });
+    const decoded = decodeShareUrlState(encoded, 'opentopomap');
+    expect(decoded.selectedRegionId).toBe('drawn');
+    expect(decoded.drawnPolygon).toEqual(polygon);
+
+    const bare = decodeShareUrlState(new URLSearchParams('r=drawn'), 'opentopomap');
+    expect(bare.selectedRegionId).toBeUndefined();
+  });
+
+  it('does not let a leftover place search override a drawn region', () => {
+    const params = encodeShareUrlState({
+      selectedRegionId: 'drawn',
+      drawnBounds: { west: 10, south: 50, east: 12, north: 52 },
+      placeSearchResult: {
+        name: 'Paris',
+        bounds: { west: 2, south: 48, east: 3, north: 49 },
+      },
+    });
+    const decoded = decodeShareUrlState(params, 'opentopomap');
+    expect(decoded.selectedRegionId).toBe('drawn');
+    expect(decoded.placeSearchResult).toBeUndefined();
+    expect(params.get('place')).toBeNull();
   });
 });

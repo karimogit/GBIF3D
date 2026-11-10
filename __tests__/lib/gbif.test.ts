@@ -58,6 +58,20 @@ describe('GBIF API', () => {
       expect(String(fetchMock.mock.calls[0][0])).toContain('geometry=');
     });
 
+    it('does not send impossible dates and clamps a future range', async () => {
+      fetchMock.mockResolvedValue(
+        jsonResponse({ offset: 0, limit: 1, endOfRecords: true, count: 0, results: [] })
+      );
+      await searchOccurrences({ eventDate: '2024-02-30/2024-03-01', limit: 1 });
+      expect(String(fetchMock.mock.calls[0][0])).not.toContain('eventDate=');
+
+      clearCache();
+      await searchOccurrences({ eventDate: '2020-01-01/2099-01-01', limit: 1 });
+      const url = String(fetchMock.mock.calls[1][0]);
+      expect(url).toContain('eventDate=');
+      expect(url).not.toContain('2099');
+    });
+
     it('filters by taxonKey when provided', async () => {
       fetchMock.mockResolvedValueOnce(
         jsonResponse({

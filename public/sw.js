@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gbif-globe-v1';
+const CACHE_NAME = 'gbif-globe-v2';
 const APP_SHELL = ['/', '/icon.svg', '/manifest.json'];
 
 self.addEventListener('install', (event) => {
@@ -22,17 +22,24 @@ self.addEventListener('fetch', (event) => {
   if (url.origin !== self.location.origin) return;
   if (url.pathname.startsWith('/api/')) return;
 
-  event.respondWith(
-    caches.match(request).then((cached) => {
-      const fetchPromise = fetch(request)
+  // Documents are network-first. Serving a cached HTML shell first keeps users on
+  // the previous deploy's script URLs after a release.
+  if (request.mode === 'navigate') {
+    event.respondWith(
+      fetch(request)
         .then((response) => {
-          if (response.ok && request.mode === 'navigate') {
-            caches.open(CACHE_NAME).then((cache) => cache.put(request, response.clone()));
+          if (response.ok) {
+            const copy = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
           }
           return response;
         })
-        .catch(() => cached);
-      return cached ?? fetchPromise;
-    })
+        .catch(() => caches.match(request).then((cached) => cached || Response.error()))
+    );
+    return;
+  }
+
+  event.respondWith(
+    caches.match(request).then((cached) => cached ?? fetch(request))
   );
 });

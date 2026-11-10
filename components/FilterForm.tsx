@@ -26,7 +26,9 @@ import {
   OCCURRENCE_MAX_TOTAL,
   OCCURRENCE_MIN_TOTAL,
   DEFAULT_OCCURRENCE_LIMIT,
+  clampOccurrenceLimit,
 } from '@/lib/gbif';
+import { normalizeEventDateRange } from '@/lib/occurrence-date';
 
 const IUCN_ANY = 'any';
 /** GBIF `iucnRedListCategory` values. */
@@ -42,18 +44,6 @@ const IUCN_OPTIONS = [
   { value: 'DD', label: 'Data Deficient' },
   { value: 'NE', label: 'Not Evaluated' },
 ];
-
-function clampLimit(raw: string | number): number {
-  const n = Math.floor(Number(raw));
-  if (!Number.isFinite(n)) return DEFAULT_OCCURRENCE_LIMIT;
-  return Math.min(OCCURRENCE_MAX_TOTAL, Math.max(OCCURRENCE_MIN_TOTAL, n));
-}
-
-function todayIsoDate(): string {
-  const d = new Date();
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
 
 const BASIS_ANY = '';
 const BASIS_OPTIONS = [
@@ -123,7 +113,7 @@ export default function FilterForm({
   };
 
   const commitLimit = () => {
-    const next = clampLimit(limitText);
+    const next = clampOccurrenceLimit(limitText);
     setLimitText(String(next));
     if (next !== filters.limit) updateFilter('limit', next);
   };
@@ -135,21 +125,16 @@ export default function FilterForm({
       updateFilter('eventDate', undefined);
       return;
     }
-    if (!from || !to) {
-      // Require both ends for now to avoid ambiguous open-ended ranges.
+    const next = normalizeEventDateRange(`${from}/${to}`);
+    if (!next) {
       updateFilter('eventDate', undefined);
       return;
     }
-    // Ensure start <= end and neither is in the future (GBIF returns 400 for both)
-    const today = todayIsoDate();
-    let [start, end] = from <= to ? [from, to] : [to, from];
-    if (end > today) end = today;
-    if (start > today) start = today;
-    if (start !== dateFrom.trim() || end !== dateTo.trim()) {
+    const [start, end] = next.split('/');
+    if (start !== from || end !== to) {
       setDateFrom(start);
       setDateTo(end);
     }
-    const next = `${start}/${end}`;
     if (next !== filters.eventDate) updateFilter('eventDate', next);
   };
 
